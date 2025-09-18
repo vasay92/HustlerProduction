@@ -112,6 +112,7 @@ final class ServicesViewModel: ObservableObject {
                 self.error = error
                 self.isLoadingRequests = false
             }
+            print("Error loading requests: \(error)")
         }
     }
     
