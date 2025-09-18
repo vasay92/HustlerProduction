@@ -1,10 +1,14 @@
 // ServicesView.swift
 // Path: ClaudeHustlerFirebase/Views/Services/ServicesView.swift
 
+// ServicesView.swift
+// Path: ClaudeHustlerFirebase/Views/Services/ServicesView.swift
+
 import SwiftUI
 
+// ONLY REPLACE THIS STRUCT - Keep everything else below it!
 struct ServicesView: View {
-    @StateObject private var firebase = FirebaseService.shared
+    @StateObject private var viewModel = ServicesViewModel()  // NEW: Using ViewModel
     @State private var selectedTab: ServiceTab = .offers
     @State private var selectedCategory: ServiceCategory? = nil
     @State private var searchText = ""
@@ -20,7 +24,7 @@ struct ServicesView: View {
     }
     
     var currentPosts: [ServicePost] {
-        selectedTab == .offers ? firebase.offers : firebase.requests
+        selectedTab == .offers ? viewModel.offers : viewModel.requests  // CHANGED: From firebase.offers
     }
     
     var filteredPosts: [ServicePost] {
@@ -72,54 +76,76 @@ struct ServicesView: View {
                                 .foregroundColor(selectedTab == .requests ? .primary : .gray)
                             
                             Rectangle()
-                                .fill(selectedTab == .requests ? Color.orange : Color.clear)
+                                .fill(selectedTab == .requests ? Color.blue : Color.clear)
                                 .frame(height: 3)
                         }
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal)
-                .padding(.top)
+                .padding(.top, 10)
                 
                 // Search Bar
                 HStack {
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        
-                        TextField(selectedTab == .offers ? "Search services..." : "Search requests...", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                    }
-                    .padding(10)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
                     
-                    Button(action: { showingFilters = true }) {
-                        Image(systemName: "slider.horizontal.3")
-                            .foregroundColor(.primary)
-                            .overlay(
-                                // Show indicator if filter is active
-                                selectedCategory != nil ?
-                                Circle()
-                                    .fill(Color.red)
-                                    .frame(width: 8, height: 8)
-                                    .offset(x: 8, y: -8)
-                                : nil
-                            )
-                    }
-                    
-                    Button(action: {
-                        viewMode = viewMode == .grid ? .list : .grid
-                    }) {
-                        Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
-                            .foregroundColor(.primary)
+                    TextField("Search \(selectedTab == .offers ? "offers" : "requests")...", text: $searchText)
+                        .textFieldStyle(PlainTextFieldStyle())
+                }
+                .padding(10)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding(.horizontal)
+                .padding(.vertical, 5)
+                
+                // Filter Bar
+                HStack {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            // View Mode Toggle
+                            Button(action: { viewMode = viewMode == .grid ? .list : .grid }) {
+                                Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            // Category Filter
+                            if let category = selectedCategory {
+                                Button(action: { selectedCategory = nil }) {
+                                    HStack {
+                                        Text(category.displayName)
+                                        Image(systemName: "xmark.circle.fill")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.blue.opacity(0.1))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(15)
+                                }
+                            }
+                            
+                            // Filter Button
+                            Button(action: { showingFilters = true }) {
+                                HStack {
+                                    Image(systemName: "slider.horizontal.3")
+                                    Text("Filters")
+                                }
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.gray.opacity(0.1))
+                                .foregroundColor(.primary)
+                                .cornerRadius(15)
+                            }
+                        }
                     }
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding(.bottom, 5)
                 
-                // Services Grid/List
+                // Content
                 ScrollView {
-                    if filteredPosts.isEmpty {
+                    if filteredPosts.isEmpty && !viewModel.isLoadingOffers && !viewModel.isLoadingRequests {
                         ServicesEmptyStateView(isRequest: selectedTab == .requests)
                             .padding(.top, 50)
                     } else {
@@ -130,16 +156,57 @@ struct ServicesView: View {
                                         MinimalServiceCard(post: post, isRequest: post.isRequest)
                                     }
                                     .buttonStyle(PlainButtonStyle())
+                                    .onAppear {
+                                        // NEW: Load more when reaching the last item
+                                        if post.id == filteredPosts.last?.id {
+                                            Task {
+                                                if selectedTab == .offers && viewModel.offersHasMore {
+                                                    await viewModel.loadMoreOffers()
+                                                } else if selectedTab == .requests && viewModel.requestsHasMore {
+                                                    await viewModel.loadMoreRequests()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // NEW: Loading indicator at bottom
+                                if (selectedTab == .offers && viewModel.isLoadingOffers) ||
+                                   (selectedTab == .requests && viewModel.isLoadingRequests) {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
                                 }
                             }
-                            .padding(.horizontal, 10)
+                            .padding(.horizontal)
                         } else {
-                            LazyVStack(spacing: 10) {
+                            // List View
+                            LazyVStack(spacing: 12) {
                                 ForEach(filteredPosts) { post in
                                     NavigationLink(destination: PostDetailView(post: post)) {
                                         ServiceListCard(post: post, isRequest: post.isRequest)
                                     }
                                     .buttonStyle(PlainButtonStyle())
+                                    .onAppear {
+                                        // NEW: Load more when reaching the last item
+                                        if post.id == filteredPosts.last?.id {
+                                            Task {
+                                                if selectedTab == .offers && viewModel.offersHasMore {
+                                                    await viewModel.loadMoreOffers()
+                                                } else if selectedTab == .requests && viewModel.requestsHasMore {
+                                                    await viewModel.loadMoreRequests()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // NEW: Loading indicator
+                                if (selectedTab == .offers && viewModel.isLoadingOffers) ||
+                                   (selectedTab == .requests && viewModel.isLoadingRequests) {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
                                 }
                             }
                             .padding(.horizontal)
@@ -147,26 +214,22 @@ struct ServicesView: View {
                     }
                 }
                 .refreshable {
-                    if selectedTab == .offers {
-                        await firebase.loadOffers()
-                    } else {
-                        await firebase.loadRequests()
-                    }
+                    // NEW: Using ViewModel refresh
+                    await viewModel.refresh(type: selectedTab == .offers ? .offers : .requests)
                 }
             }
-            .navigationBarHidden(true) // Hide the navigation bar completely
+            .navigationBarHidden(true)
             .sheet(isPresented: $showingFilters) {
                 EnhancedFiltersView(
                     selectedCategory: $selectedCategory,
                     selectedTab: selectedTab
                 )
             }
-            .task {
-                await firebase.loadAllServicePosts()
-            }
         }
     }
 }
+
+
 
 // MARK: - Minimal Service Card (3 per row)
 struct MinimalServiceCard: View {
