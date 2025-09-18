@@ -214,7 +214,7 @@ struct ServicesView: View {
                     }
                 }
                 .refreshable {
-                    // NEW: Using ViewModel refresh
+                    // Refresh based on current tab
                     await viewModel.refresh(type: selectedTab == .offers ? .offers : .requests)
                 }
             }

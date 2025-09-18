@@ -6,31 +6,11 @@ import FirebaseFirestore
 
 struct HomeView: View {
     @StateObject private var firebase = FirebaseService.shared
+    @StateObject private var viewModel = HomeViewModel()  // NEW: Add HomeViewModel
     @State private var showingFilters = false
-    @State private var selectedPost: ServicePost?
-    @State private var searchText = ""
-    @State private var selectedTab = 0
-    @State private var unreadMessageCount = 0
     @State private var showingMessages = false
+    @State private var unreadMessageCount: Int = 0
     @State private var conversationsListener: ListenerRegistration?
-    
-    var filteredPosts: [ServicePost] {
-        let posts = selectedTab == 0
-            ? firebase.posts.filter { !$0.isRequest }
-            : firebase.posts.filter { $0.isRequest }
-        
-        if searchText.isEmpty {
-            return posts
-        }
-        return posts.filter {
-            $0.title.localizedCaseInsensitiveContains(searchText) ||
-            $0.description.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-    
-    var trendingPosts: [ServicePost] {
-        firebase.posts.prefix(5).map { $0 }
-    }
     
     var body: some View {
         NavigationView {
@@ -38,7 +18,7 @@ struct HomeView: View {
                 VStack(spacing: 20) {
                     // Custom Navigation Bar
                     HStack {
-                        Text("Hustler") // Changed from "ClaudeHustler" to "Hustler"
+                        Text("Hustler")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundStyle(
@@ -82,8 +62,8 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.top, 10)
                     
-                    // Trending Services Section
-                    if !trendingPosts.isEmpty {
+                    // Trending Services Section - Now using ViewModel
+                    if !viewModel.trendingPosts.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Label("Trending", systemImage: "flame.fill")
@@ -95,7 +75,7 @@ struct HomeView: View {
                             
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 15) {
-                                    ForEach(trendingPosts) { post in
+                                    ForEach(viewModel.trendingPosts) { post in
                                         NavigationLink(destination: PostDetailView(post: post)) {
                                             MiniServiceCard(post: post)
                                         }
@@ -107,27 +87,41 @@ struct HomeView: View {
                         }
                     }
                     
-                    // Recent Activity
+                    // Recent Activity - Now using ViewModel
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Recent Activity")
                             .font(.headline)
                             .padding(.horizontal)
                         
                         LazyVStack(spacing: 15) {
-                            ForEach(filteredPosts) { post in
+                            ForEach(viewModel.filteredPosts) { post in
                                 NavigationLink(destination: PostDetailView(post: post)) {
                                     ServicePostCard(post: post)
                                 }
                                 .buttonStyle(PlainButtonStyle())
+                                .onAppear {
+                                    // Load more when reaching the last item
+                                    if post.id == viewModel.filteredPosts.last?.id && viewModel.hasMore {
+                                        Task {
+                                            await viewModel.loadMorePosts()
+                                        }
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal)
+                    }
+                    
+                    // Loading indicator
+                    if viewModel.isLoading && !viewModel.posts.isEmpty {
+                        ProgressView()
+                            .padding()
                     }
                 }
             }
             .navigationBarHidden(true)
             .refreshable {
-                await firebase.loadPosts()
+                await viewModel.refresh()  // NEW: Use ViewModel refresh
                 await updateUnreadCount()
             }
             .sheet(isPresented: $showingFilters) {
@@ -147,7 +141,7 @@ struct HomeView: View {
             }
             .onAppear {
                 Task {
-                    await firebase.loadPosts()
+                    // ViewModel loads data automatically in init, no need to load here
                     await updateUnreadCount()
                     startListeningToUnreadCount()
                 }
@@ -173,23 +167,25 @@ struct HomeView: View {
                         total += conversation.unreadCounts[userId] ?? 0
                     }
                 }
-                
-                // Animate the badge update
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    unreadMessageCount = total
-                }
-                
-                print("📬 Unread message count updated: \(total)")
+                self.unreadMessageCount = total
             }
         }
     }
     
     private func updateUnreadCount() async {
-        let count = await firebase.getTotalUnreadCount()
-        await MainActor.run {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                unreadMessageCount = count
+        guard let userId = firebase.currentUser?.id else { return }
+        
+        do {
+            let conversations = try await firebase.getUserConversations(userId: userId)
+            var total = 0
+            for conversation in conversations {
+                total += conversation.unreadCounts[userId] ?? 0
             }
+            await MainActor.run {
+                self.unreadMessageCount = total
+            }
+        } catch {
+            print("Error updating unread count: \(error)")
         }
     }
 }

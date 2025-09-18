@@ -76,10 +76,6 @@ final class HomeViewModel: ObservableObject {
                 self.hasMore = fetchedPosts.count == pageSize
                 self.isLoading = false
             }
-            
-            // Cache the results
-            cache.store(fetchedPosts, for: "posts_page_1")
-            
         } catch {
             await MainActor.run {
                 self.error = error
@@ -89,23 +85,21 @@ final class HomeViewModel: ObservableObject {
         }
     }
     
-    func loadMore() async {
-        guard !isLoading,
-              hasMore,
-              let lastDoc = lastDocument else { return }
+    func loadMorePosts() async {
+        guard !isLoading, hasMore, let lastDoc = lastDocument else { return }
         
         isLoading = true
         
         do {
-            let (morePosts, newLastDoc) = try await repository.fetch(
+            let (fetchedPosts, newLastDoc) = try await repository.fetch(
                 limit: pageSize,
                 lastDocument: lastDoc
             )
             
             await MainActor.run {
-                self.posts.append(contentsOf: morePosts)
+                self.posts.append(contentsOf: fetchedPosts)
                 self.lastDocument = newLastDoc
-                self.hasMore = morePosts.count == pageSize
+                self.hasMore = fetchedPosts.count == pageSize
                 self.isLoading = false
             }
         } catch {
@@ -116,36 +110,20 @@ final class HomeViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Refresh Method for Pull-to-Refresh
     func refresh() async {
-        // Clear cache for fresh data
-        cache.remove(for: "posts_page_1")
-        
+        // Reset pagination and reload from start
         lastDocument = nil
         hasMore = true
         await loadInitialData()
     }
     
-    func search(_ query: String) async {
-        guard !query.isEmpty else {
-            await loadInitialData()
-            return
-        }
-        
-        isLoading = true
-        
-        do {
-            let results = try await repository.search(query: query)
-            
-            await MainActor.run {
-                self.posts = results
-                self.isLoading = false
-                self.hasMore = false // Search doesn't support pagination yet
-            }
-        } catch {
-            await MainActor.run {
-                self.error = error
-                self.isLoading = false
-            }
-        }
+    // MARK: - Category and Search Methods
+    func setCategory(_ category: ServiceCategory?) {
+        self.selectedCategory = category
+    }
+    
+    func updateSearchText(_ text: String) {
+        self.searchText = text
     }
 }
