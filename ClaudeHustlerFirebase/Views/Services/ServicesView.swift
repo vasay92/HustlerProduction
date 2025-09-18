@@ -146,9 +146,21 @@ struct ServicesView: View {
                 // Content
                 ScrollView {
                     if filteredPosts.isEmpty && !viewModel.isLoadingOffers && !viewModel.isLoadingRequests {
-                        ServicesEmptyStateView(isRequest: selectedTab == .requests)
-                            .padding(.top, 50)
-                    } else {
+                        EmptyStateView(
+                            icon: selectedTab == .offers ? "storefront" : "magnifyingglass",
+                            title: selectedTab == .offers ? "No Offers Yet" : "No Requests Yet",
+                            message: selectedTab == .offers
+                                ? "Be the first to offer your services!"
+                                : "No one has requested services yet. Check back later!",
+                            buttonTitle: selectedTab == .offers ? "Create Offer" : "Create Request",
+                            action: {
+                                // Navigate to create post
+                                showingCreatePost = true
+                            }
+                        )
+                        .padding(.top, 50)
+                    }
+                     else {
                         if viewMode == .grid {
                             LazyVGrid(columns: columns, spacing: 10) {
                                 ForEach(filteredPosts) { post in

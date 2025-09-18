@@ -6,9 +6,10 @@ import FirebaseFirestore
 
 struct HomeView: View {
     @StateObject private var firebase = FirebaseService.shared
-    @StateObject private var viewModel = HomeViewModel()  // NEW: Add HomeViewModel
+    @StateObject private var viewModel = HomeViewModel()
     @State private var showingFilters = false
     @State private var showingMessages = false
+    @State private var showingCreatePost = false  // Add this for create post navigation
     @State private var unreadMessageCount: Int = 0
     @State private var conversationsListener: ListenerRegistration?
     
@@ -62,66 +63,94 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.top, 10)
                     
-                    // Trending Services Section - Now using ViewModel
-                    if !viewModel.trendingPosts.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Label("Trending", systemImage: "flame.fill")
-                                    .font(.headline)
-                                    .foregroundColor(.orange)
-                                Spacer()
+                    // Empty State or Content
+                    if viewModel.posts.isEmpty && !viewModel.isLoading {
+                        EmptyStateView(
+                            icon: "house",
+                            title: "No Posts Yet",
+                            message: "Be the first to share something with the community!",
+                            buttonTitle: "Create Post",
+                            action: {
+                                showingCreatePost = true
                             }
-                            .padding(.horizontal)
+                        )
+                        .frame(minHeight: 400)
+                    } else {
+                        // Trending Services Section
+                        if !viewModel.trendingPosts.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Label("Trending", systemImage: "flame.fill")
+                                        .font(.headline)
+                                        .foregroundColor(.orange)
+                                    Spacer()
+                                }
+                                .padding(.horizontal)
+                                
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 15) {
+                                        ForEach(viewModel.trendingPosts) { post in
+                                            NavigationLink(destination: PostDetailView(post: post)) {
+                                                MiniServiceCard(post: post)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                        }
+                        
+                        // Recent Activity
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Recent Activity")
+                                .font(.headline)
+                                .padding(.horizontal)
                             
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 15) {
-                                    ForEach(viewModel.trendingPosts) { post in
+                            if viewModel.filteredPosts.isEmpty && !searchText.isEmpty {
+                                // Search empty state
+                                EmptyStateView(
+                                    icon: "magnifyingglass",
+                                    title: "No Results Found",
+                                    message: "Try adjusting your search or filters",
+                                    buttonTitle: "Clear Search",
+                                    action: {
+                                        viewModel.updateSearchText("")
+                                    }
+                                )
+                                .frame(height: 300)
+                            } else {
+                                LazyVStack(spacing: 15) {
+                                    ForEach(viewModel.filteredPosts) { post in
                                         NavigationLink(destination: PostDetailView(post: post)) {
-                                            MiniServiceCard(post: post)
+                                            ServicePostCard(post: post)
                                         }
                                         .buttonStyle(PlainButtonStyle())
+                                        .onAppear {
+                                            // Load more when reaching the last item
+                                            if post.id == viewModel.filteredPosts.last?.id && viewModel.hasMore {
+                                                Task {
+                                                    await viewModel.loadMorePosts()
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 .padding(.horizontal)
                             }
                         }
-                    }
-                    
-                    // Recent Activity - Now using ViewModel
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Recent Activity")
-                            .font(.headline)
-                            .padding(.horizontal)
                         
-                        LazyVStack(spacing: 15) {
-                            ForEach(viewModel.filteredPosts) { post in
-                                NavigationLink(destination: PostDetailView(post: post)) {
-                                    ServicePostCard(post: post)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .onAppear {
-                                    // Load more when reaching the last item
-                                    if post.id == viewModel.filteredPosts.last?.id && viewModel.hasMore {
-                                        Task {
-                                            await viewModel.loadMorePosts()
-                                        }
-                                    }
-                                }
-                            }
+                        // Loading indicator for pagination
+                        if viewModel.isLoading && !viewModel.posts.isEmpty {
+                            ProgressView()
+                                .padding()
                         }
-                        .padding(.horizontal)
-                    }
-                    
-                    // Loading indicator
-                    if viewModel.isLoading && !viewModel.posts.isEmpty {
-                        ProgressView()
-                            .padding()
                     }
                 }
             }
             .navigationBarHidden(true)
             .refreshable {
-                await viewModel.refresh()  // Only refresh posts data
+                await viewModel.refresh()
             }
             .sheet(isPresented: $showingFilters) {
                 FilterView()
@@ -138,8 +167,19 @@ struct HomeView: View {
                         }
                 }
             }
+            .sheet(isPresented: $showingCreatePost) {
+                NavigationView {
+                    EditServicePostView()
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Cancel") {
+                                    showingCreatePost = false
+                                }
+                            }
+                        }
+                }
+            }
             .onAppear {
-                // Start listening to unread count
                 startListeningToUnreadCount()
             }
             .onDisappear {
@@ -148,13 +188,16 @@ struct HomeView: View {
         }
     }
     
+    // MARK: - Computed Properties
+    private var searchText: String {
+        viewModel.searchText
+    }
+    
     // MARK: - Real-time Unread Count
     
     private func startListeningToUnreadCount() {
-        // Remove any existing listener
         conversationsListener?.remove()
         
-        // Set up real-time listener for conversations
         conversationsListener = firebase.listenToConversations { conversations in
             Task { @MainActor in
                 var total = 0
