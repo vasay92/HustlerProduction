@@ -121,8 +121,7 @@ struct HomeView: View {
             }
             .navigationBarHidden(true)
             .refreshable {
-                await viewModel.refresh()  // NEW: Use ViewModel refresh
-                await updateUnreadCount()
+                await viewModel.refresh()  // Only refresh posts data
             }
             .sheet(isPresented: $showingFilters) {
                 FilterView()
@@ -140,11 +139,8 @@ struct HomeView: View {
                 }
             }
             .onAppear {
-                Task {
-                    // ViewModel loads data automatically in init, no need to load here
-                    await updateUnreadCount()
-                    startListeningToUnreadCount()
-                }
+                // Start listening to unread count
+                startListeningToUnreadCount()
             }
             .onDisappear {
                 conversationsListener?.remove()
@@ -169,23 +165,6 @@ struct HomeView: View {
                 }
                 self.unreadMessageCount = total
             }
-        }
-    }
-    
-    private func updateUnreadCount() async {
-        guard let userId = firebase.currentUser?.id else { return }
-        
-        do {
-            let conversations = try await firebase.getUserConversations(userId: userId)
-            var total = 0
-            for conversation in conversations {
-                total += conversation.unreadCounts[userId] ?? 0
-            }
-            await MainActor.run {
-                self.unreadMessageCount = total
-            }
-        } catch {
-            print("Error updating unread count: \(error)")
         }
     }
 }
