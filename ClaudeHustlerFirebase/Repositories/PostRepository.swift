@@ -143,27 +143,22 @@ final class PostRepository: RepositoryProtocol {
             throw NSError(domain: "PostRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
+        // Create with correct properties
         let postData = ServicePost(
-                id: post.id,
-                userId: userId,  // Set the userId here
-                title: post.title,
-                description: post.description,
-                price: post.price,
-                category: post.category,
-                tags: post.tags,
-                imageUrls: post.imageUrls,
-                videoUrls: post.videoUrls,
-                location: post.location,
-                isAvailable: post.isAvailable,
-                rating: post.rating,
-                reviewCount: post.reviewCount,
-                viewCount: post.viewCount,
-                likeCount: post.likeCount,
-                isRequest: post.isRequest,
-                deliveryTime: post.deliveryTime,
-                createdAt: Date(),  // Set the date here
-                updatedAt: Date()
-            )
+            id: post.id,
+            userId: userId,
+            userName: post.userName,
+            userProfileImage: post.userProfileImage,
+            title: post.title,
+            description: post.description,
+            category: post.category,
+            price: post.price,
+            location: post.location,
+            imageURLs: post.imageURLs,
+            isRequest: post.isRequest,
+            status: post.status,
+            updatedAt: Date()
+        )
         
         let docRef = try await db.collection("posts").addDocument(from: postData)
         
@@ -179,27 +174,22 @@ final class PostRepository: RepositoryProtocol {
             throw NSError(domain: "PostRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Post ID is required"])
         }
         
+        // Update with correct properties
         let updatedPost = ServicePost(
-                id: post.id,
-                userId: post.userId,
-                title: post.title,
-                description: post.description,
-                price: post.price,
-                category: post.category,
-                tags: post.tags,
-                imageUrls: post.imageUrls,
-                videoUrls: post.videoUrls,
-                location: post.location,
-                isAvailable: post.isAvailable,
-                rating: post.rating,
-                reviewCount: post.reviewCount,
-                viewCount: post.viewCount,
-                likeCount: post.likeCount,
-                isRequest: post.isRequest,
-                deliveryTime: post.deliveryTime,
-                createdAt: post.createdAt,
-                updatedAt: Date()  // Update only this
-            )
+            id: post.id,
+            userId: post.userId,
+            userName: post.userName,
+            userProfileImage: post.userProfileImage,
+            title: post.title,
+            description: post.description,
+            category: post.category,
+            price: post.price,
+            location: post.location,
+            imageURLs: post.imageURLs,
+            isRequest: post.isRequest,
+            status: post.status,
+            updatedAt: Date()
+        )
         
         try await db.collection("posts").document(postId).setData(from: updatedPost, merge: true)
         
