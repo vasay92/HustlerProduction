@@ -11,62 +11,47 @@ struct PortfolioCardView: View {
     let card: PortfolioCard
     let isOwner: Bool
     @State private var showingGallery = false
-    @State private var showingEditMenu = false
+    @State private var showingMenu = false
     @StateObject private var firebase = FirebaseService.shared
     
     var body: some View {
-        Button(action: { showingGallery = true }) {
-            VStack(alignment: .leading, spacing: 8) {
-                // Cover Image
-                if let coverURL = card.coverImageURL {
-                    AsyncImage(url: URL(string: coverURL)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 120, height: 160)
-                            .clipped()
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 120, height: 160)
-                            .overlay(
-                                ProgressView()
-                            )
-                    }
-                } else if let firstImage = card.mediaURLs.first {
-                    AsyncImage(url: URL(string: firstImage)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 120, height: 160)
-                            .clipped()
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 120, height: 160)
-                            .overlay(
-                                ProgressView()
-                            )
-                    }
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 120, height: 160)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        )
+        VStack(alignment: .leading, spacing: 8) {
+            // Card content
+            Button(action: { showingGallery = true }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Cover Image
+                    // ... existing image code
+                    
+                    // Title
+                    Text(card.title)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .foregroundColor(.primary)
+                        .frame(width: 120, alignment: .leading)
                 }
-                
-                // Title
-                Text(card.title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                    .foregroundColor(.primary)
-                    .frame(width: 120, alignment: .leading)
             }
-            .cornerRadius(12)
+            
+            // Edit/Delete button for owner
+            if isOwner {
+                Button(action: { showingMenu = true }) {
+                    Image(systemName: "ellipsis")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(width: 120, alignment: .trailing)
+                }
+                .confirmationDialog("Options", isPresented: $showingMenu) {
+                    Button("Edit") {
+                        showingGallery = true  // Opens gallery where edit is available
+                    }
+                    Button("Delete", role: .destructive) {
+                        Task {
+                            await deletePortfolio()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+            }
         }
         .fullScreenCover(isPresented: $showingGallery) {
             PortfolioGalleryView(card: card, isOwner: isOwner)
@@ -77,12 +62,7 @@ struct PortfolioCardView: View {
         guard let cardId = card.id else { return }
         
         do {
-            try await Firestore.firestore()
-                .collection("portfolioCards")
-                .document(cardId)
-                .delete()
-            
-            // Optionally refresh the parent view
+            try await firebase.deletePortfolioCard(cardId)
         } catch {
             print("Error deleting portfolio: \(error)")
         }
@@ -143,6 +123,7 @@ struct CreatePortfolioCardView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var title = ""
+    @State private var description = ""  // ADD THIS
     @State private var coverImage: UIImage?
     @State private var mediaImages: [UIImage] = []
     @State private var showingCoverPicker = false
@@ -156,75 +137,20 @@ struct CreatePortfolioCardView: View {
                     TextField("Enter title", text: $title)
                 }
                 
+                Section("Description") {  // ADD THIS SECTION
+                    TextField("Describe your work", text: $description, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+                
                 Section("Cover Image (Optional)") {
-                    if let cover = coverImage {
-                        Image(uiImage: cover)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: 200)
-                            .cornerRadius(8)
-                    }
-                    
-                    Button(action: { showingCoverPicker = true }) {
-                        Label(coverImage == nil ? "Add Cover Image" : "Change Cover Image", systemImage: "photo")
-                    }
+                    // ... existing cover image code
                 }
                 
                 Section("Portfolio Images") {
-                    if !mediaImages.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
-                                ForEach(Array(mediaImages.enumerated()), id: \.offset) { index, image in
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 80, height: 80)
-                                        .cornerRadius(8)
-                                        .overlay(
-                                            Button(action: {
-                                                mediaImages.remove(at: index)
-                                            }) {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.white)
-                                                    .background(Color.black.opacity(0.6))
-                                                    .clipShape(Circle())
-                                            }
-                                            .padding(4)
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                                        )
-                                }
-                            }
-                        }
-                    }
-                    
-                    Button(action: { showingMediaPicker = true }) {
-                        Label("Add Images", systemImage: "photo.on.rectangle.angled")
-                    }
+                    // ... existing images code
                 }
             }
-            .navigationTitle("Create Portfolio")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(isCreating)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Create") {
-                        Task {
-                            await createCard()
-                        }
-                    }
-                    .disabled(title.isEmpty || isCreating)
-                }
-            }
-        }
-        .sheet(isPresented: $showingCoverPicker) {
-            ImagePicker(images: .constant([]), singleImage: $coverImage)
-        }
-        .sheet(isPresented: $showingMediaPicker) {
-            ImagePicker(images: $mediaImages, singleImage: nil)
+            // ... rest of the view
         }
     }
     
@@ -235,13 +161,13 @@ struct CreatePortfolioCardView: View {
                 title: title,
                 coverImage: coverImage,
                 mediaImages: mediaImages,
-                description: nil
+                description: description  // PASS THE DESCRIPTION
             )
             dismiss()
         } catch {
-            print("Error creating portfolio card: \(error)")
-            isCreating = false
+            print("Error creating card: \(error)")
         }
+        isCreating = false
     }
 }
 

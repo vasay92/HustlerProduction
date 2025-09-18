@@ -5,6 +5,7 @@ import SwiftUI
 import PhotosUI
 import FirebaseFirestore
 
+
 // MARK: - Identifiable Wrapper for String
 // PortfolioGalleryView.swift
 // Path: ClaudeHustlerFirebase/Views/Profile/PortfolioGalleryView.swift
@@ -383,15 +384,18 @@ struct ImageViewerView: View {
 }
 
 // MARK: - Edit Portfolio Details View
-// MARK: - Edit Portfolio Details View
 struct EditPortfolioDetailsView: View {
     let card: PortfolioCard
     @Environment(\.dismiss) var dismiss
+    @StateObject private var firebase = FirebaseService.shared
     @State private var title: String = ""
+    @State private var description: String = ""
+    @State private var isSaving = false
     
     init(card: PortfolioCard) {
         self.card = card
         _title = State(initialValue: card.title)
+        _description = State(initialValue: card.description ?? "")
     }
     
     var body: some View {
@@ -400,12 +404,30 @@ struct EditPortfolioDetailsView: View {
                 Section("Portfolio Title") {
                     TextField("Enter title", text: $title)
                 }
+                
+                Section("Description") {
+                    TextField("Describe your work", text: $description, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+                
+                Section {
+                    Text("Created: \(card.createdAt, style: .date)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Last updated: \(card.updatedAt, style: .relative)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
-            .navigationTitle("Edit Title")
+            .navigationTitle("Edit Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isSaving)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -414,6 +436,14 @@ struct EditPortfolioDetailsView: View {
                             await updateDetails()
                         }
                     }
+                    .disabled(title.isEmpty || isSaving)
+                }
+            }
+            .overlay {
+                if isSaving {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .overlay(ProgressView())
                 }
             }
         }
@@ -422,17 +452,19 @@ struct EditPortfolioDetailsView: View {
     private func updateDetails() async {
         guard let cardId = card.id else { return }
         
+        isSaving = true
+        
         do {
-            try await Firestore.firestore()
-                .collection("portfolioCards")
-                .document(cardId)
-                .updateData([
-                    "title": title,
-                    "updatedAt": Date()
-                ])
+            try await firebase.updatePortfolioCard(
+                cardId,
+                title: title,
+                description: description
+            )
             dismiss()
         } catch {
             print("Error updating details: \(error)")
         }
+        
+        isSaving = false
     }
 }
