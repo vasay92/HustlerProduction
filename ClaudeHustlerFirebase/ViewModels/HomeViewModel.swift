@@ -6,6 +6,7 @@
 import SwiftUI
 import Combine
 import FirebaseFirestore
+import SDWebImageSwiftUI
 
 @MainActor
 class HomeViewModel: ObservableObject {
@@ -67,7 +68,7 @@ class HomeViewModel: ObservableObject {
         hasMore = true
         
         do {
-            let result = try await repository.fetchPosts(limit: 20)
+            let result = try await repository.fetch(limit: 20)
             posts = result.items
             lastDocument = result.lastDoc
             hasMore = !result.items.isEmpty && result.items.count == 20
@@ -98,7 +99,7 @@ class HomeViewModel: ObservableObject {
         isLoading = true
         
         do {
-            let result = try await repository.fetchPosts(limit: 20, lastDocument: lastDoc)
+            let result = try await repository.fetch(limit: 20, lastDocument: lastDoc)
             posts.append(contentsOf: result.items)
             lastDocument = result.lastDoc
             hasMore = !result.items.isEmpty && result.items.count == 20
