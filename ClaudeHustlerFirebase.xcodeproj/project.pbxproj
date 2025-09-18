@@ -23,10 +23,10 @@
 		EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086A2E7C8B2B004B253C /* SecurityService.swift */; };
 		EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086C2E7C8B41004B253C /* AuthenticationService.swift */; };
 		EB6E08922E7C918A004B253C /* CacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08912E7C9189004B253C /* CacheService.swift */; };
-		EB6E08982E7C9408004B253C /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08972E7C920E004B253C /* HomeViewModel.swift */; };
-		EB6E08992E7C940D004B253C /* ServicesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08962E7C91F1004B253C /* ServicesViewModel.swift */; };
-		EB6E089A2E7C9435004B253C /* PostRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08942E7C91BC004B253C /* PostRepository.swift */; };
-		EB6E089B2E7C943B004B253C /* RepositoryProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08902E7C9173004B253C /* RepositoryProtocol.swift */; };
+		EB6E08A42E7C9641004B253C /* PostRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E089F2E7C9641004B253C /* PostRepository.swift */; };
+		EB6E08A52E7C9641004B253C /* ServicesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08A22E7C9641004B253C /* ServicesViewModel.swift */; };
+		EB6E08A62E7C9641004B253C /* RepositoryProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E089C2E7C9641004B253C /* RepositoryProtocol.swift */; };
+		EB6E08A72E7C9641004B253C /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08A12E7C9641004B253C /* HomeViewModel.swift */; };
 		EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EBBCA1932E7C875000745D24 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -62,11 +62,11 @@
 		EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewCard.swift; sourceTree = "<group>"; };
 		EB6E086A2E7C8B2B004B253C /* SecurityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityService.swift; sourceTree = "<group>"; };
 		EB6E086C2E7C8B41004B253C /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
-		EB6E08902E7C9173004B253C /* RepositoryProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryProtocol.swift; sourceTree = "<group>"; };
 		EB6E08912E7C9189004B253C /* CacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheService.swift; sourceTree = "<group>"; };
-		EB6E08942E7C91BC004B253C /* PostRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostRepository.swift; sourceTree = "<group>"; };
-		EB6E08962E7C91F1004B253C /* ServicesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServicesViewModel.swift; sourceTree = "<group>"; };
-		EB6E08972E7C920E004B253C /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
+		EB6E089C2E7C9641004B253C /* RepositoryProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryProtocol.swift; sourceTree = "<group>"; };
+		EB6E089F2E7C9641004B253C /* PostRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostRepository.swift; sourceTree = "<group>"; };
+		EB6E08A12E7C9641004B253C /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
+		EB6E08A22E7C9641004B253C /* ServicesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServicesViewModel.swift; sourceTree = "<group>"; };
 		EBBCA1932E7C875000745D24 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -150,9 +150,9 @@
 		EB6BBA3B2E68F52F006DB468 = {
 			isa = PBXGroup;
 			children = (
-				EB6E08952E7C91E3004B253C /* ViewModels */,
-				EB6E08932E7C91A5004B253C /* Repositories */,
-				EB6E088E2E7C915C004B253C /* Core */,
+				EB6E089E2E7C9641004B253C /* Core */,
+				EB6E08A02E7C9641004B253C /* Repositories */,
+				EB6E08A32E7C9641004B253C /* ViewModels */,
 				EB6BBA6F2E68F5CB006DB468 /* App */,
 				EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */,
 				EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */,
@@ -229,35 +229,35 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		EB6E088E2E7C915C004B253C /* Core */ = {
+		EB6E089D2E7C9641004B253C /* Protocols */ = {
 			isa = PBXGroup;
 			children = (
-				EB6E088F2E7C9161004B253C /* Protocols */,
-			);
-			path = Core;
-			sourceTree = "<group>";
-		};
-		EB6E088F2E7C9161004B253C /* Protocols */ = {
-			isa = PBXGroup;
-			children = (
-				EB6E08902E7C9173004B253C /* RepositoryProtocol.swift */,
+				EB6E089C2E7C9641004B253C /* RepositoryProtocol.swift */,
 			);
 			path = Protocols;
 			sourceTree = "<group>";
 		};
-		EB6E08932E7C91A5004B253C /* Repositories */ = {
+		EB6E089E2E7C9641004B253C /* Core */ = {
 			isa = PBXGroup;
 			children = (
-				EB6E08942E7C91BC004B253C /* PostRepository.swift */,
+				EB6E089D2E7C9641004B253C /* Protocols */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		EB6E08A02E7C9641004B253C /* Repositories */ = {
+			isa = PBXGroup;
+			children = (
+				EB6E089F2E7C9641004B253C /* PostRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
 		};
-		EB6E08952E7C91E3004B253C /* ViewModels */ = {
+		EB6E08A32E7C9641004B253C /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
-				EB6E08972E7C920E004B253C /* HomeViewModel.swift */,
-				EB6E08962E7C91F1004B253C /* ServicesViewModel.swift */,
+				EB6E08A12E7C9641004B253C /* HomeViewModel.swift */,
+				EB6E08A22E7C9641004B253C /* ServicesViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -424,13 +424,13 @@
 				EB6E08922E7C918A004B253C /* CacheService.swift in Sources */,
 				EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */,
 				EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */,
+				EB6E08A42E7C9641004B253C /* PostRepository.swift in Sources */,
+				EB6E08A52E7C9641004B253C /* ServicesViewModel.swift in Sources */,
+				EB6E08A62E7C9641004B253C /* RepositoryProtocol.swift in Sources */,
+				EB6E08A72E7C9641004B253C /* HomeViewModel.swift in Sources */,
 				EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
-				EB6E089A2E7C9435004B253C /* PostRepository.swift in Sources */,
-				EB6E08992E7C940D004B253C /* ServicesViewModel.swift in Sources */,
-				EB6E089B2E7C943B004B253C /* RepositoryProtocol.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
-				EB6E08982E7C9408004B253C /* HomeViewModel.swift in Sources */,
 				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
