@@ -348,7 +348,7 @@ struct EnhancedProfileView: View {
                     EmptyStateView(
                         icon: "briefcase",
                         title: "No Posts Yet",
-                        subtitle: isOwnProfile ? "Your service offers and requests will appear here" : "No services posted yet"
+                        message: isOwnProfile ? "Your service offers and requests will appear here" : "No services posted yet"
                     )
                     .padding(.vertical, 40)
                 } else {
@@ -369,7 +369,7 @@ struct EnhancedProfileView: View {
                     EmptyStateView(
                         icon: "bookmark",
                         title: "No Saved Reels",
-                        subtitle: "Reels you save will appear here"
+                        message: "Reels you save will appear here"
                     )
                     .padding(.vertical, 40)
                 } else {
@@ -391,7 +391,7 @@ struct EnhancedProfileView: View {
                     EmptyStateView(
                         icon: "bookmark",
                         title: "No Saved Posts",
-                        subtitle: "Posts you save will appear here"
+                        message: "Posts you save will appear here"
                     )
                     .padding(.vertical, 40)
                 } else {
@@ -487,7 +487,7 @@ struct EnhancedProfileView: View {
                 EmptyStateView(
                     icon: "star",
                     title: "No Reviews Yet",
-                    subtitle: isOwnProfile ? "Reviews from customers will appear here" : "Be the first to leave a review"
+                    message: isOwnProfile ? "Reviews from customers will appear here" : "Be the first to leave a review"
                 )
                 .padding(.vertical, 30)
             } else {
@@ -861,26 +861,4 @@ struct HalfStarRatingView: View {
     }
 }
 
-struct EmptyStateView: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.largeTitle)
-                .foregroundColor(.gray)
-            
-            Text(title)
-                .font(.headline)
-                .foregroundColor(.primary)
-            
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
+
