@@ -74,7 +74,7 @@ struct HomeView: View {
                         .padding(.horizontal)
                     } else if viewModel.posts.isEmpty && !viewModel.isLoading {
                         // EMPTY STATE - No posts exist
-                        GenericEmptyStateView(
+                        EmptyStateView(
                             icon: "house",
                             title: "No Posts Yet",
                             message: "Be the first to share something with the community!",
@@ -120,7 +120,7 @@ struct HomeView: View {
                             
                             if viewModel.filteredPosts.isEmpty && !searchText.isEmpty {
                                 // Search empty state
-                                GenericEmptyStateView(
+                                EmptyStateView(
                                     icon: "magnifyingglass",
                                     title: "No Results Found",
                                     message: "Try adjusting your search or filters",
