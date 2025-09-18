@@ -5,7 +5,7 @@ import SwiftUI
 import PhotosUI
 
 struct EditServicePostView: View {
-    let post: ServicePost
+    let post: ServicePost?  // Made optional to handle both create and edit
     @StateObject private var firebase = FirebaseService.shared
     @Environment(\.dismiss) var dismiss
     
@@ -21,20 +21,38 @@ struct EditServicePostView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var showingSuccessMessage = false
+    @State private var isRequest: Bool  // Add this to track if it's a request or offer
     
-    init(post: ServicePost) {
+    init(post: ServicePost? = nil, isRequest: Bool = false) {
         self.post = post
-        _title = State(initialValue: post.title)
-        _description = State(initialValue: post.description)
-        _selectedCategory = State(initialValue: post.category)
-        _price = State(initialValue: post.price != nil ? String(Int(post.price!)) : "")
-        _location = State(initialValue: post.location ?? "")
-        _existingImageURLs = State(initialValue: post.imageURLs)
+        // If editing, use post values; if creating, use defaults
+        _title = State(initialValue: post?.title ?? "")
+        _description = State(initialValue: post?.description ?? "")
+        _selectedCategory = State(initialValue: post?.category ?? .other)
+        _price = State(initialValue: post?.price != nil ? String(Int(post!.price!)) : "")
+        _location = State(initialValue: post?.location ?? "")
+        _existingImageURLs = State(initialValue: post?.imageURLs ?? [])
+        _isRequest = State(initialValue: post?.isRequest ?? isRequest)
+    }
+    
+    var isEditMode: Bool {
+        post != nil
     }
     
     var body: some View {
         NavigationView {
             Form {
+                // Post Type Toggle (only show when creating new)
+                if !isEditMode {
+                    Section("Post Type") {
+                        Picker("Type", selection: $isRequest) {
+                            Text("Offering Service").tag(false)
+                            Text("Requesting Service").tag(true)
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                }
+                
                 Section("Details") {
                     TextField("Title", text: $title)
                     TextField("Description", text: $description, axis: .vertical)
@@ -49,66 +67,28 @@ struct EditServicePostView: View {
                 Section("Pricing & Location") {
                     HStack {
                         Text("$")
-                        TextField(post.isRequest ? "Budget" : "Price", text: $price)
+                        TextField(isRequest ? "Budget" : "Price", text: $price)
                             .keyboardType(.numberPad)
                     }
-                    TextField("Service location (optional)", text: $location)
+                    TextField("Location", text: $location)
                 }
                 
-                Section("Photos") {
+                Section("Images") {
+                    // Show existing images if editing
                     if !existingImageURLs.isEmpty {
-                        VStack(alignment: .leading) {
-                            Text("Current Photos")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack {
-                                    ForEach(Array(existingImageURLs.enumerated()), id: \.offset) { index, imageURL in
-                                        AsyncImage(url: URL(string: imageURL)) { image in
-                                            image
-                                                .resizable()
-                                                .scaledToFill()
-                                        } placeholder: {
-                                            ProgressView()
-                                        }
-                                        .frame(width: 80, height: 80)
-                                        .cornerRadius(8)
-                                        .overlay(
-                                            Button(action: {
-                                                existingImageURLs.remove(at: index)
-                                            }) {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.white)
-                                                    .background(Color.black.opacity(0.6))
-                                                    .clipShape(Circle())
-                                            }
-                                            .padding(4),
-                                            alignment: .topTrailing
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if !newImages.isEmpty {
-                        VStack(alignment: .leading) {
-                            Text("New Photos to Add")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack {
-                                    ForEach(Array(newImages.enumerated()), id: \.offset) { index, image in
-                                        Image(uiImage: image)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(existingImageURLs, id: \.self) { imageURL in
+                                    AsyncImage(url: URL(string: imageURL)) { image in
+                                        image
                                             .resizable()
                                             .scaledToFill()
-                                            .frame(width: 80, height: 80)
-                                            .cornerRadius(8)
+                                            .frame(width: 100, height: 100)
+                                            .clipped()
+                                            .cornerRadius(10)
                                             .overlay(
                                                 Button(action: {
-                                                    newImages.remove(at: index)
+                                                    existingImageURLs.removeAll(where: { $0 == imageURL })
                                                 }) {
                                                     Image(systemName: "xmark.circle.fill")
                                                         .foregroundColor(.white)
@@ -118,36 +98,58 @@ struct EditServicePostView: View {
                                                 .padding(4),
                                                 alignment: .topTrailing
                                             )
+                                    } placeholder: {
+                                        ProgressView()
+                                            .frame(width: 100, height: 100)
+                                            .background(Color.gray.opacity(0.2))
+                                            .cornerRadius(10)
                                     }
                                 }
                             }
                         }
                     }
                     
+                    // New images to upload
+                    if !newImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(newImages, id: \.self) { image in
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 100, height: 100)
+                                        .clipped()
+                                        .cornerRadius(10)
+                                        .overlay(
+                                            Button(action: {
+                                                newImages.removeAll(where: { $0 == image })
+                                            }) {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.white)
+                                                    .background(Color.black.opacity(0.6))
+                                                    .clipShape(Circle())
+                                            }
+                                            .padding(4),
+                                            alignment: .topTrailing
+                                        )
+                                }
+                            }
+                        }
+                    }
+                    
                     Button(action: { showingImagePicker = true }) {
-                        Label("Add Photos", systemImage: "camera.fill")
-                            .frame(maxWidth: .infinity)
+                        Label("Add Images", systemImage: "photo.on.rectangle.angled")
                     }
                 }
                 
-                Section("Post Status") {
-                    if post.status == .active {
+                // Status section (only show if editing)
+                if isEditMode, let postStatus = post?.status, postStatus != .active {
+                    Section("Status") {
                         HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Active")
-                                .foregroundColor(.green)
-                            Spacer()
-                            Text("Post is currently visible")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    } else {
-                        HStack {
-                            Image(systemName: post.status == .completed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundColor(post.status == .completed ? .orange : .red)
-                            Text(post.status == .completed ? "Completed" : "Cancelled")
-                                .foregroundColor(post.status == .completed ? .orange : .red)
+                            Image(systemName: postStatus == .completed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundColor(postStatus == .completed ? .orange : .red)
+                            Text(postStatus == .completed ? "Completed" : "Cancelled")
+                                .foregroundColor(postStatus == .completed ? .orange : .red)
                             Spacer()
                         }
                     }
@@ -156,7 +158,7 @@ struct EditServicePostView: View {
                 Section {
                     Button(action: {
                         Task {
-                            await saveChanges()
+                            await savePost()
                         }
                     }) {
                         if isSaving {
@@ -166,14 +168,14 @@ struct EditServicePostView: View {
                                 Spacer()
                             }
                         } else {
-                            Text("Save Changes")
+                            Text(isEditMode ? "Save Changes" : "Create Post")
                                 .frame(maxWidth: .infinity)
                         }
                     }
                     .disabled(title.isEmpty || description.isEmpty || isSaving)
                 }
             }
-            .navigationTitle("Edit Post")
+            .navigationTitle(isEditMode ? "Edit Post" : "Create Post")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -192,20 +194,20 @@ struct EditServicePostView: View {
         .alert("Success!", isPresented: $showingSuccessMessage) {
             Button("OK") { dismiss() }
         } message: {
-            Text("Your post has been updated successfully!")
+            Text(isEditMode ? "Your post has been updated successfully!" : "Your post has been created successfully!")
         }
     }
     
-    private func saveChanges() async {
-        guard let postId = post.id else { return }
-        
+    private func savePost() async {
         isSaving = true
         
         do {
+            // Upload new images
             var newImageURLs: [String] = []
             if !newImages.isEmpty {
+                let userId = firebase.currentUser?.id ?? "unknown"
                 for (index, image) in newImages.enumerated() {
-                    let path = "services/\(post.userId)/\(UUID().uuidString)_\(index).jpg"
+                    let path = "services/\(userId)/\(UUID().uuidString)_\(index).jpg"
                     let url = try await firebase.uploadImage(image, path: path)
                     newImageURLs.append(url)
                 }
@@ -214,15 +216,38 @@ struct EditServicePostView: View {
             let allImageURLs = existingImageURLs + newImageURLs
             let priceValue = Double(price) ?? 0
             
-            try await firebase.updatePost(
-                postId: postId,
-                title: title,
-                description: description,
-                category: selectedCategory,
-                price: priceValue > 0 ? priceValue : nil,
-                location: location.isEmpty ? nil : location,
-                imageURLs: allImageURLs
-            )
+            if isEditMode {
+                // Update existing post
+                guard let postId = post?.id else { return }
+                
+                try await firebase.updatePost(
+                    postId: postId,
+                    title: title,
+                    description: description,
+                    category: selectedCategory,
+                    price: priceValue > 0 ? priceValue : nil,
+                    location: location.isEmpty ? nil : location,
+                    imageURLs: allImageURLs
+                )
+            } else {
+                // Create new post
+                let newPost = ServicePost(
+                    id: nil,
+                    userId: firebase.currentUser?.id ?? "",
+                    userName: firebase.currentUser?.name,
+                    userProfileImage: firebase.currentUser?.profileImageURL,
+                    title: title,
+                    description: description,
+                    category: selectedCategory,
+                    price: priceValue > 0 ? priceValue : nil,
+                    location: location.isEmpty ? nil : location,
+                    imageURLs: allImageURLs,
+                    isRequest: isRequest,
+                    status: .active
+                )
+                
+                try await firebase.saveServicePost(newPost)
+            }
             
             showingSuccessMessage = true
         } catch {
@@ -233,7 +258,7 @@ struct EditServicePostView: View {
     }
 }
 
-// Local ImagePicker wrapper to avoid cross-file reference issues
+// Image Picker for Edit Post
 struct EditPostImagePicker: UIViewControllerRepresentable {
     @Binding var images: [UIImage]
     @Environment(\.dismiss) var dismiss
@@ -241,7 +266,7 @@ struct EditPostImagePicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.filter = .images
-        config.selectionLimit = 10
+        config.selectionLimit = 5
         
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
@@ -264,14 +289,12 @@ struct EditPostImagePicker: UIViewControllerRepresentable {
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             parent.dismiss()
             
-            guard !results.isEmpty else { return }
-            
             for result in results {
                 if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
-                    result.itemProvider.loadObject(ofClass: UIImage.self) { [weak self] image, error in
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
                         if let image = image as? UIImage {
                             DispatchQueue.main.async {
-                                self?.parent.images.append(image)
+                                self.parent.images.append(image)
                             }
                         }
                     }

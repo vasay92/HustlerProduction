@@ -14,6 +14,7 @@ struct ServicesView: View {
     @State private var searchText = ""
     @State private var showingFilters = false
     @State private var viewMode: ViewMode = .grid
+    @State private var showingCreatePost = false
     
     enum ServiceTab {
         case offers, requests

@@ -169,7 +169,7 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showingCreatePost) {
                 NavigationView {
-                    EditServicePostView()
+                    EditServicePostView(post: <#ServicePost#>)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
                                 Button("Cancel") {
