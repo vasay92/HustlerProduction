@@ -23,6 +23,10 @@
 		EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086A2E7C8B2B004B253C /* SecurityService.swift */; };
 		EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086C2E7C8B41004B253C /* AuthenticationService.swift */; };
 		EB6E08922E7C918A004B253C /* CacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08912E7C9189004B253C /* CacheService.swift */; };
+		EB6E08982E7C9408004B253C /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08972E7C920E004B253C /* HomeViewModel.swift */; };
+		EB6E08992E7C940D004B253C /* ServicesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08962E7C91F1004B253C /* ServicesViewModel.swift */; };
+		EB6E089A2E7C9435004B253C /* PostRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08942E7C91BC004B253C /* PostRepository.swift */; };
+		EB6E089B2E7C943B004B253C /* RepositoryProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08902E7C9173004B253C /* RepositoryProtocol.swift */; };
 		EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EBBCA1932E7C875000745D24 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -422,7 +426,11 @@
 				EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */,
 				EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
+				EB6E089A2E7C9435004B253C /* PostRepository.swift in Sources */,
+				EB6E08992E7C940D004B253C /* ServicesViewModel.swift in Sources */,
+				EB6E089B2E7C943B004B253C /* RepositoryProtocol.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
+				EB6E08982E7C9408004B253C /* HomeViewModel.swift in Sources */,
 				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
