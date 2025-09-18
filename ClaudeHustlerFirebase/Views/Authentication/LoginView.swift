@@ -48,12 +48,14 @@ struct LoginView: View {
                         
                         SecureField("Password", text: $password)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .textContentType(.init(rawValue: ""))
                             .disabled(authService.isLoading)
                         
                         // Confirm password (only for sign up)
                         if isSignUp {
                             SecureField("Confirm Password", text: $confirmPassword)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .textContentType(.init(rawValue: ""))
                                 .disabled(authService.isLoading)
                             
                             // Password requirements hint

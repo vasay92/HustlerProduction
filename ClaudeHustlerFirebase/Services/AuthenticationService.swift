@@ -8,13 +8,28 @@ import FirebaseAuth
 import SwiftUI
 
 // MARK: - Authentication State
-enum AuthState {
+enum AuthState: Equatable {
     case unknown
     case authenticated(userId: String)
     case unauthenticated
     case authenticating
+    
+    // Implement Equatable conformance
+    static func == (lhs: AuthState, rhs: AuthState) -> Bool {
+        switch (lhs, rhs) {
+        case (.unknown, .unknown):
+            return true
+        case (.authenticated(let lhsUserId), .authenticated(let rhsUserId)):
+            return lhsUserId == rhsUserId
+        case (.unauthenticated, .unauthenticated):
+            return true
+        case (.authenticating, .authenticating):
+            return true
+        default:
+            return false
+        }
+    }
 }
-
 // MARK: - Authentication Errors
 enum AuthError: LocalizedError {
     case invalidEmail
