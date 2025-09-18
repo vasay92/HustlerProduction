@@ -19,7 +19,7 @@ final class PostRepository: RepositoryProtocol {
     func fetch(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
         // Create query
         var query = db.collection("posts")
-            .order(by: "createdAt", descending: true)
+            .order(by: "updatedAt", descending: true)
             .limit(to: limit)
         
         // Add pagination if we have a last document
@@ -75,7 +75,7 @@ final class PostRepository: RepositoryProtocol {
     func fetchByCategory(_ category: ServiceCategory, limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
         var query = db.collection("posts")
             .whereField("category", isEqualTo: category.rawValue)
-            .order(by: "createdAt", descending: true)
+            .order(by: "updatedAt", descending: true)
             .limit(to: limit)
         
         if let lastDoc = lastDocument {
@@ -97,7 +97,7 @@ final class PostRepository: RepositoryProtocol {
     func fetchOffers(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
         var query = db.collection("posts")
             .whereField("isRequest", isEqualTo: false)
-            .order(by: "createdAt", descending: true)
+            .order(by: "updatedAt", descending: true)
             .limit(to: limit)
         
         if let lastDoc = lastDocument {
@@ -119,7 +119,7 @@ final class PostRepository: RepositoryProtocol {
     func fetchRequests(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
         var query = db.collection("posts")
             .whereField("isRequest", isEqualTo: true)
-            .order(by: "createdAt", descending: true)
+            .order(by: "updatedAt", descending: true)
             .limit(to: limit)
         
         if let lastDoc = lastDocument {
@@ -216,7 +216,7 @@ final class PostRepository: RepositoryProtocol {
         // Note: For proper text search, consider using Algolia or ElasticSearch
         // This is a basic implementation
         let snapshot = try await db.collection("posts")
-            .order(by: "createdAt", descending: true)
+            .order(by: "updatedAt", descending: true)
             .limit(to: 100)
             .getDocuments()
         
