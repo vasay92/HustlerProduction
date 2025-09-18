@@ -143,10 +143,27 @@ final class PostRepository: RepositoryProtocol {
             throw NSError(domain: "PostRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        var postData = post
-        postData.userId = userId
-        postData.createdAt = Date()
-        postData.updatedAt = Date()
+        let postData = ServicePost(
+                id: post.id,
+                userId: userId,  // Set the userId here
+                title: post.title,
+                description: post.description,
+                price: post.price,
+                category: post.category,
+                tags: post.tags,
+                imageUrls: post.imageUrls,
+                videoUrls: post.videoUrls,
+                location: post.location,
+                isAvailable: post.isAvailable,
+                rating: post.rating,
+                reviewCount: post.reviewCount,
+                viewCount: post.viewCount,
+                likeCount: post.likeCount,
+                isRequest: post.isRequest,
+                deliveryTime: post.deliveryTime,
+                createdAt: Date(),  // Set the date here
+                updatedAt: Date()
+            )
         
         let docRef = try await db.collection("posts").addDocument(from: postData)
         
@@ -162,8 +179,27 @@ final class PostRepository: RepositoryProtocol {
             throw NSError(domain: "PostRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Post ID is required"])
         }
         
-        var updatedPost = post
-        updatedPost.updatedAt = Date()
+        let updatedPost = ServicePost(
+                id: post.id,
+                userId: post.userId,
+                title: post.title,
+                description: post.description,
+                price: post.price,
+                category: post.category,
+                tags: post.tags,
+                imageUrls: post.imageUrls,
+                videoUrls: post.videoUrls,
+                location: post.location,
+                isAvailable: post.isAvailable,
+                rating: post.rating,
+                reviewCount: post.reviewCount,
+                viewCount: post.viewCount,
+                likeCount: post.likeCount,
+                isRequest: post.isRequest,
+                deliveryTime: post.deliveryTime,
+                createdAt: post.createdAt,
+                updatedAt: Date()  // Update only this
+            )
         
         try await db.collection("posts").document(postId).setData(from: updatedPost, merge: true)
         

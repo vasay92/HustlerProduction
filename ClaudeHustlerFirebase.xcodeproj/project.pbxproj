@@ -150,9 +150,6 @@
 		EB6BBA3B2E68F52F006DB468 = {
 			isa = PBXGroup;
 			children = (
-				EB6E089E2E7C9641004B253C /* Core */,
-				EB6E08A02E7C9641004B253C /* Repositories */,
-				EB6E08A32E7C9641004B253C /* ViewModels */,
 				EB6BBA6F2E68F5CB006DB468 /* App */,
 				EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */,
 				EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */,
@@ -174,6 +171,9 @@
 		EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */ = {
 			isa = PBXGroup;
 			children = (
+				EB6E089E2E7C9641004B253C /* Core */,
+				EB6E08A02E7C9641004B253C /* Repositories */,
+				EB6E08A32E7C9641004B253C /* ViewModels */,
 				EB6BBA722E68F5E9006DB468 /* Views */,
 				EB6BBA712E68F5E3006DB468 /* Services */,
 				EB6BBA702E68F5DD006DB468 /* Models */,
