@@ -20,6 +20,7 @@
 		EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBAB12E6914F4006DB468 /* PostOptionsView.swift */; };
 		EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBABF2E69325A006DB468 /* PostDetailView.swift */; };
 		EB6BBB372E70D070006DB468 /* ContentPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */; };
+		EB6E08692E7C89A4004B253C /* .gitignore in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08682E7C89A2004B253C /* .gitignore */; };
 		EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EBBCA1932E7C875000745D24 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -53,6 +54,7 @@
 		EB6BBAB12E6914F4006DB468 /* PostOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostOptionsView.swift; sourceTree = "<group>"; };
 		EB6BBABF2E69325A006DB468 /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
 		EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewCard.swift; sourceTree = "<group>"; };
+		EB6E08682E7C89A2004B253C /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		EBBCA1932E7C875000745D24 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -136,6 +138,7 @@
 		EB6BBA3B2E68F52F006DB468 = {
 			isa = PBXGroup;
 			children = (
+				EB6E08682E7C89A2004B253C /* .gitignore */,
 				EB6BBA6F2E68F5CB006DB468 /* App */,
 				EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */,
 				EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */,
@@ -372,6 +375,7 @@
 				EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
+				EB6E08692E7C89A4004B253C /* .gitignore in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
