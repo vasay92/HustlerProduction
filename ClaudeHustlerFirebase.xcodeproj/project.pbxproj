@@ -21,6 +21,10 @@
 		EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBABF2E69325A006DB468 /* PostDetailView.swift */; };
 		EB6BBB372E70D070006DB468 /* ContentPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */; };
 		EB6E08692E7C89A4004B253C /* .gitignore in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08682E7C89A2004B253C /* .gitignore */; };
+		EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086A2E7C8B2B004B253C /* SecurityService.swift */; };
+		EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086C2E7C8B41004B253C /* AuthenticationService.swift */; };
+		EB6E086F2E7C8BEE004B253C /* firestore.rules in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086E2E7C8BEE004B253C /* firestore.rules */; };
+		EB6E08712E7C8C0A004B253C /* storage.rules in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08702E7C8C09004B253C /* storage.rules */; };
 		EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EBBCA1932E7C875000745D24 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -55,6 +59,10 @@
 		EB6BBABF2E69325A006DB468 /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
 		EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewCard.swift; sourceTree = "<group>"; };
 		EB6E08682E7C89A2004B253C /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
+		EB6E086A2E7C8B2B004B253C /* SecurityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityService.swift; sourceTree = "<group>"; };
+		EB6E086C2E7C8B41004B253C /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
+		EB6E086E2E7C8BEE004B253C /* firestore.rules */ = {isa = PBXFileReference; lastKnownFileType = text; path = firestore.rules; sourceTree = "<group>"; };
+		EB6E08702E7C8C09004B253C /* storage.rules */ = {isa = PBXFileReference; lastKnownFileType = text; path = storage.rules; sourceTree = "<group>"; };
 		EBBCA1932E7C875000745D24 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -138,6 +146,8 @@
 		EB6BBA3B2E68F52F006DB468 = {
 			isa = PBXGroup;
 			children = (
+				EB6E08702E7C8C09004B253C /* storage.rules */,
+				EB6E086E2E7C8BEE004B253C /* firestore.rules */,
 				EB6E08682E7C89A2004B253C /* .gitignore */,
 				EB6BBA6F2E68F5CB006DB468 /* App */,
 				EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */,
@@ -186,6 +196,8 @@
 		EB6BBA712E68F5E3006DB468 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				EB6E086C2E7C8B41004B253C /* AuthenticationService.swift */,
+				EB6E086A2E7C8B2B004B253C /* SecurityService.swift */,
 				EB6BBA812E68F9DE006DB468 /* FirebaseService.swift */,
 			);
 			path = Services;
@@ -369,13 +381,17 @@
 			files = (
 				EB6BBA802E68F9CF006DB468 /* DataModels.swift in Sources */,
 				EB6BBA8F2E68FAF9006DB468 /* MainTabView.swift in Sources */,
+				EB6E08712E7C8C0A004B253C /* storage.rules in Sources */,
 				EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */,
 				EB6BBB372E70D070006DB468 /* ContentPreviewCard.swift in Sources */,
 				EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */,
+				EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */,
+				EB6E086F2E7C8BEE004B253C /* firestore.rules in Sources */,
 				EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
 				EB6E08692E7C89A4004B253C /* .gitignore in Sources */,
+				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
