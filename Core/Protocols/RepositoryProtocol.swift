@@ -21,7 +21,7 @@ protocol RepositoryProtocol {
 struct PaginatedResponse<T> {
     let items: [T]
     let lastDocument: DocumentSnapshot?
-    let hasMore: Bool
+    let hasMore: Bool∫
     let totalCount: Int?
     
     init(items: [T], lastDocument: DocumentSnapshot?, hasMore: Bool = true, totalCount: Int? = nil) {
