@@ -235,33 +235,16 @@ struct ServicePostCard: View {
             if !post.imageURLs.isEmpty {
                 TabView {
                     ForEach(post.imageURLs, id: \.self) { imageURL in
-                        AsyncImage(url: URL(string: imageURL)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(height: 200)
-                                    .clipped()
-                            case .failure(_):
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.2))
-                                    .frame(height: 200)
-                                    .overlay(
-                                        Image(systemName: "photo")
-                                            .foregroundColor(.gray)
-                                    )
-                            case .empty:
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.1))
-                                    .frame(height: 200)
-                                    .overlay(
-                                        ProgressView()
-                                    )
-                            @unknown default:
-                                EmptyView()
-                            }
+                        CachedAsyncImage(url: imageURL) {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .overlay(
+                                    Image(systemName: "photo")
+                                        .foregroundColor(.gray)
+                                )
                         }
+                        .frame(height: 200)
+                        .clipped()
                     }
                 }
                 .frame(height: 200)

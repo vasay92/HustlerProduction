@@ -6,6 +6,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
 import UIKit
+import SDWebImageSwiftUI
 
 typealias AppUser = User  // Your custom User model
 typealias AuthUser = FirebaseAuth.User  // Firebase Auth User
@@ -556,6 +557,15 @@ class FirebaseService: ObservableObject {
         } catch {
             print("Error loading statuses from following: \(error)")
             statuses = []
+        }
+    }
+    
+    // MARK: - Cache Management
+
+    func clearImageCache() {
+        SDImageCache.shared.clearMemory()
+        SDImageCache.shared.clearDisk {
+            print("Image cache cleared")
         }
     }
 }
