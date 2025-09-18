@@ -20,6 +20,7 @@
 		EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBAB12E6914F4006DB468 /* PostOptionsView.swift */; };
 		EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBABF2E69325A006DB468 /* PostDetailView.swift */; };
 		EB6BBB372E70D070006DB468 /* ContentPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */; };
+		EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EBBCA1932E7C875000745D24 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,19 +53,10 @@
 		EB6BBAB12E6914F4006DB468 /* PostOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostOptionsView.swift; sourceTree = "<group>"; };
 		EB6BBABF2E69325A006DB468 /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
 		EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewCard.swift; sourceTree = "<group>"; };
+		EBBCA1932E7C875000745D24 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		EB6BBA462E68F52F006DB468 /* ClaudeHustlerFirebase1 */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ClaudeHustlerFirebase1;
-			sourceTree = "<group>";
-		};
-		EB6BBA832E68FA3E006DB468 /* CreatePost */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CreatePost;
-			sourceTree = "<group>";
-		};
 		EB6BBA842E68FA44006DB468 /* Profile */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Profile;
@@ -144,10 +136,10 @@
 		EB6BBA3B2E68F52F006DB468 = {
 			isa = PBXGroup;
 			children = (
+				EB6BBA6F2E68F5CB006DB468 /* App */,
 				EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */,
-				EB6BBA462E68F52F006DB468 /* ClaudeHustlerFirebase1 */,
-				EB6BBA742E68F6BB006DB468 /* Frameworks */,
 				EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */,
+				EBBCA1932E7C875000745D24 /* Assets.xcassets */,
 				EB6BBA452E68F52F006DB468 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -168,8 +160,6 @@
 				EB6BBA722E68F5E9006DB468 /* Views */,
 				EB6BBA712E68F5E3006DB468 /* Services */,
 				EB6BBA702E68F5DD006DB468 /* Models */,
-				EB6BBA6F2E68F5CB006DB468 /* App */,
-				EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */,
 			);
 			path = ClaudeHustlerFirebase;
 			sourceTree = "<group>";
@@ -177,6 +167,7 @@
 		EB6BBA6F2E68F5CB006DB468 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -212,18 +203,10 @@
 				EB6BBA862E68FA4C006DB468 /* Authentication */,
 				EB6BBA852E68FA48006DB468 /* Home */,
 				EB6BBA842E68FA44006DB468 /* Profile */,
-				EB6BBA832E68FA3E006DB468 /* CreatePost */,
 				EB6BBA872E68FA79006DB468 /* Components */,
 				EB6BBA492E68F52F006DB468 /* ContentView.swift */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		EB6BBA742E68F6BB006DB468 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -242,8 +225,6 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				EB6BBA462E68F52F006DB468 /* ClaudeHustlerFirebase1 */,
-				EB6BBA832E68FA3E006DB468 /* CreatePost */,
 				EB6BBA842E68FA44006DB468 /* Profile */,
 				EB6BBA852E68FA48006DB468 /* Home */,
 				EB6BBA862E68FA4C006DB468 /* Authentication */,
@@ -357,6 +338,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */,
 				EB6BBA7E2E68F71A006DB468 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
