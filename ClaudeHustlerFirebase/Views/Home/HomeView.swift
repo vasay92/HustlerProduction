@@ -9,7 +9,7 @@ struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @State private var showingFilters = false
     @State private var showingMessages = false
-    @State private var showingCreatePost = false  // Add this for create post navigation
+    @State private var showingCreatePost = false
     @State private var unreadMessageCount: Int = 0
     @State private var conversationsListener: ListenerRegistration?
     
@@ -63,9 +63,18 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.top, 10)
                     
-                    // Empty State or Content
-                    if viewModel.posts.isEmpty && !viewModel.isLoading {
-                        EmptyStateView(
+                    // Content Section with Loading States
+                    if viewModel.isLoading && viewModel.posts.isEmpty {
+                        // INITIAL LOADING - Show skeletons
+                        VStack(spacing: 15) {
+                            ForEach(0..<5, id: \.self) { _ in
+                                ServiceCardSkeleton()
+                            }
+                        }
+                        .padding(.horizontal)
+                    } else if viewModel.posts.isEmpty && !viewModel.isLoading {
+                        // EMPTY STATE - No posts exist
+                        GenericEmptyStateView(
                             icon: "house",
                             title: "No Posts Yet",
                             message: "Be the first to share something with the community!",
@@ -76,6 +85,8 @@ struct HomeView: View {
                         )
                         .frame(minHeight: 400)
                     } else {
+                        // CONTENT EXISTS - Show actual posts
+                        
                         // Trending Services Section
                         if !viewModel.trendingPosts.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
@@ -109,7 +120,7 @@ struct HomeView: View {
                             
                             if viewModel.filteredPosts.isEmpty && !searchText.isEmpty {
                                 // Search empty state
-                                EmptyStateView(
+                                GenericEmptyStateView(
                                     icon: "magnifyingglass",
                                     title: "No Results Found",
                                     message: "Try adjusting your search or filters",
