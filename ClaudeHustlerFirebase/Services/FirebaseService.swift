@@ -6,7 +6,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
 import UIKit
-import SDWebImageSwiftUI
+import SDWebImage
 
 typealias AppUser = User  // Your custom User model
 typealias AuthUser = FirebaseAuth.User  // Firebase Auth User
