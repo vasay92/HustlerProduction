@@ -246,7 +246,15 @@ struct EditServicePostView: View {
                     status: .active
                 )
                 
-                try await firebase.saveServicePost(newPost)
+                _ = try await firebase.createServicePost(
+                    title: title,
+                    description: description,
+                    category: selectedCategory,
+                    price: priceValue > 0 ? priceValue : nil,
+                    isRequest: isRequest,
+                    location: location.isEmpty ? nil : location,
+                    imageURLs: allImageURLs
+                )
             }
             
             showingSuccessMessage = true
