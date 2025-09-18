@@ -10,6 +10,7 @@ import FirebaseAuth
 // MARK: - Post Repository
 final class PostRepository: RepositoryProtocol {
     typealias Model = ServicePost
+    static let shared = PostRepository()
     
     private let db = Firestore.firestore()
     private let cache = CacheService.shared
