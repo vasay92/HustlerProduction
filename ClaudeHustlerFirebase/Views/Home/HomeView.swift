@@ -63,6 +63,23 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.top, 10)
                     
+                    HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            
+                            TextField("Search services...", text: $viewModel.searchText)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            
+                            if !viewModel.searchText.isEmpty {
+                                Button(action: { viewModel.searchText = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 10)
+                    
                     // Content Section with Loading States
                     if viewModel.isLoading && viewModel.posts.isEmpty {
                         // INITIAL LOADING - Show skeletons
