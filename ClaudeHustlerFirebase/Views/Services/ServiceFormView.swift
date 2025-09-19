@@ -5,6 +5,7 @@
 
 import SwiftUI
 import PhotosUI
+import FirebaseAuth
 
 
 struct ServiceFormView: View {
@@ -424,26 +425,41 @@ struct ServiceFormView: View {
                 }
                 
                 if isEditMode {
-                    guard let postId = existingPost?.id else { return }
-                    try await firebase.updatePost(
-                        postId: postId,
-                        title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                        description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                        category: selectedCategory,
-                        price: priceValidation.price,
-                        location: location.isEmpty ? nil : location,
-                        imageURLs: imageURLs
-                    )
+                    var updatedPost = existingPost!
+                    updatedPost.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    updatedPost.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+                    updatedPost.category = selectedCategory
+                    updatedPost.price = priceValidation.price
+                    updatedPost.location = location.isEmpty ? nil : location
+                    updatedPost.imageURLs = imageURLs
+                    try await PostRepository.shared.update(updatedPost)
+
+                    // Trigger refresh
+                    await HomeViewModel.shared?.refresh()
+                    await ServicesViewModel.shared?.refresh(type: updatedPost.isRequest ? .requests : .offers)
+                    
                 } else {
-                    _ = try await firebase.createServicePost(
+                    // CREATE NEW POST using PostRepository
+                    let newPost = ServicePost(
+                        id: nil,
+                        userId: firebase.currentUser?.id ?? "",
+                        userName: firebase.currentUser?.name,
+                        userProfileImage: firebase.currentUser?.profileImageURL,
                         title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         description: description.trimmingCharacters(in: .whitespacesAndNewlines),
                         category: selectedCategory,
                         price: priceValidation.price,
-                        isRequest: isRequest,
                         location: location.isEmpty ? nil : location,
-                        imageURLs: imageURLs
+                        imageURLs: imageURLs,
+                        isRequest: isRequest,
+                        status: .active,
+                        updatedAt: Date()
                     )
+                    _ = try await PostRepository.shared.create(newPost)
+                    
+                    // Trigger refresh in ViewModels
+                    await HomeViewModel.shared?.refresh()
+                    await ServicesViewModel.shared?.refresh(type: isRequest ? .requests : .offers)
                 }
                 
                 dismiss()

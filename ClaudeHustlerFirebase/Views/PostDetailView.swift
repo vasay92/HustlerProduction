@@ -493,7 +493,7 @@ struct PostDetailView: View {
         isDeleting = true
         
         do {
-            try await firebase.deletePost(postId)
+            try await PostRepository.shared.delete(postId)
             dismiss()
         } catch {
             print("Error deleting post: \(error)")

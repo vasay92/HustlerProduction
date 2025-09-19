@@ -21,8 +21,10 @@ class HomeViewModel: ObservableObject {
     private let repository = PostRepository.shared
     private var lastDocument: DocumentSnapshot?
     private var cancellables = Set<AnyCancellable>()
+    static weak var shared: HomeViewModel?
     
     init() {
+        Self.shared = self
         setupSearchListener()
         Task {
             await loadInitialPosts()

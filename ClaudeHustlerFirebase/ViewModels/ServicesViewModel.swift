@@ -24,9 +24,11 @@ final class ServicesViewModel: ObservableObject {
     private var offersLastDocument: DocumentSnapshot?
     private var requestsLastDocument: DocumentSnapshot?
     private let pageSize = 20
+    static weak var shared: ServicesViewModel?
     
     // MARK: - Initialization
     init() {
+        Self.shared = self
         Task {
             await loadInitialData()
         }
