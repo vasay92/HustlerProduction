@@ -252,35 +252,7 @@ struct ConversationRow: View {
     }
 }
 
-// MARK: - Profile Image View Helper
-struct ProfileImageView: View {
-    let imageURL: String?
-    let size: CGFloat
-    
-    var body: some View {
-        if let urlString = imageURL, let url = URL(string: urlString) {
-            AsyncImage(url: url) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipShape(Circle())
-            } placeholder: {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: size, height: size)
-                    .overlay(
-                        ProgressView()
-                    )
-            }
-        } else {
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: size))
-                .foregroundColor(.gray)
-                .frame(width: size, height: size)
-        }
-    }
-}
+
 
 // MARK: - Date Extension for Time Ago
 extension Date {
@@ -356,59 +328,3 @@ struct NewMessageView: View {
     }
 }
 
-// MARK: - Chat View (Placeholder)
-// Note: You should already have this view - this is just to make the file compile
-struct ChatView: View {
-    let conversation: Conversation
-    @Environment(\.dismiss) var dismiss
-    
-    init(conversation: Conversation) {
-        self.conversation = conversation
-    }
-    
-    // Alternative initializer for creating new conversations
-    init(recipientId: String, contextType: Message.MessageContextType? = nil,
-         contextId: String? = nil,
-         contextData: (title: String, image: String, userId: String)? = nil,
-         isFromContentView: Bool = false) {
-        // Create a temporary conversation
-        self.conversation = Conversation(
-            participantIds: [FirebaseService.shared.currentUser?.id ?? "", recipientId],
-            participantNames: [:],
-            participantImages: [:]
-        )
-    }
-    
-    var body: some View {
-        NavigationView {
-            VStack {
-                // Messages would be displayed here
-                ScrollView {
-                    Text("Chat messages will appear here")
-                        .foregroundColor(.secondary)
-                        .padding()
-                }
-                
-                // Message input bar would go here
-                HStack {
-                    TextField("Type a message...", text: .constant(""))
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                    
-                    Button(action: {}) {
-                        Image(systemName: "paperplane.fill")
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Chat")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Back") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
