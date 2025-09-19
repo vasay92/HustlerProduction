@@ -66,19 +66,19 @@ struct ReelsView: View {
                 HStack(spacing: 12) {
                     // Add Your Story button
                     if firebase.statuses.first(where: { $0.userId == firebase.currentUser?.id }) == nil {
-                        AddStatusButton()
-                    }
-                    
-                    // User's own status if exists
-                    ForEach(firebase.statuses.filter { $0.userId == firebase.currentUser?.id }) { status in
-                        StatusBubble(status: status, isOwnStatus: true) {
-                            selectedStatus = status
+                        AddStatusButton(action: { showingCreateOptions = true })
+                    } else {
+                        // Show user's own status if exists
+                        if let ownStatus = firebase.statuses.first(where: { $0.userId == firebase.currentUser?.id }) {
+                            StatusCircle(status: ownStatus, isOwnStatus: true) {
+                                selectedStatus = ownStatus
+                            }
                         }
                     }
                     
-                    // Following users' statuses
+                    // Other users' statuses
                     ForEach(firebase.statuses.filter { $0.userId != firebase.currentUser?.id }) { status in
-                        StatusBubble(status: status, isOwnStatus: false) {
+                        StatusCircle(status: status, isOwnStatus: false) {
                             selectedStatus = status
                         }
                     }
@@ -86,7 +86,6 @@ struct ReelsView: View {
                 .padding(.horizontal)
             }
             .frame(height: 100)
-            .padding(.top, 10)
         }
     }
     
@@ -94,21 +93,11 @@ struct ReelsView: View {
     @ViewBuilder
     private var reelsGridSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Reels")
-                    .font(.headline)
-                    .padding(.horizontal)
-                
-                Spacer()
-                
-                // Add button for creating content
-                Button(action: { showingCreateOptions = true }) {
-                    Image(systemName: "plus.square")
-                        .font(.title3)
-                        .foregroundColor(.primary)
-                        .padding(.trailing)
-                }
-            }
+            // Section Header
+            Text("Reels")
+                .font(.title2)
+                .fontWeight(.bold)
+                .padding(.horizontal)
             
             if firebase.reels.isEmpty {
                 EmptyReelsPlaceholder()
@@ -127,13 +116,11 @@ struct ReelsView: View {
     }
 }
 
-// MARK: - Vertical Reel Scroll View (TikTok Style)
+// MARK: - Vertical Reel Scroll View (Full Screen Mode)
 struct VerticalReelScrollView: View {
     let reels: [Reel]
     let initialIndex: Int
-    
     @Environment(\.dismiss) var dismiss
-    @StateObject private var firebase = FirebaseService.shared
     @State private var currentIndex: Int
     
     init(reels: [Reel], initialIndex: Int) {
@@ -147,7 +134,6 @@ struct VerticalReelScrollView: View {
             Color.black.ignoresSafeArea()
             
             if !reels.isEmpty {
-                // Use regular TabView with page style for horizontal scrolling
                 TabView(selection: $currentIndex) {
                     ForEach(Array(reels.enumerated()), id: \.element.id) { index, reel in
                         FullScreenReelView(
@@ -161,7 +147,7 @@ struct VerticalReelScrollView: View {
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 .ignoresSafeArea()
                 
-                // Top overlay with close button
+                // Top bar overlay
                 VStack {
                     HStack {
                         Button(action: { dismiss() }) {
@@ -169,8 +155,7 @@ struct VerticalReelScrollView: View {
                                 .font(.title2)
                                 .foregroundColor(.white)
                                 .padding()
-                                .background(Color.black.opacity(0.5))
-                                .clipShape(Circle())
+                                .background(Circle().fill(Color.black.opacity(0.3)))
                         }
                         .padding()
                         
@@ -208,9 +193,6 @@ struct VerticalReelScrollView: View {
         }
     }
 }
-
-// MARK: - Full Screen Reel View (Individual Reel)
-// In ReelsView.swift, replace the FullScreenReelView with this enhanced version:
 
 // MARK: - Full Screen Reel View (Individual Reel)
 struct FullScreenReelView: View {
@@ -304,10 +286,8 @@ struct FullScreenReelView: View {
             }
         }
         .onDisappear {
-            reelListener?.remove()
-            if let reelId = reel.id {
-                firebase.stopListeningToReel(reelId)
-            }
+            // IMPROVED: Comprehensive cleanup
+            cleanupAllListeners()
         }
         .onChange(of: isCurrentReel) { _, newValue in
             if newValue {
@@ -316,10 +296,8 @@ struct FullScreenReelView: View {
                     await checkInitialStates()
                 }
             } else {
-                reelListener?.remove()
-                if let reelId = reel.id {
-                    firebase.stopListeningToReel(reelId)
-                }
+                // IMPROVED: Use consolidated cleanup
+                cleanupAllListeners()
             }
         }
         .fullScreenCover(isPresented: $showingUserProfile) {
@@ -379,52 +357,73 @@ struct FullScreenReelView: View {
     
     @ViewBuilder
     private var reelBackgroundContent: some View {
-        if let thumbnailURL = displayReel.thumbnailURL {
-            AsyncImage(url: URL(string: thumbnailURL)) { image in
-                image
-                    .resizable()
-                    .scaledToFit()
-            } placeholder: {
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.purple.opacity(0.6), Color.blue.opacity(0.6)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+        if let thumbnailURL = displayReel.thumbnailURL ?? displayReel.videoURL,
+           let url = URL(string: thumbnailURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                case .failure(_):
+                    Color.gray.opacity(0.3)
+                        .overlay(
+                            Image(systemName: "play.rectangle.fill")
+                                .font(.largeTitle)
+                                .foregroundColor(.gray)
                         )
-                    )
+                case .empty:
+                    Color.gray.opacity(0.3)
+                        .overlay(ProgressView())
+                @unknown default:
+                    Color.gray.opacity(0.3)
+                }
             }
         } else {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.purple.opacity(0.6), Color.blue.opacity(0.6)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+            Color.gray.opacity(0.3)
+                .overlay(
+                    Image(systemName: "play.rectangle.fill")
+                        .font(.largeTitle)
+                        .foregroundColor(.gray)
                 )
         }
     }
     
     @ViewBuilder
     private var userInfoSection: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(Color.white)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text(String(displayReel.userName?.first ?? "U"))
-                        .foregroundColor(.black)
-                        .fontWeight(.semibold)
-                )
-            
+        HStack {
             Button(action: { showingUserProfile = true }) {
-                Text(displayReel.userName ?? "User")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
+                HStack(spacing: 8) {
+                    // Profile image
+                    if let profileImage = displayReel.userProfileImage {
+                        AsyncImage(url: URL(string: profileImage)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 35, height: 35)
+                                .clipShape(Circle())
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 35, height: 35)
+                        }
+                    } else {
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 35, height: 35)
+                    }
+                    
+                    // Username
+                    Text(displayReel.userName ?? "User")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                }
             }
             
+            // Follow button (if not own reel)
             if !isOwnReel {
                 Button(action: { toggleFollow() }) {
                     Text(isFollowing ? "Following" : "Follow")
@@ -556,10 +555,39 @@ struct FullScreenReelView: View {
             )
     }
     
+    // MARK: - IMPROVED Cleanup Helper Method
+    private func cleanupAllListeners() {
+        // Remove reel listener
+        reelListener?.remove()
+        reelListener = nil
+        
+        // Stop listening to the specific reel
+        if let reelId = reel.id {
+            firebase.stopListeningToReel(reelId)
+        }
+        
+        // Cleanup comments listener if comments sheet was opened
+        if showingComments {
+            firebase.stopListeningToComments(reel.id ?? "")
+        }
+        
+        // Cleanup likes listener if likes sheet was opened
+        if showingLikesList {
+            firebase.stopListeningToLikes(reel.id ?? "")
+        }
+        
+        #if DEBUG
+        print("✅ FullScreenReelView: All listeners cleaned up for reel \(reel.id ?? "unknown")")
+        #endif
+    }
+    
     // MARK: - Methods
     
     private func startListeningToReel() {
         guard let reelId = reel.id else { return }
+        
+        // Always remove any existing listener first
+        reelListener?.remove()
         
         reelListener = firebase.listenToReel(reelId) { updatedReel in
             if let updatedReel = updatedReel {
@@ -595,7 +623,6 @@ struct FullScreenReelView: View {
             await MainActor.run {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isLiked.toggle()
-                    
                 }
             }
         }
@@ -659,107 +686,72 @@ struct FullScreenReelView: View {
     }
 }
 
-// MARK: - Updated Reel Action Button Component
-struct ReelActionButton: View {
-    let icon: String
-    let text: String?
-    let color: Color
+// MARK: - Supporting Components
+
+// Add Status Button
+struct AddStatusButton: View {
     let action: () -> Void
-    var onLongPress: (() -> Void)? = nil
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.title)
-                    .foregroundColor(color)
-                    .scaleEffect(color == .red || color == .yellow ? 1.1 : 1.0)
-                    .animation(.easeInOut(duration: 0.2), value: color)
-                
-                if let text = text {
-                    Text(text)
-                        .font(.caption)
-                        .foregroundColor(.white)
-                }
-            }
-        }
-        .simultaneousGesture(
-            LongPressGesture()
-                .onEnded { _ in
-                    onLongPress?()
-                }
-        )
-    }
-}
-// MARK: - Add Status Button
-struct AddStatusButton: View {
-    @State private var showingCamera = false
-    
-    var body: some View {
-        Button(action: { showingCamera = true }) {
-            VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.gray.opacity(0.1))
-                        .frame(width: 75, height: 75)
+            VStack {
+                ZStack(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 70, height: 70)
+                        .overlay(
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .foregroundColor(.primary)
+                        )
                     
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(.blue)
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "plus")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        )
                 }
                 
                 Text("Your Story")
                     .font(.caption)
                     .foregroundColor(.primary)
+                    .lineLimit(1)
             }
-        }
-        .fullScreenCover(isPresented: $showingCamera) {
-            CameraView(mode: .status)
         }
     }
 }
 
-// MARK: - Status Bubble
-struct StatusBubble: View {
+// Status Circle
+struct StatusCircle: View {
     let status: Status
     let isOwnStatus: Bool
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
-                ZStack {
-                    // Background image
-                    AsyncImage(url: URL(string: status.mediaURL)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 75, height: 75)
-                                .clipShape(RoundedRectangle(cornerRadius: 20))
-                        case .failure(_):
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 75, height: 75)
-                        case .empty:
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.gray.opacity(0.1))
-                                .frame(width: 75, height: 75)
-                                .overlay(ProgressView())
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                    
-                    // Border for unviewed stories
-                    RoundedRectangle(cornerRadius: 20)
+            VStack {
+                AsyncImage(url: URL(string: status.mediaURL)) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 65, height: 65)
+                        .clipShape(Circle())
+                } placeholder: {
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 65, height: 65)
+                }
+                .overlay(
+                    Circle()
                         .stroke(
-                            isOwnStatus ? Color.blue : Color.purple,
+                            status.viewedBy.contains(FirebaseService.shared.currentUser?.id ?? "") ? Color.gray : isOwnStatus ? Color.blue : Color.purple,
                             lineWidth: status.viewedBy.contains(FirebaseService.shared.currentUser?.id ?? "") ? 1 : 3
                         )
                         .frame(width: 75, height: 75)
-                }
+                )
                 
                 Text(isOwnStatus ? "Your Story" : (status.userName ?? "User"))
                     .font(.caption)
@@ -770,10 +762,22 @@ struct StatusBubble: View {
     }
 }
 
-// MARK: - Reel Grid Item
+// Reel Grid Item
 struct ReelGridItem: View {
     let reel: Reel
     let action: () -> Void
+    
+    var placeholderView: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [Color.purple.opacity(0.3), Color.blue.opacity(0.3)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
+    }
     
     var body: some View {
         Button(action: action) {
@@ -827,21 +831,9 @@ struct ReelGridItem: View {
             .background(Color.gray.opacity(0.2))
         }
     }
-    
-    var placeholderView: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [Color.purple.opacity(0.3), Color.blue.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
-    }
 }
 
-// MARK: - Empty Reels Placeholder
+// Empty Reels Placeholder
 struct EmptyReelsPlaceholder: View {
     var body: some View {
         VStack(spacing: 20) {
@@ -862,6 +854,122 @@ struct EmptyReelsPlaceholder: View {
     }
 }
 
+// MARK: - Action Button Component
+struct ReelActionButton: View {
+    let icon: String
+    let text: String?
+    let color: Color
+    let action: () -> Void
+    var onLongPress: (() -> Void)? = nil
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.title)
+                    .foregroundColor(color)
+                    .scaleEffect(color == .red || color == .yellow ? 1.1 : 1.0)
+                
+                if let text = text {
+                    Text(text)
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .fontWeight(.semibold)
+                }
+            }
+            .frame(width: 44, height: 44)
+        }
+        .simultaneousGesture(
+            LongPressGesture().onEnded { _ in
+                onLongPress?()
+            }
+        )
+    }
+}
+
+// MARK: - Share Sheet
+struct ReelShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - Edit Reel Caption View
+struct EditReelCaptionView: View {
+    let reel: Reel
+    @Environment(\.dismiss) var dismiss
+    @StateObject private var firebase = FirebaseService.shared
+    @State private var title: String
+    @State private var description: String
+    @State private var isSaving = false
+    
+    init(reel: Reel) {
+        self.reel = reel
+        _title = State(initialValue: reel.title)
+        _description = State(initialValue: reel.description)
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Title") {
+                    TextField("Enter title", text: $title)
+                }
+                
+                Section("Description") {
+                    TextEditor(text: $description)
+                        .frame(minHeight: 100)
+                }
+            }
+            .navigationTitle("Edit Reel")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        Task {
+                            await saveChanges()
+                        }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+            .overlay(
+                Group {
+                    if isSaving {
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                            .overlay(
+                                ProgressView("Saving...")
+                            )
+                    }
+                }
+            )
+        }
+    }
+    
+    private func saveChanges() async {
+        guard let reelId = reel.id else { return }
+        
+        isSaving = true
+        
+        do {
+            try await firebase.updateReelCaption(reelId, title: title, description: description)
+            dismiss()
+        } catch {
+            print("Error updating reel: \(error)")
+            isSaving = false
+        }
+    }
+}
+
 // MARK: - Create Content Options Sheet
 struct CreateContentOptionsSheet: View {
     @Environment(\.dismiss) var dismiss
@@ -877,9 +985,7 @@ struct CreateContentOptionsSheet: View {
                     .padding(.top)
                 
                 // Status Option
-                Button(action: {
-                    showingStatusCamera = true
-                }) {
+                Button(action: { showingStatusCamera = true }) {
                     HStack {
                         Image(systemName: "circle.dashed")
                             .font(.title2)
@@ -903,9 +1009,7 @@ struct CreateContentOptionsSheet: View {
                 }
                 
                 // Reel Option
-                Button(action: {
-                    showingReelCamera = true
-                }) {
+                Button(action: { showingReelCamera = true }) {
                     HStack {
                         Image(systemName: "play.rectangle.fill")
                             .font(.title2)
@@ -930,10 +1034,8 @@ struct CreateContentOptionsSheet: View {
                 
                 Spacer()
                 
-                Button("Cancel") {
-                    dismiss()
-                }
-                .foregroundColor(.primary)
+                Button("Cancel") { dismiss() }
+                    .foregroundColor(.primary)
             }
             .padding()
             .navigationBarHidden(true)
@@ -947,7 +1049,6 @@ struct CreateContentOptionsSheet: View {
         }
     }
 }
-
 
 // MARK: - Status Viewer View with Delete
 struct StatusViewerView: View {
@@ -1042,64 +1143,40 @@ struct StatusViewerView: View {
                 
                 Spacer()
                 
-                // Caption if exists
-                if let caption = status.caption, !caption.isEmpty {
-                    Text(caption)
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.black.opacity(0.5))
-                        .cornerRadius(10)
-                        .padding()
-                }
-                
-                // Reply button (only show if not own status)
+                // Bottom action bar (if not own status)
                 if !isOwnStatus {
                     HStack {
-                        Spacer()
                         Button(action: { showingMessageView = true }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "message.fill")
+                            HStack {
+                                Image(systemName: "message")
                                 Text("Reply")
                             }
-                            .font(.subheadline)
+                            .font(.callout)
                             .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.blue)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.2))
                             .cornerRadius(20)
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom)
                     }
+                    .padding()
                 }
             }
-            
-            // Loading overlay
-            if isDeleting {
-                Color.black.opacity(0.7)
-                    .ignoresSafeArea()
-                    .overlay(
-                        VStack {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(1.5)
-                            Text("Deleting...")
-                                .foregroundColor(.white)
-                                .padding(.top)
-                        }
-                    )
-            }
         }
-        .navigationBarHidden(true)
+        .task {
+            // Mark as viewed
+            await markAsViewed()
+        }
         .fullScreenCover(isPresented: $showingUserProfile) {
             NavigationView {
                 EnhancedProfileView(userId: status.userId)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .navigationBarItems(
-                        leading: Button("Close") {
-                            showingUserProfile = false
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Close") {
+                                showingUserProfile = false
+                            }
                         }
-                    )
+                    }
             }
         }
         .fullScreenCover(isPresented: $showingMessageView) {
@@ -1108,7 +1185,7 @@ struct StatusViewerView: View {
                 contextType: .status,
                 contextId: status.id,
                 contextData: (
-                    title: status.caption ?? "Status Update",
+                    title: "Replied to your story",
                     image: status.mediaURL,
                     userId: status.userId
                 ),
@@ -1123,13 +1200,34 @@ struct StatusViewerView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This status will be permanently deleted.")
+            Text("This action cannot be undone. Your status will be permanently deleted.")
         }
-        .task {
-            if !isOwnStatus {
-                await firebase.viewStatus(status.id ?? "")
+        .overlay(
+            Group {
+                if isDeleting {
+                    Color.black.opacity(0.7)
+                        .ignoresSafeArea()
+                        .overlay(
+                            VStack {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.5)
+                                Text("Deleting...")
+                                    .foregroundColor(.white)
+                                    .padding(.top)
+                            }
+                        )
+                }
             }
-        }
+        )
+    }
+    
+    private func markAsViewed() async {
+        guard let statusId = status.id,
+              let userId = firebase.currentUser?.id,
+              !status.viewedBy.contains(userId) else { return }
+        
+        try? await firebase.markStatusAsViewed(statusId)
     }
     
     private func deleteStatus() async {
@@ -1147,80 +1245,7 @@ struct StatusViewerView: View {
     }
 }
 
-// MARK: - Edit Reel Caption View
-struct EditReelCaptionView: View {
-    let reel: Reel
-    @Environment(\.dismiss) var dismiss
-    @StateObject private var firebase = FirebaseService.shared
-    @State private var title: String
-    @State private var description: String
-    @State private var isSaving = false
-    
-    init(reel: Reel) {
-        self.reel = reel
-        _title = State(initialValue: reel.title)
-        _description = State(initialValue: reel.description)
-    }
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Title") {
-                    TextField("Enter title", text: $title)
-                }
-                
-                Section("Description") {
-                    TextField("Enter description", text: $description, axis: .vertical)
-                        .lineLimit(3...6)
-                }
-            }
-            .navigationTitle("Edit Caption")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(isSaving)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        Task {
-                            await saveChanges()
-                        }
-                    }
-                    .disabled(title.isEmpty || isSaving)
-                }
-            }
-            .overlay(
-                Group {
-                    if isSaving {
-                        Color.black.opacity(0.3)
-                            .ignoresSafeArea()
-                            .overlay(
-                                ProgressView("Saving...")
-                            )
-                    }
-                }
-            )
-        }
-    }
-    
-    private func saveChanges() async {
-        guard let reelId = reel.id else { return }
-        
-        isSaving = true
-        
-        do {
-            try await firebase.updateReelCaption(reelId, title: title, description: description)
-            dismiss()
-        } catch {
-            print("Error updating reel: \(error)")
-            isSaving = false
-        }
-    }
-}
-
-// MARK: - Reel Viewer View with Edit/Delete (Original standalone view)
+// MARK: - Reel Viewer View (Standalone for saved reels, etc)
 struct ReelViewerView: View {
     let reel: Reel
     @Environment(\.dismiss) var dismiss
@@ -1253,219 +1278,131 @@ struct ReelViewerView: View {
                         .resizable()
                         .scaledToFit()
                 } placeholder: {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.purple.opacity(0.6), Color.blue.opacity(0.6)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .overlay(
-                            VStack {
-                                Image(systemName: "play.rectangle.fill")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.white.opacity(0.8))
-                                Text("Video Player")
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                        )
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 }
-            } else {
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.purple.opacity(0.6), Color.blue.opacity(0.6)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        VStack {
-                            Image(systemName: "play.rectangle.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.white.opacity(0.8))
-                            Text("Video Player")
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                    )
             }
             
-            // Overlay UI
+            // Overlay controls
             VStack {
                 // Top bar
                 HStack {
                     Button(action: { dismiss() }) {
-                        Image(systemName: "chevron.down")
+                        Image(systemName: "xmark")
                             .font(.title2)
                             .foregroundColor(.white)
                             .padding()
-                            .background(Color.black.opacity(0.3))
-                            .clipShape(Circle())
+                            .background(Circle().fill(Color.black.opacity(0.3)))
                     }
                     
                     Spacer()
-                    
-                    Text("Reels")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                    
-                    Button(action: {}) {
-                        Image(systemName: "camera")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.black.opacity(0.3))
-                            .clipShape(Circle())
-                    }
                 }
-                .padding(.horizontal)
-                .padding(.top)
+                .padding()
                 
                 Spacer()
                 
-                // Bottom info and actions
+                // Bottom content
                 HStack(alignment: .bottom) {
                     // Left side - Info
                     VStack(alignment: .leading, spacing: 10) {
-                        // User info row
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 40, height: 40)
-                                .overlay(
-                                    Text(String(reel.userName?.first ?? "U"))
-                                        .foregroundColor(.black)
-                                        .fontWeight(.semibold)
-                                )
-                            
-                            // Username button
-                            Button(action: {
-                                showingUserProfile = true
-                            }) {
+                        // User info
+                        Button(action: { showingUserProfile = true }) {
+                            HStack {
+                                Circle()
+                                    .fill(Color.gray)
+                                    .frame(width: 35, height: 35)
+                                    .overlay(
+                                        Text(String(reel.userName?.first ?? "U"))
+                                            .foregroundColor(.white)
+                                    )
+                                
                                 Text(reel.userName ?? "User")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
                                     .foregroundColor(.white)
-                            }
-                            
-                            // Follow button (only if not own content)
-                            if !isOwnReel {
-                                Button(action: { toggleFollow() }) {
-                                    Text(isFollowing ? "Following" : "Follow")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 6)
-                                        .background(isFollowing ? Color.clear : Color.red)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(isFollowing ? Color.white : Color.clear, lineWidth: 1)
-                                        )
-                                        .cornerRadius(4)
+                                    .fontWeight(.semibold)
+                                
+                                if !isOwnReel {
+                                    Button(action: { toggleFollow() }) {
+                                        Text(isFollowing ? "Following" : "Follow")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 4)
+                                            .background(isFollowing ? Color.clear : Color.red)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .stroke(isFollowing ? Color.white : Color.clear, lineWidth: 1)
+                                            )
+                                            .cornerRadius(4)
+                                    }
                                 }
                             }
                         }
                         
-                        // Title and description
-                        Text(reel.title)
-                            .font(.headline)
-                            .foregroundColor(.white)
+                        // Caption
+                        if !reel.title.isEmpty {
+                            Text(reel.title)
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
                         
-                        Text(reel.description)
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.9))
-                            .lineLimit(2)
-                        
-                        // Category if exists
-                        if let category = reel.category {
-                            Text("#\(category.displayName)")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
+                        if !reel.description.isEmpty {
+                            Text(reel.description)
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(3)
                         }
                     }
                     .padding()
-                    .padding(.bottom, 20)
                     
                     Spacer()
                     
                     // Right side - Actions
-                    VStack(spacing: 25) {
-                        // Like
-                        VStack(spacing: 4) {
-                            Button(action: { toggleLike() }) {
+                    VStack(spacing: 20) {
+                        Button(action: { toggleLike() }) {
+                            VStack {
                                 Image(systemName: isLiked ? "heart.fill" : "heart")
                                     .font(.title)
                                     .foregroundColor(isLiked ? .red : .white)
-                                    .scaleEffect(isLiked ? 1.1 : 1.0)
-                                    .animation(.easeInOut(duration: 0.2), value: isLiked)
+                                
+                                if reel.likes.count > 0 {
+                                    Text("\(reel.likes.count)")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                }
                             }
-                            Text("\(reel.likes.count)")
-                                .font(.caption)
-                                .foregroundColor(.white)
                         }
                         
-                        // Comment
-                        VStack(spacing: 4) {
-                            Button(action: { showingComments = true }) {
+                        Button(action: { showingComments = true }) {
+                            VStack {
                                 Image(systemName: "bubble.right")
                                     .font(.title)
                                     .foregroundColor(.white)
-                            }
-                            Text("\(reel.comments)")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        }
-                        
-                        // Message (only if not own reel)
-                        if !isOwnReel {
-                            VStack(spacing: 4) {
-                                Button(action: {
-                                    showingMessageView = true
-                                }) {
-                                    Image(systemName: "message")
-                                        .font(.title)
+                                
+                                if reel.comments > 0 {
+                                    Text("\(reel.comments)")
+                                        .font(.caption)
                                         .foregroundColor(.white)
                                 }
-                                Text("Message")
-                                    .font(.caption)
-                                    .foregroundColor(.white)
                             }
                         }
                         
-                        // Share
-                        VStack(spacing: 4) {
-                            Button(action: { shareReel() }) {
-                                Image(systemName: "paperplane")
-                                    .font(.title)
-                                    .foregroundColor(.white)
-                            }
-                            Text("\(reel.shares)")
-                                .font(.caption)
+                        Button(action: { shareReel() }) {
+                            Image(systemName: "paperplane")
+                                .font(.title)
                                 .foregroundColor(.white)
                         }
                         
-                        // Save
                         Button(action: { toggleSave() }) {
                             Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
                                 .font(.title)
                                 .foregroundColor(isSaved ? .yellow : .white)
-                                .scaleEffect(isSaved ? 1.1 : 1.0)
-                                .animation(.easeInOut(duration: 0.2), value: isSaved)
                         }
                         
-                        // More Options Menu
                         Menu {
                             if isOwnReel {
                                 Button(action: { showingEditSheet = true }) {
                                     Label("Edit Caption", systemImage: "pencil")
                                 }
-                                
-                                Divider()
                                 
                                 Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
                                     Label("Delete Reel", systemImage: "trash")
@@ -1473,10 +1410,6 @@ struct ReelViewerView: View {
                             } else {
                                 Button(action: {}) {
                                     Label("Report", systemImage: "flag")
-                                }
-                                
-                                Button(action: {}) {
-                                    Label("Not Interested", systemImage: "hand.raised")
                                 }
                             }
                         } label: {
@@ -1486,35 +1419,22 @@ struct ReelViewerView: View {
                         }
                     }
                     .padding()
-                    .padding(.bottom, 20)
                 }
             }
-            
-            // Loading overlay
-            if isDeleting {
-                Color.black.opacity(0.7)
-                    .ignoresSafeArea()
-                    .overlay(
-                        VStack {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(1.5)
-                            Text("Deleting...")
-                                .foregroundColor(.white)
-                                .padding(.top)
-                        }
-                    )
-            }
         }
-        .navigationBarHidden(true)
+        .task {
+            await checkInitialStates()
+        }
         .fullScreenCover(isPresented: $showingUserProfile) {
             NavigationView {
                 EnhancedProfileView(userId: reel.userId)
-                    .navigationBarItems(
-                        leading: Button("Close") {
-                            showingUserProfile = false
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Close") {
+                                showingUserProfile = false
+                            }
                         }
-                    )
+                    }
             }
         }
         .sheet(isPresented: $showingComments) {
@@ -1529,7 +1449,7 @@ struct ReelViewerView: View {
                 contextType: .reel,
                 contextId: reel.id,
                 contextData: (
-                    title: reel.title,
+                    title: reel.title.isEmpty ? "Shared a reel" : reel.title,
                     image: reel.thumbnailURL ?? reel.videoURL,
                     userId: reel.userId
                 ),
@@ -1544,32 +1464,33 @@ struct ReelViewerView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This action cannot be undone. Your reel will be permanently deleted.")
+            Text("This action cannot be undone.")
         }
         .sheet(isPresented: $showingShareSheet) {
             ReelShareSheet(items: [
-                "Check out this amazing reel: \(reel.title)",
+                reel.title.isEmpty ? "Check out this reel!" : reel.title,
                 reel.description,
                 URL(string: reel.thumbnailURL ?? reel.videoURL) ?? URL(string: "https://claudehustler.com")!
             ])
         }
-        .task {
-            await checkInitialStates()
-        }
-    }
-    
-    private func deleteReel() async {
-        guard let reelId = reel.id else { return }
-        
-        isDeleting = true
-        
-        do {
-            try await firebase.deleteReel(reelId)
-            dismiss()
-        } catch {
-            print("Error deleting reel: \(error)")
-            isDeleting = false
-        }
+        .overlay(
+            Group {
+                if isDeleting {
+                    Color.black.opacity(0.7)
+                        .ignoresSafeArea()
+                        .overlay(
+                            VStack {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.5)
+                                Text("Deleting...")
+                                    .foregroundColor(.white)
+                                    .padding(.top)
+                            }
+                        )
+                }
+            }
+        )
     }
     
     private func checkInitialStates() async {
@@ -1578,18 +1499,6 @@ struct ReelViewerView: View {
         
         if let reelId = reel.id {
             isSaved = await firebase.isItemSaved(itemId: reelId, type: .reel)
-        }
-    }
-    
-    private func toggleSave() {
-        guard let reelId = reel.id else { return }
-        
-        Task {
-            do {
-                isSaved = try await firebase.toggleReelSave(reelId)
-            } catch {
-                print("Error toggling save: \(error)")
-            }
         }
     }
     
@@ -1624,29 +1533,38 @@ struct ReelViewerView: View {
         isFollowing = currentUser.following.contains(reel.userId)
     }
     
+    private func toggleSave() {
+        guard let reelId = reel.id else { return }
+        
+        Task {
+            do {
+                isSaved = try await firebase.toggleReelSave(reelId)
+            } catch {
+                print("Error toggling save: \(error)")
+            }
+        }
+    }
+    
     private func shareReel() {
         showingShareSheet = true
-        // Increment share count in Firebase
-        Task {
-            if let reelId = reel.id {
-                try? await firebase.db.collection("reels").document(reelId).updateData([
-                    "shares": FieldValue.increment(Int64(1))
-                ])
-            }
+    }
+    
+    private func deleteReel() async {
+        guard let reelId = reel.id else { return }
+        
+        isDeleting = true
+        
+        do {
+            try await firebase.deleteReel(reelId)
+            dismiss()
+        } catch {
+            print("Error deleting reel: \(error)")
+            isDeleting = false
         }
     }
 }
 
-// MARK: - Comments View
 
-// MARK: - Reel Share Sheet
-struct ReelShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        return controller
-    }
-    
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
+
+// Note: CameraView is implemented in a separate file (CameraView.swift)
+// It handles the actual camera functionality for capturing photos/videos

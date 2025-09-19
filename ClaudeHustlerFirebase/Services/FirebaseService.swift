@@ -2391,4 +2391,65 @@ extension FirebaseService {
     }
 }
 
+// MARK: - Global Listener Management
+extension FirebaseService {
+    
+    /// Remove ALL active listeners (useful for sign out)
+    func removeAllListeners() {
+        // Remove conversation listeners
+        conversationsListener?.remove()
+        conversationsListener = nil
+        
+        // Remove messages listener
+        messagesListener?.remove()
+        messagesListener = nil
+        
+        // Remove all reel listeners
+        Self.reelListeners.values.forEach { $0.remove() }
+        Self.reelListeners.removeAll()
+        
+        // Remove all comment listeners
+        Self.commentsListeners.values.forEach { $0.remove() }
+        Self.commentsListeners.removeAll()
+        
+        // Remove all likes listeners
+        Self.likesListeners.values.forEach { $0.remove() }
+        Self.likesListeners.removeAll()
+        
+        // Remove all review listeners
+        Self.reviewsListeners.values.forEach { $0.remove() }
+        Self.reviewsListeners.removeAll()
+        
+        print("✅ All Firebase listeners cleaned up")
+    }
+    
+    /// Get count of active listeners (for debugging)
+    func getActiveListenerCount() -> Int {
+        var count = 0
+        if conversationsListener != nil { count += 1 }
+        if messagesListener != nil { count += 1 }
+        count += Self.reelListeners.count
+        count += Self.commentsListeners.count
+        count += Self.likesListeners.count
+        count += Self.reviewsListeners.count
+        return count
+    }
+}
+
+#if DEBUG
+var listenerDebugTimer: Timer?
+
+func startListenerMonitoring() {
+    listenerDebugTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
+        let count = self.getActiveListenerCount()
+        print("🔍 Active Listeners: \(count)")
+    }
+}
+
+func stopListenerMonitoring() {
+    listenerDebugTimer?.invalidate()
+    listenerDebugTimer = nil
+}
+#endif
+
 

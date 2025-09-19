@@ -184,13 +184,17 @@ class AuthenticationService: ObservableObject {
     }
     
     // MARK: - Sign Out
-    func signOut() async {
-        do {
-            try firebase.signOut()
-            authState = .unauthenticated
-        } catch {
-            print("Error signing out: \(error)")
-        }
+    func signOut() throws {
+        // Clean up all Firebase listeners
+        FirebaseService.shared.removeAllListeners()
+        
+        // Clean up Firebase cached data
+        FirebaseService.shared.cleanupOnSignOut()
+        
+        // Sign out from Firebase Auth
+        try auth.signOut()
+        
+        print("✅ User signed out and all listeners cleaned")
     }
     
     // MARK: - Password Reset
