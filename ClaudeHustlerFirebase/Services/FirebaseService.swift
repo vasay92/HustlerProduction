@@ -18,10 +18,10 @@ class FirebaseService: ObservableObject {
     let auth = Auth.auth()
     let storage = Storage.storage()
     
-    private let reelRepository = ReelRepository.shared
-    private let messageRepository = MessageRepository.shared
-    private let userRepository = UserRepository.shared
-    private let reviewRepository = ReviewRepository.shared
+//    private let reelRepository = ReelRepository.shared
+//    private let messageRepository = MessageRepository.shared
+//    private let userRepository = UserRepository.shared
+//    private let reviewRepository = ReviewRepository.shared
     @Published var currentUser: User?
     @Published var isAuthenticated = false
     @Published var posts: [ServicePost] = []
