@@ -197,7 +197,7 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showingCreatePost) {
                 NavigationView {
-                    EditServicePostView(post: nil)
+                    ServiceFormView()
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
                                 Button("Cancel") {
@@ -409,22 +409,33 @@ struct MiniServiceCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Image placeholder
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 150, height: 150)
-                .cornerRadius(10)
-                .overlay(
-                    Image(systemName: "photo")
-                        .foregroundColor(.white)
-                        .font(.largeTitle)
-                )
+            // Image or placeholder
+            if !post.imageURLs.isEmpty, let firstImageURL = post.imageURLs.first {
+                AsyncImage(url: URL(string: firstImageURL)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 150, height: 150)
+                            .clipped()
+                            .cornerRadius(10)
+                    case .failure(_):
+                        imagePlaceholder
+                    case .empty:
+                        ZStack {
+                            imagePlaceholder
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        }
+                    @unknown default:
+                        imagePlaceholder
+                    }
+                }
+            } else {
+                imagePlaceholder
+            }
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(post.title)
@@ -446,6 +457,24 @@ struct MiniServiceCard: View {
         .background(Color(UIColor.systemBackground))
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+    
+    private var imagePlaceholder: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 150, height: 150)
+            .cornerRadius(10)
+            .overlay(
+                Image(systemName: "photo")
+                    .foregroundColor(.white)
+                    .font(.largeTitle)
+            )
     }
 }
 

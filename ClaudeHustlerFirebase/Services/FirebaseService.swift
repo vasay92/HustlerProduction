@@ -16,7 +16,7 @@ class FirebaseService: ObservableObject {
     static let shared = FirebaseService()
     let db = Firestore.firestore()
     let auth = Auth.auth()
-    let storage = Storage.storage()
+    let storage = Storage.storage(url: "gs://hustlernew-968dd.firebasestorage.app")
     
 //    private let reelRepository = ReelRepository.shared
 //    private let messageRepository = MessageRepository.shared
@@ -469,16 +469,35 @@ class FirebaseService: ObservableObject {
     // MARK: - Image Upload
     
     func uploadImage(_ image: UIImage, path: String) async throws -> String {
+        
+        
         guard let imageData = image.jpegData(compressionQuality: 0.7) else {
             throw NSError(domain: "ImageError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])
         }
         
-        let storageRef = storage.reference().child(path)
+        // Create a fresh reference each time
+        let storageRef = Storage.storage().reference().child(path)
         
-        _ = try await storageRef.putDataAsync(imageData, metadata: nil)
-        let downloadURL = try await storageRef.downloadURL()
         
-        return downloadURL.absoluteString
+        
+        // Use metadata
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        
+        do {
+            // Upload the data
+            let uploadTask = try await storageRef.putDataAsync(imageData, metadata: metadata)
+            
+            
+            // Get the download URL
+            let downloadURL = try await storageRef.downloadURL()
+            
+            
+            return downloadURL.absoluteString
+        } catch {
+            
+            throw error
+        }
     }
     
     // MARK: - Clean up expired statuses

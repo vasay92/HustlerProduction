@@ -103,7 +103,7 @@ struct PostDetailView: View {
             )
         }
         .fullScreenCover(isPresented: $showingEditView) {
-            EditServicePostView(post: post)
+            ServiceFormView(post: post)
         }
         .confirmationDialog("Delete Post?", isPresented: $showingDeleteConfirmation) {
             Button("Delete", role: .destructive) {

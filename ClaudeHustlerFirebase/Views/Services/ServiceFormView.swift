@@ -6,6 +6,7 @@
 import SwiftUI
 import PhotosUI
 
+
 struct ServiceFormView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
@@ -83,7 +84,7 @@ struct ServiceFormView: View {
                 }
             }
             .sheet(isPresented: $showingImagePicker) {
-                ImagePicker(images: $selectedImages, singleImage: .constant(nil))
+                MultiImagePicker(images: $selectedImages)  // Use the new picker
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK") { }
@@ -397,6 +398,7 @@ struct ServiceFormView: View {
     // MARK: - Actions
     
     private func savePost() {
+        
         showValidationErrors = true
         
         guard isFormValid else {
@@ -409,8 +411,14 @@ struct ServiceFormView: View {
             do {
                 var imageURLs: [String] = []
                 if !selectedImages.isEmpty {
-                    for image in selectedImages {
-                        let url = try await firebase.uploadImage(image, path: "posts/\(UUID().uuidString).jpg")
+                    
+                    for (index, image) in selectedImages.enumerated() {
+                        let imageName = "\(UUID().uuidString).jpg"
+                        let imagePath = "posts/\(imageName)"
+                        
+                        
+                        let url = try await firebase.uploadImage(image, path: imagePath)
+                        
                         imageURLs.append(url)
                     }
                 }
@@ -451,4 +459,53 @@ struct ServiceFormView: View {
 
 #Preview {
     ServiceFormView()
+}
+
+// Add this ENTIRE struct at the BOTTOM of ServiceFormView.swift
+struct MultiImagePicker: UIViewControllerRepresentable {
+    @Binding var images: [UIImage]
+    @Environment(\.dismiss) var dismiss
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 5  // Allow up to 5 images
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: MultiImagePicker
+        
+        init(_ parent: MultiImagePicker) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            
+            parent.images = []  // Clear previous selections
+            
+            for result in results {
+                if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                        if let image = image as? UIImage {
+                            DispatchQueue.main.async {
+                                self.parent.images.append(image)
+                                
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
