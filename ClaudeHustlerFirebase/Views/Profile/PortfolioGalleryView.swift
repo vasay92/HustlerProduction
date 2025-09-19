@@ -113,9 +113,6 @@ struct PortfolioGalleryView: View {
     @ViewBuilder
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(card.title)
-                .font(.largeTitle)
-                .fontWeight(.bold)
             
             if let description = card.description, !description.isEmpty {
                 Text(description)

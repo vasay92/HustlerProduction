@@ -15,46 +15,75 @@ struct PortfolioCardView: View {
     @StateObject private var firebase = FirebaseService.shared
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Card content
-            Button(action: { showingGallery = true }) {
-                VStack(alignment: .leading, spacing: 8) {
-                    // Cover Image
-                    // ... existing image code
-                    
-                    // Title
-                    Text(card.title)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                        .foregroundColor(.primary)
-                        .frame(width: 120, alignment: .leading)
-                }
-            }
-            
-            // Edit/Delete button for owner
-            if isOwner {
-                Button(action: { showingMenu = true }) {
-                    Image(systemName: "ellipsis")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(width: 120, alignment: .trailing)
-                }
-                .confirmationDialog("Options", isPresented: $showingMenu) {
-                    Button("Edit") {
-                        showingGallery = true  // Opens gallery where edit is available
+        Button(action: { showingGallery = true }) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Cover Image
+                if let coverURL = card.coverImageURL {
+                    AsyncImage(url: URL(string: coverURL)) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 120, height: 160)
+                            .clipped()
+                    } placeholder: {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 120, height: 160)
+                            .overlay(ProgressView())
                     }
-                    Button("Delete", role: .destructive) {
-                        Task {
-                            await deletePortfolio()
-                        }
+                } else if let firstImage = card.mediaURLs.first {
+                    AsyncImage(url: URL(string: firstImage)) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 120, height: 160)
+                            .clipped()
+                    } placeholder: {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 120, height: 160)
+                            .overlay(ProgressView())
                     }
-                    Button("Cancel", role: .cancel) {}
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 120, height: 160)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.gray)
+                        )
                 }
+                
+                // Title
+                Text(card.title)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .foregroundColor(.primary)
+                    .frame(width: 120, alignment: .leading)
             }
+            .cornerRadius(12)
         }
         .fullScreenCover(isPresented: $showingGallery) {
             PortfolioGalleryView(card: card, isOwner: isOwner)
+        }
+        .contextMenu {
+            if isOwner {
+                Button(action: { showingGallery = true }) {
+                    Label("View", systemImage: "eye")
+                }
+                Button(action: { showingGallery = true }) {
+                    Label("Edit", systemImage: "pencil")
+                }
+                Divider()
+                Button(role: .destructive, action: {
+                    Task {
+                        await deletePortfolio()
+                    }
+                }) {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
         }
     }
     
@@ -123,7 +152,7 @@ struct CreatePortfolioCardView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var title = ""
-    @State private var description = ""  // ADD THIS
+    @State private var description = ""
     @State private var coverImage: UIImage?
     @State private var mediaImages: [UIImage] = []
     @State private var showingCoverPicker = false
@@ -137,20 +166,69 @@ struct CreatePortfolioCardView: View {
                     TextField("Enter title", text: $title)
                 }
                 
-                Section("Description") {  // ADD THIS SECTION
+                Section("Description") {
                     TextField("Describe your work", text: $description, axis: .vertical)
                         .lineLimit(3...6)
                 }
                 
                 Section("Cover Image (Optional)") {
-                    // ... existing cover image code
+                    if let cover = coverImage {
+                        Image(uiImage: cover)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 200)
+                            .cornerRadius(8)
+                    }
+                    
+                    Button(action: { showingCoverPicker = true }) {
+                        Label(coverImage == nil ? "Select Cover" : "Change Cover",
+                              systemImage: coverImage == nil ? "photo" : "photo.badge.plus")
+                    }
                 }
                 
                 Section("Portfolio Images") {
-                    // ... existing images code
+                    if !mediaImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(Array(mediaImages.enumerated()), id: \.offset) { _, image in
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 80, height: 80)
+                                        .cornerRadius(8)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Button(action: { showingMediaPicker = true }) {
+                        Label("Add Images", systemImage: "photo.on.rectangle.angled")
+                    }
                 }
             }
-            // ... rest of the view
+            .navigationTitle("Create Portfolio")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isCreating)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Create") {
+                        Task {
+                            await createCard()
+                        }
+                    }
+                    .disabled(title.isEmpty || isCreating)
+                }
+            }
+        }
+        .sheet(isPresented: $showingCoverPicker) {
+            ImagePicker(images: .constant([]), singleImage: $coverImage)
+        }
+        .sheet(isPresented: $showingMediaPicker) {
+            ImagePicker(images: $mediaImages, singleImage: .constant(nil))
         }
     }
     
@@ -161,7 +239,7 @@ struct CreatePortfolioCardView: View {
                 title: title,
                 coverImage: coverImage,
                 mediaImages: mediaImages,
-                description: description  // PASS THE DESCRIPTION
+                description: description
             )
             dismiss()
         } catch {
