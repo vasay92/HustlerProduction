@@ -185,16 +185,15 @@ class AuthenticationService: ObservableObject {
     }
     
     // MARK: - Sign Out
+    // MARK: - Sign Out
     func signOut() throws {
-        // Clean up all Firebase listeners - calling method if it exists
-        if firebase.responds(to: #selector(FirebaseService.removeAllListeners)) {
-            firebase.performSelector(onMainThread: #selector(FirebaseService.removeAllListeners), with: nil, waitUntilDone: true)
-        }
+        // Clean up all Firebase listeners - Direct method call since both classes are @MainActor
+        firebase.removeAllListeners()
         
         // Clean up Firebase cached data
         firebase.cleanupOnSignOut()
         
-        // Sign out from Firebase Auth - FIXED: Using firebase.signOut()
+        // Sign out from Firebase Auth
         try firebase.signOut()
         
         print("✅ User signed out and all listeners cleaned")
