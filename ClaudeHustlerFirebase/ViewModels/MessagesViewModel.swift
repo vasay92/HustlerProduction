@@ -19,6 +19,7 @@ final class MessagesViewModel: ObservableObject {
     private var currentUserId: String?
     
     init() {
+        Self.shared = self
         self.currentUserId = Auth.auth().currentUser?.uid
     }
     

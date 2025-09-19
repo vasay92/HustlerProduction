@@ -40,6 +40,7 @@ final class ReelsViewModel: ObservableObject {
     
     // MARK: - Initialization
     init() {
+        Self.shared = self
         // Initialize current user ID
         self.currentUserId = Auth.auth().currentUser?.uid
         
