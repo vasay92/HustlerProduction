@@ -28,6 +28,7 @@
 		EB6E08A72E7C9641004B253C /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E08A12E7C9641004B253C /* HomeViewModel.swift */; };
 		EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EBBCA1932E7C875000745D24 /* Assets.xcassets */; };
 		EBD038C62E7CC4DF004E0CBD /* SDWebImageSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = EBD038C52E7CC4DF004E0CBD /* SDWebImageSwiftUI */; };
+		EBD038D22E7CF44A004E0CBD /* ValidationHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038CE2E7CF11C004E0CBD /* ValidationHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -447,6 +448,7 @@
 				EB6E08A52E7C9641004B253C /* ServicesViewModel.swift in Sources */,
 				EB6E08A62E7C9641004B253C /* RepositoryProtocol.swift in Sources */,
 				EB6E08A72E7C9641004B253C /* HomeViewModel.swift in Sources */,
+				EBD038D22E7CF44A004E0CBD /* ValidationHelper.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
 				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
