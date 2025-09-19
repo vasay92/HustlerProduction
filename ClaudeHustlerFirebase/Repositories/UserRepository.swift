@@ -106,8 +106,8 @@ final class UserRepository: RepositoryProtocol {
         // Prepare update data (only updatable fields)
         let updates: [String: Any] = [
             "name": user.name,
-            "bio": user.bio ?? "",
-            "location": user.location ?? "",
+            "bio": user.bio,
+            "location": user.location,
             "isServiceProvider": user.isServiceProvider,
 //            "skills": user.skills ?? [],
 //            "availability": user.availability ?? "",
@@ -349,8 +349,8 @@ final class UserRepository: RepositoryProtocol {
         // Filter by skills if category provided
         if let category = category {
             users = users.filter { user in
-      //          user.skills?.contains(category.displayName) ?? false
-            }
+                    user.isServiceProvider
+                }
         }
         
         return (users, snapshot.documents.last)

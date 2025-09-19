@@ -70,8 +70,9 @@ final class MessageRepository: RepositoryProtocol {
         limit: Int = 50,
         lastDocument: DocumentSnapshot? = nil
     ) async throws -> (items: [Message], lastDoc: DocumentSnapshot?) {
-        var query = db.collection("messages")
-            .whereField("conversationId", isEqualTo: conversationId)
+        var query = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
             .order(by: "timestamp", descending: true)
             .limit(to: limit)
         
@@ -90,15 +91,25 @@ final class MessageRepository: RepositoryProtocol {
         return (Array(messages), snapshot.documents.last)
     }
     
-    // MARK: - Create Message
+    // MARK: - Protocol Conformance Create (required by RepositoryProtocol)
+    func create(_ item: Message) async throws -> String {
+        // Use the conversationId from the message itself
+        let conversationId = item.conversationId
+        
+        // Call the existing create method
+        return try await create(item, in: conversationId)
+    }
+    
+    // MARK: - Create Message with ConversationId
     func create(_ message: Message, in conversationId: String) async throws -> String {
         guard let userId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Create message data dictionary (don't modify the input message)
+        // Create message data dictionary
         let messageData: [String: Any] = [
             "senderId": userId,
+            "conversationId": conversationId,
             "text": message.text,
             "timestamp": Date(),
             "isRead": false,
@@ -130,22 +141,34 @@ final class MessageRepository: RepositoryProtocol {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
+        // Find the conversation that contains this message
+        let conversationId = message.conversationId
+        
         // Verify ownership
-        let document = try await db.collection("messages").document(messageId).getDocument()
+        let document = try await db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .document(messageId)
+            .getDocument()
+        
         guard let data = document.data(),
               data["senderId"] as? String == currentUserId else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to edit this message"])
         }
         
         // Update message
-        try await db.collection("messages").document(messageId).updateData([
-            "text": message.text,
-            "isEdited": true,
-            "editedAt": Date()
-        ])
+        try await db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .document(messageId)
+            .updateData([
+                "text": message.text,
+                "isEdited": true,
+                "editedAt": Date()
+            ])
         
         // Clear cache
-        cache.remove(for: "conversation_\(message.conversationId)")
+        cache.remove(for: "messages_\(conversationId)")
     }
     
     // MARK: - Delete Message
@@ -154,23 +177,38 @@ final class MessageRepository: RepositoryProtocol {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Get message to verify ownership and get conversationId
-        let document = try await db.collection("messages").document(id).getDocument()
-        guard let data = document.data(),
-              data["senderId"] as? String == currentUserId,
-              let conversationId = data["conversationId"] as? String else {
-            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to delete this message"])
+        // Find which conversation contains this message
+        // This is a simplified approach - in production, you might want to store conversationId with the message
+        let conversationsSnapshot = try await db.collection("conversations")
+            .whereField("participantIds", arrayContains: currentUserId)
+            .getDocuments()
+        
+        for conversationDoc in conversationsSnapshot.documents {
+            let messageDoc = try await conversationDoc.reference
+                .collection("messages")
+                .document(id)
+                .getDocument()
+            
+            if messageDoc.exists,
+               let data = messageDoc.data(),
+               data["senderId"] as? String == currentUserId {
+                // Soft delete (mark as deleted but keep record)
+                try await conversationDoc.reference
+                    .collection("messages")
+                    .document(id)
+                    .updateData([
+                        "isDeleted": true,
+                        "text": "This message was deleted",
+                        "deletedAt": Date()
+                    ])
+                
+                // Clear cache
+                cache.remove(for: "messages_\(conversationDoc.documentID)")
+                return
+            }
         }
         
-        // Soft delete (mark as deleted but keep record)
-        try await db.collection("messages").document(id).updateData([
-            "isDeleted": true,
-            "text": "This message was deleted",
-            "deletedAt": Date()
-        ])
-        
-        // Clear cache
-        cache.remove(for: "conversation_\(conversationId)")
+        throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Message not found or unauthorized"])
     }
     
     // MARK: - Conversation Management
@@ -223,21 +261,21 @@ final class MessageRepository: RepositoryProtocol {
         }
         
         // Create new conversation
-        let conversationData = Conversation(
-            participantIds: [currentUserId, recipientId],
-            participantNames: [:],
-            participantImages: [:],
-            lastMessage: nil,
-            lastMessageTimestamp: Date(),
-            lastMessageSenderId: nil,
-            unreadCounts: [currentUserId: 0, recipientId: 0],
-            lastReadTimestamps: [:],
-            createdAt: Date(),
-            updatedAt: Date(),
-            blockedUsers: []
-        )
+        let conversationData: [String: Any] = [
+            "participantIds": [currentUserId, recipientId],
+            "participantNames": [:],
+            "participantImages": [:],
+            "lastMessage": "",
+            "lastMessageTimestamp": Date(),
+            "lastMessageSenderId": "",
+            "unreadCounts": [currentUserId: 0, recipientId: 0],
+            "lastReadTimestamps": [:],
+            "createdAt": Date(),
+            "updatedAt": Date(),
+            "blockedUsers": []
+        ]
         
-        let docRef = try await db.collection("conversations").addDocument(from: conversationData)
+        let docRef = try await db.collection("conversations").addDocument(data: conversationData)
         
         // Load participant details
         await updateConversationParticipantInfo(conversationId: docRef.documentID)
@@ -251,20 +289,18 @@ final class MessageRepository: RepositoryProtocol {
         let batch = db.batch()
         
         // Update all unread messages in this conversation
-        let unreadMessages = try await db.collection("messages")
-            .whereField("conversationId", isEqualTo: conversationId)
-            .whereField("senderId", isNotEqualTo: userId)
+        let unreadMessages = try await db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
             .whereField("isRead", isEqualTo: false)
+            .whereField("senderId", isNotEqualTo: userId)
             .getDocuments()
         
-        for message in unreadMessages.documents {
-            batch.updateData([
-                "isRead": true,
-                "readAt": Date()
-            ], forDocument: message.reference)
+        for doc in unreadMessages.documents {
+            batch.updateData(["isRead": true], forDocument: doc.reference)
         }
         
-        // Reset unread count in conversation
+        // Update conversation unread count
         let conversationRef = db.collection("conversations").document(conversationId)
         batch.updateData([
             "unreadCounts.\(userId)": 0,
@@ -274,35 +310,58 @@ final class MessageRepository: RepositoryProtocol {
         try await batch.commit()
         
         // Clear cache
-        cache.remove(for: "conversation_\(conversationId)")
+        cache.remove(for: "conversations_page_1")
     }
     
-    func blockUserInConversation(_ userId: String, conversationId: String) async throws {
-        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+    // MARK: - Private Helper Methods
+    
+    private func updateConversationLastMessage(_ conversationId: String, message: String) async throws {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
         
         try await db.collection("conversations").document(conversationId).updateData([
-            "blockedUsers": FieldValue.arrayUnion([userId])
+            "lastMessage": message,
+            "lastMessageTimestamp": Date(),
+            "lastMessageSenderId": userId,
+            "updatedAt": Date()
         ])
-        
-        cache.remove(for: "conversation_\(conversationId)")
     }
     
-    func unblockUserInConversation(_ userId: String, conversationId: String) async throws {
-        try await db.collection("conversations").document(conversationId).updateData([
-            "blockedUsers": FieldValue.arrayRemove([userId])
-        ])
-        
-        cache.remove(for: "conversation_\(conversationId)")
+    private func updateConversationParticipantInfo(conversationId: String) async {
+        do {
+            let conversation = try await db.collection("conversations").document(conversationId).getDocument()
+            guard let participantIds = conversation.data()?["participantIds"] as? [String] else { return }
+            
+            var participantNames: [String: String] = [:]
+            var participantImages: [String: String] = [:]
+            
+            for participantId in participantIds {
+                let userDoc = try await db.collection("users").document(participantId).getDocument()
+                if let userData = userDoc.data() {
+                    participantNames[participantId] = userData["name"] as? String ?? "Unknown"
+                    if let imageURL = userData["profileImageURL"] as? String {
+                        participantImages[participantId] = imageURL
+                    }
+                }
+            }
+            
+            try await db.collection("conversations").document(conversationId).updateData([
+                "participantNames": participantNames,
+                "participantImages": participantImages
+            ])
+        } catch {
+            print("Error updating participant info: \(error)")
+        }
     }
     
-    // MARK: - Real-time Listeners
+    // MARK: - Real-time Listening
     
     func listenToConversation(_ conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
         // Remove existing listener
-        conversationListeners[conversationId]?.remove()
+        messageListeners[conversationId]?.remove()
         
-        let listener = db.collection("messages")
-            .whereField("conversationId", isEqualTo: conversationId)
+        let listener = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
@@ -320,48 +379,19 @@ final class MessageRepository: RepositoryProtocol {
                 completion(messages)
             }
         
-        conversationListeners[conversationId] = listener
+        messageListeners[conversationId] = listener
         return listener
     }
     
     func stopListeningToConversation(_ conversationId: String) {
-        conversationListeners[conversationId]?.remove()
-        conversationListeners.removeValue(forKey: conversationId)
+        messageListeners[conversationId]?.remove()
+        messageListeners.removeValue(forKey: conversationId)
     }
     
     func removeAllListeners() {
         conversationListeners.values.forEach { $0.remove() }
         conversationListeners.removeAll()
-        
         messageListeners.values.forEach { $0.remove() }
         messageListeners.removeAll()
-    }
-    
-    // MARK: - Private Helpers
-    
-    private func updateConversationParticipantInfo(conversationId: String) async {
-        do {
-            let conversation = try await db.collection("conversations").document(conversationId).getDocument()
-            guard let data = conversation.data(),
-                  let participantIds = data["participantIds"] as? [String] else { return }
-            
-            var participantNames: [String: String] = [:]
-            var participantImages: [String: String] = [:]
-            
-            for userId in participantIds {
-                let userDoc = try await db.collection("users").document(userId).getDocument()
-                if let userData = userDoc.data() {
-                    participantNames[userId] = userData["name"] as? String ?? "Unknown"
-                    participantImages[userId] = userData["profileImageURL"] as? String
-                }
-            }
-            
-            try await db.collection("conversations").document(conversationId).updateData([
-                "participantNames": participantNames,
-                "participantImages": participantImages
-            ])
-        } catch {
-            print("Error updating conversation info: \(error)")
-        }
     }
 }
