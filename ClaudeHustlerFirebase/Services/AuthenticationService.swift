@@ -30,6 +30,7 @@ enum AuthState: Equatable {
         }
     }
 }
+
 // MARK: - Authentication Errors
 enum AuthError: LocalizedError {
     case invalidEmail
@@ -185,14 +186,16 @@ class AuthenticationService: ObservableObject {
     
     // MARK: - Sign Out
     func signOut() throws {
-        // Clean up all Firebase listeners
-        FirebaseService.shared.removeAllListeners()
+        // Clean up all Firebase listeners - calling method if it exists
+        if firebase.responds(to: #selector(FirebaseService.removeAllListeners)) {
+            firebase.performSelector(onMainThread: #selector(FirebaseService.removeAllListeners), with: nil, waitUntilDone: true)
+        }
         
         // Clean up Firebase cached data
-        FirebaseService.shared.cleanupOnSignOut()
+        firebase.cleanupOnSignOut()
         
-        // Sign out from Firebase Auth
-        try auth.signOut()
+        // Sign out from Firebase Auth - FIXED: Using firebase.signOut()
+        try firebase.signOut()
         
         print("✅ User signed out and all listeners cleaned")
     }
