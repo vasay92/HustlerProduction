@@ -228,12 +228,16 @@ struct CreatePortfolioCardView: View {
             ImagePicker(images: .constant([]), singleImage: $coverImage)
         }
         .sheet(isPresented: $showingMediaPicker) {
-            ImagePicker(images: $mediaImages, singleImage: .constant(nil))
+            ImagePicker(images: $mediaImages, singleImage: nil)  // Changed from .constant(nil) to nil
         }
     }
     
-    private func createCard() async {
+   private func createCard() async {
         isCreating = true
+        print("Creating portfolio with title: \(title)")
+        print("Cover image: \(coverImage != nil)")
+        print("Media images count: \(mediaImages.count)")
+        
         do {
             try await firebase.createPortfolioCard(
                 title: title,
@@ -241,6 +245,7 @@ struct CreatePortfolioCardView: View {
                 mediaImages: mediaImages,
                 description: description
             )
+            print("Portfolio created successfully")
             dismiss()
         } catch {
             print("Error creating card: \(error)")

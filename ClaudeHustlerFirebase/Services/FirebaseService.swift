@@ -663,17 +663,21 @@ extension FirebaseService {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
+        print("Creating portfolio for user: \(userId)")
+        
         var mediaURLs: [String] = []
         for (index, image) in mediaImages.enumerated() {
             let path = "portfolio/\(userId)/\(UUID().uuidString)_\(index).jpg"
             let url = try await uploadImage(image, path: path)
             mediaURLs.append(url)
+            print("Uploaded image \(index + 1)/\(mediaImages.count)")
         }
         
         var coverURL: String?
         if let cover = coverImage {
             let path = "portfolio/\(userId)/covers/\(UUID().uuidString).jpg"
             coverURL = try await uploadImage(cover, path: path)
+            print("Uploaded cover image")
         } else if !mediaURLs.isEmpty {
             coverURL = mediaURLs.first
         }
@@ -684,14 +688,15 @@ extension FirebaseService {
             "userId": userId,
             "title": title,
             "coverImageURL": coverURL ?? "",
-            "mediaURLs": mediaURLs,
+            "mediaURLs": mediaURLs,  // Use mediaURLs, not mediaItems
             "description": description ?? "",
             "createdAt": Date(),
             "updatedAt": Date(),
             "displayOrder": existingCards.count
         ]
         
-        try await db.collection("portfolioCards").addDocument(data: cardData)
+        let docRef = try await db.collection("portfolioCards").addDocument(data: cardData)
+        print("Portfolio saved with ID: \(docRef.documentID)")
     }
     
     func updatePortfolioCard(_ cardId: String, title: String? = nil, description: String? = nil) async throws {

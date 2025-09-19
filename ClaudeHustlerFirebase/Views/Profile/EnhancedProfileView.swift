@@ -591,6 +591,13 @@ struct EnhancedProfileView: View {
         print("Loading profile for userId: \(userId)")
         print("Current user ID: \(firebase.currentUser?.id ?? "nil")")
         print("Is own profile: \(isOwnProfile)")
+        // Add this temporarily in EnhancedProfileView's loadProfileData:
+        print("Loading portfolios for user: \(userId)")
+        let portfolios = await firebase.loadPortfolioCards(for: userId)
+        print("Found \(portfolios.count) portfolios")
+        for portfolio in portfolios {
+            print("Portfolio: \(portfolio.title), URLs: \(portfolio.mediaURLs.count)")
+        }
         
         if isOwnProfile {
             await firebase.updateLastActive()

@@ -37,6 +37,11 @@ struct NotificationSettings: Codable {
     var helpfulVotes: Bool = true
 }
 
+struct PortfolioMedia: Codable, Equatable {
+    let url: String
+    var description: String = ""
+}
+
 // MARK: - Portfolio Flash Card Model
 struct PortfolioCard: Codable, Identifiable {
     @DocumentID var id: String?
@@ -49,7 +54,6 @@ struct PortfolioCard: Codable, Identifiable {
     var updatedAt: Date = Date()
     var displayOrder: Int = 0
 }
-
 // MARK: - Review Model
 struct Review: Codable, Identifiable {
     @DocumentID var id: String?
