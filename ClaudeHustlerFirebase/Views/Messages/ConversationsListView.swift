@@ -211,11 +211,10 @@ struct ConversationRow: View {
                     
                     Spacer()
                     
-                    if let timestamp = conversation.lastMessageTimestamp {
-                        Text(timestamp.timeAgo())
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    // CORRECT - no need for conditional binding
+                    Text(conversation.lastMessageTimestamp.timeAgo())
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 HStack {

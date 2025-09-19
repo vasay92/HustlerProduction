@@ -34,9 +34,8 @@ final class ReelsViewModel: ObservableObject {
     private var reelListeners: [String: ListenerRegistration] = [:]
     
     // Current user
-    private var currentUserId: String? {
-        Auth.auth().currentUser?.uid
-    }
+    private var currentUserId: String?
+
     
     // MARK: - Initialization
     init() {
@@ -49,7 +48,9 @@ final class ReelsViewModel: ObservableObject {
     }
     
     deinit {
-        cleanupAllListeners()
+        Task { @MainActor in
+            cleanupAllListeners()
+        }
     }
     
     // MARK: - Public Methods - Data Loading
@@ -231,7 +232,7 @@ final class ReelsViewModel: ObservableObject {
     
     func createStatus(_ status: Status) async throws {
         // This would be moved to StatusRepository
-        try await firebase.createStatus(
+        _ = try await firebase.createStatus(
             image: UIImage(), // You'd pass the actual image
             caption: status.caption
         )

@@ -155,15 +155,26 @@ final class ReelRepository: RepositoryProtocol {
             throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        var reelData = reel
-        reelData.userId = userId
-        reelData.createdAt = Date()
-        reelData.likes = []
-        reelData.comments = 0
-        reelData.shares = 0
-        reelData.views = 0
+        // Create reel data dictionary (don't modify the input reel)
+        let reelData: [String: Any] = [
+            "userId": userId,
+            "userName": reel.userName ?? "",
+            "userProfileImage": reel.userProfileImage ?? "",
+            "videoURL": reel.videoURL,
+            "thumbnailURL": reel.thumbnailURL ?? "",
+            "title": reel.title,
+            "description": reel.description,
+            "category": reel.category?.rawValue ?? "",
+            "hashtags": reel.hashtags,
+            "createdAt": Date(),
+            "likes": [],
+            "comments": 0,
+            "shares": 0,
+            "views": 0,
+            "isPromoted": false
+        ]
         
-        let docRef = try await db.collection("reels").addDocument(from: reelData)
+        let docRef = try await db.collection("reels").addDocument(data: reelData)
         
         // Clear cache
         cache.remove(for: "reels_page_1")

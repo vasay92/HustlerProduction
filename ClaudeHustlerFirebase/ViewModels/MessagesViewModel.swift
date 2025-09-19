@@ -78,14 +78,14 @@ final class MessagesViewModel: ObservableObject {
     }
     
     func deleteMessage(_ messageId: String) async {
-        do {
-            try await repository.deleteMessage(messageId)
-        } catch {
+        
             print("Error deleting message: \(error)")
-        }
+
     }
     
     deinit {
-        repository.removeAllListeners()
+        Task { @MainActor in
+                repository.removeAllListeners()
+            }
     }
 }

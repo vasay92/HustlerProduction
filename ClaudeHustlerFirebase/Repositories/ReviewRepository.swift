@@ -158,26 +158,23 @@ final class ReviewRepository: RepositoryProtocol {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Maximum 3 reviews per user allowed"])
         }
         
-        // Upload images if provided
-        var mediaURLs: [String] = []
-        if let images = review.reviewImages {
-            for (index, imageURL) in images.enumerated() {
-                // Assuming images are already uploaded and we have URLs
-                mediaURLs.append(imageURL)
-            }
-        }
+        // Create review data dictionary (don't modify the input review)
+        let reviewData: [String: Any] = [
+            "reviewerId": reviewerId,
+            "reviewedUserId": review.reviewedUserId,
+            "reviewerName": review.reviewerName ?? "",
+            "reviewerProfileImage": review.reviewerProfileImage ?? "",
+            "rating": review.rating,
+            "text": review.text,
+            "mediaURLs": review.mediaURLs,  // Already exists in Review model
+            "createdAt": Date(),
+            "updatedAt": Date(),
+            "isEdited": false,
+            "helpfulVotes": [],
+            "reviewNumber": existingReviews.documents.count + 1
+        ]
         
-        // Create review data
-        var reviewData = review
-        reviewData.reviewerId = reviewerId
-        reviewData.mediaURLs = mediaURLs
-        reviewData.createdAt = Date()
-        reviewData.updatedAt = Date()
-        reviewData.isEdited = false
-        reviewData.helpfulVotes = []
-        reviewData.reviewNumber = existingReviews.documents.count + 1
-        
-        let docRef = try await db.collection("reviews").addDocument(from: reviewData)
+        let docRef = try await db.collection("reviews").addDocument(data: reviewData)
         
         // Update user rating
         await userRepository.updateUserRating(userId: review.reviewedUserId)
