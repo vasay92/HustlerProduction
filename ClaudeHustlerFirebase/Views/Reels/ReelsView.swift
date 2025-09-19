@@ -357,8 +357,8 @@ struct FullScreenReelView: View {
     
     @ViewBuilder
     private var reelBackgroundContent: some View {
-        if let thumbnailURL = displayReel.thumbnailURL ?? displayReel.videoURL,
-           let url = URL(string: thumbnailURL) {
+        let thumbnailURL = displayReel.thumbnailURL ?? displayReel.videoURL
+        if let url = URL(string: thumbnailURL) {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):

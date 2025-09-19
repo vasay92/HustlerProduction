@@ -65,7 +65,7 @@ struct PortfolioGalleryView: View {
             }
         }
         .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(images: $newImages, singleImage: nil)
+            ImagePicker(images: $newImages, singleImage: .constant(nil))
         }
         .sheet(isPresented: $showingEditSheet) {
             EditPortfolioDetailsView(card: card)

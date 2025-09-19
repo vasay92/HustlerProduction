@@ -14,8 +14,8 @@
             filePath = "ClaudeHustlerFirebase/Services/FirebaseService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "415"
-            endingLineNumber = "415"
+            startingLineNumber = "424"
+            endingLineNumber = "424"
             landmarkName = "FirebaseService"
             landmarkType = "3">
          </BreakpointContent>

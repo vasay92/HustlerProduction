@@ -309,6 +309,15 @@ class FirebaseService: ObservableObject {
         return docRef.documentID
     }
     
+    // Add this method to FirebaseService.swift (around the Status section)
+    func markStatusAsViewed(_ statusId: String) async throws {
+        guard let userId = currentUser?.id else { return }
+        
+        try await db.collection("statuses").document(statusId).updateData([
+            "viewedBy": FieldValue.arrayUnion([userId])
+        ])
+    }
+    
     // MARK: - Reels
     
     func loadReels() async {
