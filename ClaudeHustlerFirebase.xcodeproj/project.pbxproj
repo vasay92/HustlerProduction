@@ -30,6 +30,12 @@
 		EBD038C62E7CC4DF004E0CBD /* SDWebImageSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = EBD038C52E7CC4DF004E0CBD /* SDWebImageSwiftUI */; };
 		EBD038D22E7CF44A004E0CBD /* ValidationHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038CE2E7CF11C004E0CBD /* ValidationHelper.swift */; };
 		EBD038D42E7CF9AB004E0CBD /* ListenerManageable.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038D32E7CF9AB004E0CBD /* ListenerManageable.swift */; };
+		EBD038DA2E7D0505004E0CBD /* ReviewRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038D92E7D0505004E0CBD /* ReviewRepository.swift */; };
+		EBD038DC2E7D050B004E0CBD /* UserRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038DB2E7D050A004E0CBD /* UserRepository.swift */; };
+		EBD038DE2E7D050E004E0CBD /* MessageRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038DD2E7D050D004E0CBD /* MessageRepository.swift */; };
+		EBD038E02E7D0511004E0CBD /* ReelRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038DF2E7D0511004E0CBD /* ReelRepository.swift */; };
+		EBD038E22E7D06C4004E0CBD /* ReelsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038E12E7D06C4004E0CBD /* ReelsViewModel.swift */; };
+		EBD038E42E7D06DE004E0CBD /* MessagesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +77,12 @@
 		EBBCA1932E7C875000745D24 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EBD038CE2E7CF11C004E0CBD /* ValidationHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValidationHelper.swift; sourceTree = "<group>"; };
 		EBD038D32E7CF9AB004E0CBD /* ListenerManageable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListenerManageable.swift; sourceTree = "<group>"; };
+		EBD038D92E7D0505004E0CBD /* ReviewRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRepository.swift; sourceTree = "<group>"; };
+		EBD038DB2E7D050A004E0CBD /* UserRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserRepository.swift; sourceTree = "<group>"; };
+		EBD038DD2E7D050D004E0CBD /* MessageRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRepository.swift; sourceTree = "<group>"; };
+		EBD038DF2E7D0511004E0CBD /* ReelRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelRepository.swift; sourceTree = "<group>"; };
+		EBD038E12E7D06C4004E0CBD /* ReelsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelsViewModel.swift; sourceTree = "<group>"; };
+		EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -261,6 +273,10 @@
 			isa = PBXGroup;
 			children = (
 				EB6E089F2E7C9641004B253C /* PostRepository.swift */,
+				EBD038DF2E7D0511004E0CBD /* ReelRepository.swift */,
+				EBD038DD2E7D050D004E0CBD /* MessageRepository.swift */,
+				EBD038DB2E7D050A004E0CBD /* UserRepository.swift */,
+				EBD038D92E7D0505004E0CBD /* ReviewRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -268,6 +284,8 @@
 		EB6E08A32E7C9641004B253C /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */,
+				EBD038E12E7D06C4004E0CBD /* ReelsViewModel.swift */,
 				EB6E08A12E7C9641004B253C /* HomeViewModel.swift */,
 				EB6E08A22E7C9641004B253C /* ServicesViewModel.swift */,
 			);
@@ -451,7 +469,9 @@
 				EB6BBA8F2E68FAF9006DB468 /* MainTabView.swift in Sources */,
 				EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */,
 				EB6BBB372E70D070006DB468 /* ContentPreviewCard.swift in Sources */,
+				EBD038DE2E7D050E004E0CBD /* MessageRepository.swift in Sources */,
 				EB6E08922E7C918A004B253C /* CacheService.swift in Sources */,
+				EBD038DC2E7D050B004E0CBD /* UserRepository.swift in Sources */,
 				EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */,
 				EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */,
 				EB6E08A42E7C9641004B253C /* PostRepository.swift in Sources */,
@@ -460,7 +480,11 @@
 				EB6E08A72E7C9641004B253C /* HomeViewModel.swift in Sources */,
 				EBD038D22E7CF44A004E0CBD /* ValidationHelper.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
+				EBD038E02E7D0511004E0CBD /* ReelRepository.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
+				EBD038DA2E7D0505004E0CBD /* ReviewRepository.swift in Sources */,
+				EBD038E22E7D06C4004E0CBD /* ReelsViewModel.swift in Sources */,
+				EBD038E42E7D06DE004E0CBD /* MessagesViewModel.swift in Sources */,
 				EBD038D42E7CF9AB004E0CBD /* ListenerManageable.swift in Sources */,
 				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
 			);

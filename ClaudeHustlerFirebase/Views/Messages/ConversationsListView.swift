@@ -5,6 +5,7 @@ import SwiftUI
 import FirebaseFirestore
 
 struct ConversationsListView: View {
+    @StateObject private var viewModel = MessagesViewModel()
     @StateObject private var firebase = FirebaseService.shared
     @State private var conversations: [Conversation] = []
     @State private var searchText = ""
@@ -65,7 +66,7 @@ struct ConversationsListView: View {
             }
         }
         .task {
-            await loadConversations()
+            await viewModel.loadConversations()
             startListeningToConversations()
             await updateUnreadCount()
         }

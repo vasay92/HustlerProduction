@@ -4,6 +4,7 @@ import FirebaseFirestore
 
 struct EnhancedProfileView: View {
     let userId: String
+    @StateObject private var viewModel = ProfileViewModel(userId: userId)
     @StateObject private var firebase = FirebaseService.shared
     @State private var user: User?
     @State private var portfolioCards: [PortfolioCard] = []

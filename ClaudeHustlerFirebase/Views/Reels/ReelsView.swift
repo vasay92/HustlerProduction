@@ -6,7 +6,7 @@ import AVKit
 import FirebaseFirestore
 
 struct ReelsView: View {
-    @StateObject private var firebase = FirebaseService.shared
+    @StateObject private var viewModel = ReelsViewModel()
     @State private var selectedStatus: Status?
     @State private var showingCreateOptions = false
     @State private var currentReelIndex = 0
@@ -24,25 +24,24 @@ struct ReelsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     // Status Section - Now at the very top without "Stories" label
-                    statusSection
+                    viewModel.statuses  // Will need to update this to use viewModel.statuses
                     
                     Divider()
                         .padding(.vertical, 10)
                     
                     // Reels Grid Section
-                    reelsGridSection
+                    viewModel.reels  // Will need to update this to use viewModel.reels
                 }
             }
-            .navigationBarHidden(true) // Hide the navigation bar completely
+            .navigationBarHidden(true)
         }
         .task {
-            await firebase.loadStatusesFromFollowing()
-            await firebase.loadReels()
-            await firebase.cleanupExpiredStatuses()
+            await viewModel.loadStatuses()  // CHANGE
+            await viewModel.loadInitialReels()  // CHANGE
+            await viewModel.cleanupExpiredStatuses()  // CHANGE
         }
         .refreshable {
-            await firebase.loadStatusesFromFollowing()
-            await firebase.loadReels()
+            await viewModel.refresh()  // CHANGE: Single refresh method
         }
         .sheet(isPresented: $showingCreateOptions) {
             CreateContentOptionsSheet()
@@ -52,68 +51,19 @@ struct ReelsView: View {
         }
         .fullScreenCover(isPresented: $isFullScreenMode) {
             VerticalReelScrollView(
-                reels: firebase.reels,
+                reels: viewModel.reels,  // CHANGE: firebase.reels → viewModel.reels
                 initialIndex: currentReelIndex
             )
         }
     }
     
-    // MARK: - Status Section
-    @ViewBuilder
-    private var statusSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    // Add Your Story button
-                    if firebase.statuses.first(where: { $0.userId == firebase.currentUser?.id }) == nil {
-                        AddStatusButton(action: { showingCreateOptions = true })
-                    } else {
-                        // Show user's own status if exists
-                        if let ownStatus = firebase.statuses.first(where: { $0.userId == firebase.currentUser?.id }) {
-                            StatusCircle(status: ownStatus, isOwnStatus: true) {
-                                selectedStatus = ownStatus
-                            }
-                        }
-                    }
-                    
-                    // Other users' statuses
-                    ForEach(firebase.statuses.filter { $0.userId != firebase.currentUser?.id }) { status in
-                        StatusCircle(status: status, isOwnStatus: false) {
-                            selectedStatus = status
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-            .frame(height: 100)
-        }
-    }
+    // You'll also need to update these sections:
     
-    // MARK: - Reels Grid Section
-    @ViewBuilder
-    private var reelsGridSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Section Header
-            Text("Reels")
-                .font(.title2)
-                .fontWeight(.bold)
-                .padding(.horizontal)
-            
-            if firebase.reels.isEmpty {
-                EmptyReelsPlaceholder()
-            } else {
-                LazyVGrid(columns: columns, spacing: 2) {
-                    ForEach(Array(firebase.reels.enumerated()), id: \.element.id) { index, reel in
-                        ReelGridItem(reel: reel) {
-                            currentReelIndex = index
-                            isFullScreenMode = true
-                        }
-                    }
-                }
-                .padding(.horizontal, 2)
-            }
-        }
-    }
+    // In statusSection:
+    // Change firebase.statuses → viewModel.statuses
+    
+    // In reelsGridSection:
+    // Change firebase.reels → viewModel.reels
 }
 
 // MARK: - Vertical Reel Scroll View (Full Screen Mode)
