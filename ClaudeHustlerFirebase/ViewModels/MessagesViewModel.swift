@@ -11,6 +11,7 @@ final class MessagesViewModel: ObservableObject {
     @Published var messages: [Message] = []
     @Published var isLoading = false
     @Published var error: Error?
+    static weak var shared: MessagesViewModel?
     
     private let repository = MessageRepository.shared
     private let firebase = FirebaseService.shared

@@ -21,6 +21,7 @@ final class ReelsViewModel: ObservableObject {
     @Published var hasMoreReels = true
     @Published var error: Error?
     @Published var currentUserStatus: Status?
+    static weak var shared: ReelsViewModel?
     
     // MARK: - Private Properties
     private let reelRepository = ReelRepository.shared
