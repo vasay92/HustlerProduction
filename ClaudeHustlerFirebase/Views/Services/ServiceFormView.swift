@@ -83,7 +83,7 @@ struct ServiceFormView: View {
                 }
             }
             .sheet(isPresented: $showingImagePicker) {
-                ImagePicker(images: $selectedImages)
+                ImagePicker(images: $selectedImages, singleImage: .constant(nil))
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK") { }

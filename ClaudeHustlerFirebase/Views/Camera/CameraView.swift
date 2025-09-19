@@ -309,9 +309,9 @@ struct CameraView: View {
         
         do {
             if mode == .status {
-                await postStatus()
+                try await postStatus()
             } else {
-                await postReel()
+                try await postReel()
             }
             
             // Success - dismiss
@@ -327,7 +327,7 @@ struct CameraView: View {
         }
     }
     
-    private func postStatus() async {
+    private func postStatus() async throws {
         guard let image = capturedImage else { return }
         
         do {
@@ -366,7 +366,7 @@ struct CameraView: View {
         }
     }
     
-    private func postReel() async {
+    private func postReel() async throws {
         do {
             var mediaURL = ""
             var thumbnailURL = ""

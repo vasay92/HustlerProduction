@@ -2441,7 +2441,7 @@ var listenerDebugTimer: Timer?
 
 func startListenerMonitoring() {
     listenerDebugTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
-        let count = self.getActiveListenerCount()
+        let count = FirebaseService.shared.getActiveListenerCount()  // ✅ Fixed - use shared instance
         print("🔍 Active Listeners: \(count)")
     }
 }
@@ -2451,5 +2451,4 @@ func stopListenerMonitoring() {
     listenerDebugTimer = nil
 }
 #endif
-
 

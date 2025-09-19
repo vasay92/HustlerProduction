@@ -230,7 +230,7 @@ struct CreatePortfolioCardView: View {
             ImagePicker(images: .constant([]), singleImage: $coverImage)
         }
         .sheet(isPresented: $showingMediaPicker) {
-            ImagePicker(images: $mediaImages, singleImage: nil)  // Changed from .constant(nil) to nil
+            ImagePicker(images: $mediaImages, singleImage: .constant(nil))
         }
     }
     
@@ -590,7 +590,7 @@ struct CreateReviewView: View {
             .overlay(submissionOverlay)
         }
         .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(images: $reviewImages, singleImage: nil)
+            ImagePicker(images: $reviewImages, singleImage: .constant(nil))
         }
         .alert("Error", isPresented: $showingError) {
             Button("OK") { }
