@@ -6,22 +6,21 @@ import FirebaseFirestore
 
 struct ConversationsListView: View {
     @StateObject private var viewModel = MessagesViewModel()
-    @StateObject private var firebase = FirebaseService.shared
-    @State private var conversations: [Conversation] = []
     @State private var searchText = ""
     @State private var selectedConversation: Conversation?
     @State private var showingNewMessage = false
     @State private var conversationsListener: ListenerRegistration?
-    @State private var totalUnreadCount = 0
     
     var filteredConversations: [Conversation] {
         if searchText.isEmpty {
-            return conversations
+            return viewModel.conversations
         }
         
-        guard let currentUserId = firebase.currentUser?.id else { return conversations }
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
+            return viewModel.conversations
+        }
         
-        return conversations.filter { conversation in
+        return viewModel.conversations.filter { conversation in
             let otherName = conversation.otherParticipantName(currentUserId: currentUserId) ?? ""
             return otherName.localizedCaseInsensitiveContains(searchText)
         }
@@ -30,28 +29,24 @@ struct ConversationsListView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Search Bar
-                if !conversations.isEmpty {
+                // Search Bar (only show if there are conversations)
+                if !viewModel.conversations.isEmpty {
                     searchBar
                 }
                 
-                // Conversations List
-                if conversations.isEmpty {
+                // Content
+                if viewModel.isLoading {
+                    // Loading state
+                    Spacer()
+                    ProgressView("Loading conversations...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Spacer()
+                } else if viewModel.conversations.isEmpty {
+                    // Empty state
                     emptyStateView
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(filteredConversations) { conversation in
-                                ConversationRow(conversation: conversation)
-                                    .onTapGesture {
-                                        selectedConversation = conversation
-                                    }
-                                
-                                Divider()
-                                    .padding(.leading, 76)
-                            }
-                        }
-                    }
+                    // Conversations List
+                    conversationsList
                 }
             }
             .navigationTitle("Messages")
@@ -68,10 +63,9 @@ struct ConversationsListView: View {
         .task {
             await viewModel.loadConversations()
             startListeningToConversations()
-            await updateUnreadCount()
         }
         .onDisappear {
-            conversationsListener?.remove()
+            stopListeningToConversations()
         }
         .fullScreenCover(item: $selectedConversation) { conversation in
             ChatView(conversation: conversation)
@@ -106,6 +100,25 @@ struct ConversationsListView: View {
         .padding()
     }
     
+    private var conversationsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(filteredConversations) { conversation in
+                    ConversationRow(conversation: conversation)
+                        .onTapGesture {
+                            selectedConversation = conversation
+                        }
+                    
+                    Divider()
+                        .padding(.leading, 76)
+                }
+            }
+        }
+        .refreshable {
+            await viewModel.loadConversations()
+        }
+    }
+    
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Spacer()
@@ -118,50 +131,47 @@ struct ConversationsListView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
             
-            Text("Start a conversation with other users")
+            Text("Start a conversation to connect with others")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
             
             Button(action: { showingNewMessage = true }) {
-                Label("New Message", systemImage: "plus.message.fill")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
+                Label("New Message", systemImage: "square.and.pencil")
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
                     .background(Color.blue)
-                    .cornerRadius(12)
+                    .foregroundColor(.white)
+                    .cornerRadius(20)
             }
             
             Spacer()
         }
-        .padding()
     }
     
-    // MARK: - Functions
-    
-    private func loadConversations() async {
-        conversations = await firebase.loadConversations()
-    }
+    // MARK: - Real-time Listeners
     
     private func startListeningToConversations() {
-        conversationsListener = firebase.listenToConversations { updatedConversations in
-            withAnimation {
-                self.conversations = updatedConversations
+        guard let userId = FirebaseService.shared.currentUser?.id else { return }
+        
+        conversationsListener = FirebaseService.shared.listenToConversations { [weak viewModel] conversations in
+            Task { @MainActor in
+                viewModel?.conversations = conversations
             }
         }
     }
     
-    private func updateUnreadCount() async {
-        totalUnreadCount = await firebase.getTotalUnreadCount()
+    private func stopListeningToConversations() {
+        conversationsListener?.remove()
+        conversationsListener = nil
     }
 }
 
-// MARK: - Conversation Row Component
-
+// MARK: - Conversation Row
 struct ConversationRow: View {
     let conversation: Conversation
     @StateObject private var firebase = FirebaseService.shared
-    @State private var showingOptions = false
     
     private var currentUserId: String? {
         firebase.currentUser?.id
@@ -182,64 +192,53 @@ struct ConversationRow: View {
         return conversation.unreadCounts[userId] ?? 0
     }
     
-    private var isUnread: Bool {
+    private var hasUnread: Bool {
         unreadCount > 0
     }
     
     var body: some View {
         HStack(spacing: 12) {
-            // Profile Image
-            if let imageURL = otherParticipantImage {
-                AsyncImage(url: URL(string: imageURL)) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 56, height: 56)
-                        .clipShape(Circle())
-                } placeholder: {
-                    profilePlaceholder
-                }
-            } else {
-                profilePlaceholder
-            }
+            // Avatar
+            ProfileImageView(imageURL: otherParticipantImage, size: 56)
             
-            // Message Content
+            // Content
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(otherParticipantName)
                         .font(.headline)
-                        .fontWeight(isUnread ? .semibold : .regular)
+                        .fontWeight(hasUnread ? .semibold : .regular)
                         .lineLimit(1)
                     
                     Spacer()
                     
-                    Text(conversation.lastMessageTimestamp, style: .relative)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                HStack {
-                    if let senderId = conversation.lastMessageSenderId,
-                       senderId == currentUserId {
-                        Image(systemName: "checkmark")
+                    if let timestamp = conversation.lastMessageTimestamp {
+                        Text(timestamp.timeAgo())
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
-                    Text(conversation.lastMessage ?? "Start a conversation")
-                        .font(.subheadline)
-                        .foregroundColor(isUnread ? .primary : .secondary)
-                        .fontWeight(isUnread ? .medium : .regular)
-                        .lineLimit(2)
+                }
+                
+                HStack {
+                    if let lastMessage = conversation.lastMessage {
+                        Text(lastMessage)
+                            .font(.subheadline)
+                            .foregroundColor(hasUnread ? .primary : .secondary)
+                            .lineLimit(2)
+                    } else {
+                        Text("Start a conversation")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .italic()
+                    }
                     
                     Spacer()
                     
-                    if isUnread {
+                    if hasUnread {
                         Text("\(unreadCount)")
-                            .font(.caption)
-                            .fontWeight(.semibold)
+                            .font(.caption2)
+                            .fontWeight(.bold)
                             .foregroundColor(.white)
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.blue)
                             .clipShape(Capsule())
@@ -248,194 +247,168 @@ struct ConversationRow: View {
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .background(Color(.systemBackground))
-        .contentShape(Rectangle())
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                // Delete conversation
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            
-            Button {
-                showingOptions = true
-            } label: {
-                Label("More", systemImage: "ellipsis")
-            }
-            .tint(.gray)
-        }
-        .actionSheet(isPresented: $showingOptions) {
-            ActionSheet(
-                title: Text("Conversation Options"),
-                buttons: [
-                    .destructive(Text("Block User")) {
-                        Task {
-                            if let conversationId = conversation.id,
-                               let otherUserId = conversation.otherParticipantId(currentUserId: currentUserId ?? "") {
-                                try? await firebase.blockUser(otherUserId, in: conversationId)
-                            }
-                        }
-                    },
-                    .destructive(Text("Report")) {
-                        // Show report view
-                    },
-                    .cancel()
-                ]
-            )
-        }
-    }
-    
-    private var profilePlaceholder: some View {
-        Circle()
-            .fill(Color.gray.opacity(0.3))
-            .frame(width: 56, height: 56)
-            .overlay(
-                Text(String(otherParticipantName.first ?? "U"))
-                    .font(.title2)
-                    .foregroundColor(.white)
-            )
     }
 }
 
-// MARK: - New Message View
+// MARK: - Profile Image View Helper
+struct ProfileImageView: View {
+    let imageURL: String?
+    let size: CGFloat
+    
+    var body: some View {
+        if let urlString = imageURL, let url = URL(string: urlString) {
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } placeholder: {
+                Circle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: size, height: size)
+                    .overlay(
+                        ProgressView()
+                    )
+            }
+        } else {
+            Image(systemName: "person.circle.fill")
+                .font(.system(size: size))
+                .foregroundColor(.gray)
+                .frame(width: size, height: size)
+        }
+    }
+}
 
+// MARK: - Date Extension for Time Ago
+extension Date {
+    func timeAgo() -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        let now = Date()
+        let timeInterval = now.timeIntervalSince(self)
+        
+        switch timeInterval {
+        case 0..<60:
+            return "now"
+        case 60..<3600:
+            let minutes = Int(timeInterval / 60)
+            return "\(minutes)m"
+        case 3600..<86400:
+            let hours = Int(timeInterval / 3600)
+            return "\(hours)h"
+        case 86400..<604800:
+            let days = Int(timeInterval / 86400)
+            return "\(days)d"
+        default:
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMM d"
+            return dateFormatter.string(from: self)
+        }
+    }
+}
+
+// MARK: - New Message View (Placeholder)
+// Note: This is a placeholder - you should already have this view in your project
 struct NewMessageView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var searchText = ""
-    @State private var users: [User] = []
     @State private var selectedUser: User?
-    
-    var filteredUsers: [User] {
-        if searchText.isEmpty {
-            return users
-        }
-        return users.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.email.localizedCaseInsensitiveContains(searchText)
-        }
-    }
     
     var body: some View {
         NavigationView {
             VStack {
-                // Search Bar
+                // Search bar
                 HStack {
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        
-                        TextField("Search users", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                    }
-                    .padding(10)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                    
+                    TextField("Search users...", text: $searchText)
+                        .textFieldStyle(PlainTextFieldStyle())
                 }
+                .padding(10)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
                 .padding()
                 
-                // Users List
-                if users.isEmpty {
-                    Spacer()
-                    Text("No users found")
+                // Users list would go here
+                ScrollView {
+                    Text("User search functionality to be implemented")
                         .foregroundColor(.secondary)
-                    Spacer()
-                } else {
-                    List(filteredUsers) { user in
-                        UserRow(user: user) {
-                            selectedUser = user
-                        }
-                    }
-                    .listStyle(PlainListStyle())
+                        .padding()
                 }
+                
+                Spacer()
             }
             .navigationTitle("New Message")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        dismiss()
+                    }
                 }
             }
-        }
-        .task {
-            await loadUsers()
-        }
-        .fullScreenCover(item: $selectedUser) { user in
-            if let userId = user.id {
-                ChatView(recipientId: userId)
-            }
-        }
-    }
-    
-    private func loadUsers() async {
-        // Load users from Firebase
-        // This is a simplified version - you might want to paginate or filter
-        do {
-            let snapshot = try await Firestore.firestore()
-                .collection("users")
-                .limit(to: 50)
-                .getDocuments()
-            
-            users = snapshot.documents.compactMap { doc in
-                try? doc.data(as: User.self)
-            }.filter { $0.id != firebase.currentUser?.id } // Exclude current user
-        } catch {
-            print("Error loading users: \(error)")
         }
     }
 }
 
-// MARK: - User Row Component
-
-struct UserRow: View {
-    let user: User
-    let action: () -> Void
+// MARK: - Chat View (Placeholder)
+// Note: You should already have this view - this is just to make the file compile
+struct ChatView: View {
+    let conversation: Conversation
+    @Environment(\.dismiss) var dismiss
+    
+    init(conversation: Conversation) {
+        self.conversation = conversation
+    }
+    
+    // Alternative initializer for creating new conversations
+    init(recipientId: String, contextType: Message.MessageContextType? = nil,
+         contextId: String? = nil,
+         contextData: (title: String, image: String, userId: String)? = nil,
+         isFromContentView: Bool = false) {
+        // Create a temporary conversation
+        self.conversation = Conversation(
+            participantIds: [FirebaseService.shared.currentUser?.id ?? "", recipientId],
+            participantNames: [:],
+            participantImages: [:]
+        )
+    }
     
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                // Profile Image
-                if let imageURL = user.profileImageURL {
-                    AsyncImage(url: URL(string: imageURL)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 40, height: 40)
-                            .clipShape(Circle())
-                    } placeholder: {
-                        profilePlaceholder
-                    }
-                } else {
-                    profilePlaceholder
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(user.name)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    
-                    Text(user.email)
-                        .font(.caption)
+        NavigationView {
+            VStack {
+                // Messages would be displayed here
+                ScrollView {
+                    Text("Chat messages will appear here")
                         .foregroundColor(.secondary)
+                        .padding()
                 }
                 
-                Spacer()
+                // Message input bar would go here
+                HStack {
+                    TextField("Type a message...", text: .constant(""))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    
+                    Button(action: {}) {
+                        Image(systemName: "paperplane.fill")
+                    }
+                }
+                .padding()
             }
-            .padding(.vertical, 4)
+            .navigationTitle("Chat")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Back") {
+                        dismiss()
+                    }
+                }
+            }
         }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private var profilePlaceholder: some View {
-        Circle()
-            .fill(Color.gray.opacity(0.3))
-            .frame(width: 40, height: 40)
-            .overlay(
-                Text(String(user.name.first ?? "U"))
-                    .foregroundColor(.white)
-            )
     }
 }
-

@@ -40,6 +40,9 @@ final class ReelsViewModel: ObservableObject {
     
     // MARK: - Initialization
     init() {
+        // Initialize current user ID
+        self.currentUserId = Auth.auth().currentUser?.uid
+        
         Task {
             await loadInitialData()
         }

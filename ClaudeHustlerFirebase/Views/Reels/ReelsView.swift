@@ -23,25 +23,25 @@ struct ReelsView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 0) {
-                    // Status Section - Now at the very top without "Stories" label
-                    viewModel.statuses  // Will need to update this to use viewModel.statuses
+                    // Status Section
+                    statusSection
                     
                     Divider()
                         .padding(.vertical, 10)
                     
                     // Reels Grid Section
-                    viewModel.reels  // Will need to update this to use viewModel.reels
+                    reelsGridSection
                 }
             }
             .navigationBarHidden(true)
         }
         .task {
-            await viewModel.loadStatuses()  // CHANGE
-            await viewModel.loadInitialReels()  // CHANGE
-            await viewModel.cleanupExpiredStatuses()  // CHANGE
+            await viewModel.loadStatuses()
+            await viewModel.loadInitialReels()
+            await viewModel.cleanupExpiredStatuses()
         }
         .refreshable {
-            await viewModel.refresh()  // CHANGE: Single refresh method
+            await viewModel.refresh()
         }
         .sheet(isPresented: $showingCreateOptions) {
             CreateContentOptionsSheet()
@@ -51,20 +51,105 @@ struct ReelsView: View {
         }
         .fullScreenCover(isPresented: $isFullScreenMode) {
             VerticalReelScrollView(
-                reels: viewModel.reels,  // CHANGE: firebase.reels → viewModel.reels
+                reels: viewModel.reels,
                 initialIndex: currentReelIndex
             )
         }
     }
     
-    // You'll also need to update these sections:
+    // MARK: - Status Section
+    @ViewBuilder
+    private var statusSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                // Add Status button
+                AddStatusButton {
+                    showingCreateOptions = true
+                }
+                
+                // Status circles from ViewModel
+                ForEach(viewModel.statuses) { status in
+                    StatusCircle(
+                        status: status,
+                        isOwnStatus: status.userId == FirebaseService.shared.currentUser?.id,
+                        action: { selectedStatus = status }
+                    )
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.vertical, 10)
+    }
     
-    // In statusSection:
-    // Change firebase.statuses → viewModel.statuses
-    
-    // In reelsGridSection:
-    // Change firebase.reels → viewModel.reels
+    // MARK: - Reels Grid Section
+    @ViewBuilder
+    private var reelsGridSection: some View {
+        if viewModel.isLoadingReels && viewModel.reels.isEmpty {
+            // Loading state
+            VStack {
+                ProgressView()
+                    .padding(.top, 50)
+                Text("Loading reels...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 8)
+            }
+        } else if viewModel.reels.isEmpty {
+            // Empty state
+            VStack(spacing: 20) {
+                Image(systemName: "play.rectangle")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray)
+                
+                Text("No Reels Yet")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                
+                Text("Be the first to share a reel!")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Button(action: { showingCreateOptions = true }) {
+                    Label("Create Reel", systemImage: "plus.circle.fill")
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(20)
+                }
+            }
+            .padding(.top, 50)
+        } else {
+            // Reels grid
+            LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(Array(viewModel.reels.enumerated()), id: \.element.id) { index, reel in
+                    ReelGridItem(reel: reel) {
+                        currentReelIndex = index
+                        isFullScreenMode = true
+                    }
+                    .onAppear {
+                        // Load more when reaching the end
+                        if index == viewModel.reels.count - 3 && viewModel.hasMoreReels {
+                            Task {
+                                await viewModel.loadMoreReels()
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 1)
+            
+            // Loading indicator for pagination
+            if viewModel.isLoadingReels && !viewModel.reels.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
+        }
+    }
 }
+
+// Keep all the existing supporting views (StatusCircle, ReelGridItem, etc.) as they are
 
 // MARK: - Vertical Reel Scroll View (Full Screen Mode)
 struct VerticalReelScrollView: View {
