@@ -90,51 +90,34 @@ final class MessageRepository: RepositoryProtocol {
         return (Array(messages), snapshot.documents.last)
     }
     
-    // MARK: - Create Message (Send)
-    func create(_ message: Message) async throws -> String {
+    // MARK: - Create Message
+    func create(_ message: Message, in conversationId: String) async throws -> String {
         guard let userId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        var messageData = message
-        messageData.senderId = userId
-        messageData.timestamp = Date()
-        messageData.isDelivered = false
-        messageData.isRead = false
+        // Create message data dictionary (don't modify the input message)
+        let messageData: [String: Any] = [
+            "senderId": userId,
+            "text": message.text,
+            "timestamp": Date(),
+            "isRead": false,
+            "contextType": message.contextType?.rawValue ?? "",
+            "contextId": message.contextId ?? ""
+        ]
         
-        // Start a batch write
-        let batch = db.batch()
+        let docRef = try await db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .addDocument(data: messageData)
         
-        // Add the message
-        let messageRef = db.collection("messages").document()
-        try batch.setData(from: messageData, forDocument: messageRef)
+        // Update conversation's last message
+        try await updateConversationLastMessage(conversationId, message: message.text)
         
-        // Update conversation
-        let conversationRef = db.collection("conversations").document(message.conversationId)
-        batch.updateData([
-            "lastMessage": message.text,
-            "lastMessageTimestamp": Date(),
-            "lastMessageSenderId": userId,
-            "updatedAt": Date()
-        ], forDocument: conversationRef)
+        // Clear cache
+        cache.remove(for: "messages_\(conversationId)")
         
-        // Increment unread count for recipient
-        let conversationDoc = try await conversationRef.getDocument()
-        if let data = conversationDoc.data(),
-           let participantIds = data["participantIds"] as? [String] {
-            let recipientId = participantIds.first { $0 != userId } ?? ""
-            batch.updateData([
-                "unreadCounts.\(recipientId)": FieldValue.increment(Int64(1))
-            ], forDocument: conversationRef)
-        }
-        
-        // Commit the batch
-        try await batch.commit()
-        
-        // Clear conversation cache
-        cache.remove(for: "conversation_\(message.conversationId)")
-        
-        return messageRef.documentID
+        return docRef.documentID
     }
     
     // MARK: - Update Message (Edit)

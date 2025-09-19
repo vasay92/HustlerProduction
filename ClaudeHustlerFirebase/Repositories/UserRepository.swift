@@ -67,23 +67,30 @@ final class UserRepository: RepositoryProtocol {
         return user
     }
     
-    // MARK: - Create User Profile
+    // MARK: - Create User
     func create(_ user: User) async throws -> String {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "UserRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
+        // Create user data dictionary
+        let userData: [String: Any] = [
+            "email": user.email,
+            "name": user.name,
+            "profileImageURL": user.profileImageURL ?? "",
+            "bio": user.bio,
+            "isServiceProvider": user.isServiceProvider,
+            "location": user.location,
+            "rating": user.rating,
+            "reviewCount": user.reviewCount,
+            "following": user.following,
+            "followers": user.followers,
+            "createdAt": Date(),
+            "lastActive": Date()
+        ]
         
-        var userData = user
-        userData.id = userId
-        userData.createdAt = Date()
-        userData.following = []
-        userData.followers = []
-        userData.rating = 0.0
-        userData.reviewCount = 0
+        let docRef = try await db.collection("users").addDocument(data: userData)
         
-        try await db.collection("users").document(userId).setData(from: userData)
+        // Clear cache
+        cache.remove(for: "all_users")
         
-        return userId
+        return docRef.documentID
     }
     
     // MARK: - Update User Profile
@@ -102,8 +109,8 @@ final class UserRepository: RepositoryProtocol {
             "bio": user.bio ?? "",
             "location": user.location ?? "",
             "isServiceProvider": user.isServiceProvider,
-            "skills": user.skills ?? [],
-            "availability": user.availability ?? "",
+//            "skills": user.skills ?? [],
+//            "availability": user.availability ?? "",
             "updatedAt": Date()
         ]
         
@@ -312,8 +319,8 @@ final class UserRepository: RepositoryProtocol {
             return user
         }.filter {
             $0.name.localizedCaseInsensitiveContains(query) ||
-            ($0.bio ?? "").localizedCaseInsensitiveContains(query) ||
-            ($0.location ?? "").localizedCaseInsensitiveContains(query)
+            $0.bio.localizedCaseInsensitiveContains(query) ||
+            $0.location.localizedCaseInsensitiveContains(query)
         }
         
         return Array(users.prefix(limit))
@@ -342,7 +349,7 @@ final class UserRepository: RepositoryProtocol {
         // Filter by skills if category provided
         if let category = category {
             users = users.filter { user in
-                user.skills?.contains(category.displayName) ?? false
+      //          user.skills?.contains(category.displayName) ?? false
             }
         }
         
