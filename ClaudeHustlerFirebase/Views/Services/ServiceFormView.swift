@@ -426,14 +426,14 @@ struct ServiceFormView: View {
                 
                 if isEditMode {
                     var updatedPost = existingPost!
-                    updatedPost.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                    updatedPost.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-                    updatedPost.category = selectedCategory
-                    updatedPost.price = priceValidation.price
-                    updatedPost.location = location.isEmpty ? nil : location
-                    updatedPost.imageURLs = imageURLs
-                    try await PostRepository.shared.update(updatedPost)
-
+                        updatedPost.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        updatedPost.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+                        updatedPost.category = selectedCategory
+                        updatedPost.price = priceValidation.price
+                        updatedPost.location = location.isEmpty ? nil : location
+                        // Only update images if new ones were selected, otherwise keep existing
+                        updatedPost.imageURLs = imageURLs.isEmpty ? (existingPost?.imageURLs ?? []) : imageURLs  // ✅ Preserves existing images!
+                        try await PostRepository.shared.update(updatedPost)
                     // Trigger refresh
                     await HomeViewModel.shared?.refresh()
                     await ServicesViewModel.shared?.refresh(type: updatedPost.isRequest ? .requests : .offers)
@@ -464,8 +464,9 @@ struct ServiceFormView: View {
                 
                 dismiss()
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = "Update failed: \(error.localizedDescription)"
                 showingError = true
+                print("❌ Update Error: \(error)")  // This will help debug
             }
             
             isSaving = false

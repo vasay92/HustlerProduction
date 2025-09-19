@@ -168,6 +168,7 @@ final class PostRepository: RepositoryProtocol {
         
         return docRef.documentID
     }
+
     
     // MARK: - Update Post
     func update(_ post: ServicePost) async throws {
@@ -175,28 +176,32 @@ final class PostRepository: RepositoryProtocol {
             throw NSError(domain: "PostRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Post ID is required"])
         }
         
-        // Update with correct properties
-        let updatedPost = ServicePost(
-            id: post.id,
-            userId: post.userId,
-            userName: post.userName,
-            userProfileImage: post.userProfileImage,
-            title: post.title,
-            description: post.description,
-            category: post.category,
-            price: post.price,
-            location: post.location,
-            imageURLs: post.imageURLs,
-            isRequest: post.isRequest,
-            status: post.status,
-            updatedAt: Date()
-        )
+        // Verify ownership before updating
+        let document = try await db.collection("posts").document(postId).getDocument()
+        guard let data = document.data(),
+              let postUserId = data["userId"] as? String,
+              postUserId == Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "PostRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Not authorized to update this post"])
+        }
         
-        try await db.collection("posts").document(postId).setData(from: updatedPost, merge: true)
+        // Use updateData instead of setData to avoid DocumentID issues
+        let updateData: [String: Any] = [
+            "title": post.title,
+            "description": post.description,
+            "category": post.category.rawValue,
+            "price": post.price as Any,
+            "location": post.location as Any,
+            "imageURLs": post.imageURLs,
+            "isRequest": post.isRequest,
+            "status": post.status.rawValue,
+            "updatedAt": Timestamp(date: Date())
+        ]
         
-        // Update cache
-        cache.store(updatedPost, for: "post_\(postId)")
-        cache.remove(for: "posts_page_1") // Clear list cache
+        try await db.collection("posts").document(postId).updateData(updateData)
+        
+        // Clear cache
+        cache.remove(for: "post_\(postId)")
+        cache.remove(for: "posts_page_1")
     }
     
     // MARK: - Delete Post
