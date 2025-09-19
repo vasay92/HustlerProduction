@@ -17,7 +17,6 @@
 		EB6BBA802E68F9CF006DB468 /* DataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA7F2E68F9CF006DB468 /* DataModels.swift */; };
 		EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA812E68F9DE006DB468 /* FirebaseService.swift */; };
 		EB6BBA8F2E68FAF9006DB468 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA8E2E68FAF9006DB468 /* MainTabView.swift */; };
-		EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBAB12E6914F4006DB468 /* PostOptionsView.swift */; };
 		EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBABF2E69325A006DB468 /* PostDetailView.swift */; };
 		EB6BBB372E70D070006DB468 /* ContentPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */; };
 		EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6E086A2E7C8B2B004B253C /* SecurityService.swift */; };
@@ -58,7 +57,6 @@
 		EB6BBA7F2E68F9CF006DB468 /* DataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataModels.swift; sourceTree = "<group>"; };
 		EB6BBA812E68F9DE006DB468 /* FirebaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseService.swift; sourceTree = "<group>"; };
 		EB6BBA8E2E68FAF9006DB468 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
-		EB6BBAB12E6914F4006DB468 /* PostOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostOptionsView.swift; sourceTree = "<group>"; };
 		EB6BBABF2E69325A006DB468 /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
 		EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewCard.swift; sourceTree = "<group>"; };
 		EB6E086A2E7C8B2B004B253C /* SecurityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityService.swift; sourceTree = "<group>"; };
@@ -69,6 +67,7 @@
 		EB6E08A12E7C9641004B253C /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
 		EB6E08A22E7C9641004B253C /* ServicesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServicesViewModel.swift; sourceTree = "<group>"; };
 		EBBCA1932E7C875000745D24 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EBD038CE2E7CF11C004E0CBD /* ValidationHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValidationHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -153,6 +152,7 @@
 			isa = PBXGroup;
 			children = (
 				EB6BBA6F2E68F5CB006DB468 /* App */,
+				EBD038CD2E7CF10B004E0CBD /* Helpers */,
 				EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */,
 				EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */,
 				EBBCA1932E7C875000745D24 /* Assets.xcassets */,
@@ -219,7 +219,6 @@
 				EB6BBB362E70D06F006DB468 /* ContentPreviewCard.swift */,
 				EB6BBABF2E69325A006DB468 /* PostDetailView.swift */,
 				EB6BBA8E2E68FAF9006DB468 /* MainTabView.swift */,
-				EB6BBAB12E6914F4006DB468 /* PostOptionsView.swift */,
 				EB6BBB2F2E70C9A2006DB468 /* Messages */,
 				EB6BBAAD2E69107B006DB468 /* Reels */,
 				EB6BBAA92E691054006DB468 /* Services */,
@@ -270,6 +269,14 @@
 			children = (
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		EBD038CD2E7CF10B004E0CBD /* Helpers */ = {
+			isa = PBXGroup;
+			children = (
+				EBD038CE2E7CF11C004E0CBD /* ValidationHelper.swift */,
+			);
+			path = Helpers;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -440,7 +447,6 @@
 				EB6E08A52E7C9641004B253C /* ServicesViewModel.swift in Sources */,
 				EB6E08A62E7C9641004B253C /* RepositoryProtocol.swift in Sources */,
 				EB6E08A72E7C9641004B253C /* HomeViewModel.swift in Sources */,
-				EB6BBAB22E6914F9006DB468 /* PostOptionsView.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
 				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
