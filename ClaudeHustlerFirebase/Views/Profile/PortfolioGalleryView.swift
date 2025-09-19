@@ -20,19 +20,11 @@ struct PortfolioGalleryView: View {
     @State private var showingImagePicker = false
     @State private var showingDeleteConfirmation = false
     @State private var showingEditSheet = false
-    @State private var showingDescriptionView = false
     @State private var isAddingImages = false
     @State private var newImages: [UIImage] = []
     @State private var imageToDelete: String?
-    @State private var mediaItems: [PortfolioMedia] = []
+    @State private var mediaURLs: [String] = []
     @State private var selectedImageURL: IdentifiableString?
-    
-    var allMediaURLs: [String] {
-        if !mediaItems.isEmpty {
-            return mediaItems.map { $0.url }
-        }
-        return card.mediaURLs
-    }
     
     var body: some View {
         NavigationView {
@@ -75,23 +67,14 @@ struct PortfolioGalleryView: View {
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(images: $newImages, singleImage: nil)
         }
-        .sheet(isPresented: $showingDescriptionView) {
-            AddPortfolioImagesView(images: newImages, cardId: card.id ?? "")
-                .onDisappear {
-                    newImages = []
-                    Task {
-                        await reloadCardData()
-                    }
-                }
-        }
         .sheet(isPresented: $showingEditSheet) {
             EditPortfolioDetailsView(card: card)
         }
         .fullScreenCover(item: $selectedImageURL) { identifiableURL in
             ImageViewerView(
-                card: card,
-                mediaItems: mediaItems,
-                currentURL: identifiableURL.value
+                imageURL: identifiableURL.value,
+                allImageURLs: mediaURLs,
+                currentIndex: $selectedImageIndex
             )
         }
         .alert("Delete Photo?", isPresented: $showingDeleteConfirmation) {
@@ -106,11 +89,13 @@ struct PortfolioGalleryView: View {
         }
         .onChange(of: newImages) { _, images in
             if !images.isEmpty {
-                showingDescriptionView = true
+                Task {
+                    await addMoreImages(images)
+                }
             }
         }
         .onAppear {
-            loadMediaItems()
+            mediaURLs = card.mediaURLs
         }
     }
     
@@ -139,7 +124,7 @@ struct PortfolioGalleryView: View {
     
     @ViewBuilder
     private var imageGridSection: some View {
-        if allMediaURLs.isEmpty {
+        if mediaURLs.isEmpty {
             emptyStateView
         } else {
             imageGrid
@@ -174,7 +159,7 @@ struct PortfolioGalleryView: View {
             GridItem(.flexible(), spacing: 2),
             GridItem(.flexible(), spacing: 2)
         ], spacing: 2) {
-            ForEach(Array(allMediaURLs.enumerated()), id: \.offset) { index, url in
+            ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
                 gridImageItem(at: index, url: url)
             }
         }
@@ -262,56 +247,54 @@ struct PortfolioGalleryView: View {
     
     // MARK: - Helper Functions
     
-    private func loadMediaItems() {
-        // Load media items from card
-        if !card.mediaItems.isEmpty {
-            mediaItems = card.mediaItems
-        } else {
-            // Fallback for old data structure
-            mediaItems = card.mediaURLs.map { PortfolioMedia(url: $0, description: "") }
-        }
-    }
-    
-    private func reloadCardData() async {
-        guard let cardId = card.id else { return }
+    private func addMoreImages(_ images: [UIImage]) async {
+        isAddingImages = true
         
         do {
-            let doc = try await Firestore.firestore()
+            guard let userId = firebase.currentUser?.id,
+                  let cardId = card.id else { return }
+            
+            var newURLs: [String] = []
+            for (index, image) in images.enumerated() {
+                let path = "portfolio/\(userId)/\(cardId)/\(UUID().uuidString)_\(index).jpg"
+                let url = try await firebase.uploadImage(image, path: path)
+                newURLs.append(url)
+            }
+            
+            // Update the card with new images
+            mediaURLs.append(contentsOf: newURLs)
+            
+            // Update in Firestore
+            try await Firestore.firestore()
                 .collection("portfolioCards")
                 .document(cardId)
-                .getDocument()
+                .updateData([
+                    "mediaURLs": mediaURLs,
+                    "updatedAt": Date()
+                ])
             
-            if let updatedCard = try? doc.data(as: PortfolioCard.self) {
-                if !updatedCard.mediaItems.isEmpty {
-                    mediaItems = updatedCard.mediaItems
-                } else {
-                    mediaItems = updatedCard.mediaURLs.map { PortfolioMedia(url: $0, description: "") }
-                }
-            }
+            newImages = []
         } catch {
-            print("Error reloading card: \(error)")
+            print("Error adding images: \(error)")
         }
+        
+        isAddingImages = false
     }
     
     private func deleteImage(url: String) {
         guard let cardId = card.id else { return }
         
-        // Remove from local array
-        mediaItems.removeAll { $0.url == url }
+        mediaURLs.removeAll { $0 == url }
         
         Task {
             do {
-                // Update in Firestore
-                let updateData: [String: Any] = [
-                    "mediaItems": mediaItems.map { ["url": $0.url, "description": $0.description] },
-                    "mediaURLs": mediaItems.map { $0.url },
-                    "updatedAt": Date()
-                ]
-                
                 try await Firestore.firestore()
                     .collection("portfolioCards")
                     .document(cardId)
-                    .updateData(updateData)
+                    .updateData([
+                        "mediaURLs": mediaURLs,
+                        "updatedAt": Date()
+                    ])
             } catch {
                 print("Error deleting image: \(error)")
             }
@@ -334,78 +317,32 @@ struct PortfolioGalleryView: View {
     }
 }
 
-// MARK: - Image Viewer for full screen viewing
+// MARK: - Simple Image Viewer
 struct ImageViewerView: View {
-    let card: PortfolioCard
-    let mediaItems: [PortfolioMedia]
-    let currentURL: String
+    let imageURL: String
+    let allImageURLs: [String]
+    @Binding var currentIndex: Int
     @Environment(\.dismiss) var dismiss
-    @State private var currentIndex: Int = 0
-    
-    init(card: PortfolioCard, mediaItems: [PortfolioMedia], currentURL: String) {
-        self.card = card
-        self.mediaItems = mediaItems
-        self.currentURL = currentURL
-        
-        // Set initial index
-        if let index = mediaItems.firstIndex(where: { $0.url == currentURL }) {
-            self._currentIndex = State(initialValue: index)
-        }
-    }
     
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
             TabView(selection: $currentIndex) {
-                ForEach(Array(mediaItems.enumerated()), id: \.offset) { index, item in
-                    ZStack(alignment: .bottom) {
-                        AsyncImage(url: URL(string: item.url)) { image in
-                            image
-                                .resizable()
-                                .scaledToFit()
-                        } placeholder: {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        }
-                        
-                        // Description overlay (like Reels)
-                        if !item.description.isEmpty {
-                            VStack {
-                                Spacer()
-                                
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(item.description)
-                                            .font(.body)
-                                            .foregroundColor(.white)
-                                            .multilineTextAlignment(.leading)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-                                    Spacer()
-                                }
-                                .padding()
-                                .background(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.black.opacity(0.8),
-                                            Color.black.opacity(0.5),
-                                            Color.clear
-                                        ]),
-                                        startPoint: .bottom,
-                                        endPoint: .top
-                                    )
-                                    .edgesIgnoringSafeArea(.bottom)
-                                )
-                            }
-                        }
+                ForEach(Array(allImageURLs.enumerated()), id: \.offset) { index, url in
+                    AsyncImage(url: URL(string: url)) { image in
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    } placeholder: {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     }
                     .tag(index)
                 }
             }
             .tabViewStyle(PageTabViewStyle())
             
-            // Top controls
             VStack {
                 HStack {
                     Button(action: { dismiss() }) {
@@ -419,9 +356,9 @@ struct ImageViewerView: View {
                     
                     Spacer()
                     
-                    Text("\(currentIndex + 1) / \(mediaItems.count)")
+                    Text("\(currentIndex + 1) / \(allImageURLs.count)")
                         .foregroundColor(.white)
-                        .padding(8)
+                        .padding()
                         .background(Color.black.opacity(0.5))
                         .cornerRadius(20)
                     

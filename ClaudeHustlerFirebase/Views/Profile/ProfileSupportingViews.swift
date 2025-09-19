@@ -17,42 +17,45 @@ struct PortfolioCardView: View {
     var body: some View {
         Button(action: { showingGallery = true }) {
             VStack(alignment: .leading, spacing: 8) {
-                // Cover Image
-                if let coverURL = card.coverImageURL {
-                    AsyncImage(url: URL(string: coverURL)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 120, height: 160)
-                            .clipped()
-                    } placeholder: {
+                // Cover Image - Make it responsive to container width
+                GeometryReader { geometry in
+                    if let coverURL = card.coverImageURL, !coverURL.isEmpty {
+                        AsyncImage(url: URL(string: coverURL)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: geometry.size.width, height: geometry.size.width * 1.33) // 3:4 aspect ratio
+                                .clipped()
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: geometry.size.width, height: geometry.size.width * 1.33)
+                                .overlay(ProgressView())
+                        }
+                    } else if let firstImage = card.mediaURLs.first {
+                        AsyncImage(url: URL(string: firstImage)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: geometry.size.width, height: geometry.size.width * 1.33)
+                                .clipped()
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: geometry.size.width, height: geometry.size.width * 1.33)
+                                .overlay(ProgressView())
+                        }
+                    } else {
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
-                            .frame(width: 120, height: 160)
-                            .overlay(ProgressView())
+                            .frame(width: geometry.size.width, height: geometry.size.width * 1.33)
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .foregroundColor(.gray)
+                            )
                     }
-                } else if let firstImage = card.mediaURLs.first {
-                    AsyncImage(url: URL(string: firstImage)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 120, height: 160)
-                            .clipped()
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 120, height: 160)
-                            .overlay(ProgressView())
-                    }
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 120, height: 160)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        )
                 }
+                .aspectRatio(3/4, contentMode: .fit)
                 
                 // Title
                 Text(card.title)
@@ -60,7 +63,6 @@ struct PortfolioCardView: View {
                     .fontWeight(.medium)
                     .lineLimit(1)
                     .foregroundColor(.primary)
-                    .frame(width: 120, alignment: .leading)
             }
             .cornerRadius(12)
         }

@@ -37,9 +37,8 @@ struct SettingsView: View {
             List {
                 Section("Account") {
                     NavigationLink("Edit Profile") {
-                        Text("Edit Profile View - Coming Soon")
-                            .foregroundColor(.secondary)
-                    }
+                            EditProfileView()
+                        }
                     
                     NavigationLink("Change Password") {
                         Text("Change Password View - Coming Soon")

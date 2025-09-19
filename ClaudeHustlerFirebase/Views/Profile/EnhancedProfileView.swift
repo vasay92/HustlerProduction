@@ -20,6 +20,7 @@ struct EnhancedProfileView: View {
     @State private var showingReviewForm = false
     @State private var expandedReviews = false
     @State private var showingMessageView = false
+    @State private var showingEditProfile = false
     @Environment(\.dismiss) var dismiss
     
     // Real-time review listener
@@ -116,6 +117,14 @@ struct EnhancedProfileView: View {
                 firebase.stopListeningToReviews(for: userId)
                 
             }
+            .sheet(isPresented: $showingEditProfile) {
+                EditProfileView()
+                    .onDisappear {
+                        Task {
+                            await loadProfileData()
+                        }
+                    }
+            }
             .sheet(isPresented: $showingFollowers) {
                 FollowersListView(userId: userId)
             }
@@ -159,19 +168,34 @@ struct EnhancedProfileView: View {
             }
             
             HStack(alignment: .top, spacing: 15) {
-                // Profile Image
-                if let imageURL = user?.profileImageURL {
-                    AsyncImage(url: URL(string: imageURL)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 80, height: 80)
-                            .clipShape(Circle())
-                    } placeholder: {
+                // Profile Image with Edit Button
+                ZStack(alignment: .bottomTrailing) {
+                    if let imageURL = user?.profileImageURL {
+                        AsyncImage(url: URL(string: imageURL)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 80, height: 80)
+                                .clipShape(Circle())
+                        } placeholder: {
+                            profileImagePlaceholder
+                        }
+                    } else {
                         profileImagePlaceholder
                     }
-                } else {
-                    profileImagePlaceholder
+                    
+                    // Edit button overlay for own profile
+                    if isOwnProfile {
+                        Button(action: { showingEditProfile = true }) {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .background(Color.blue)
+                                .clipShape(Circle())
+                                .shadow(radius: 2)
+                        }
+                        .offset(x: 5, y: 5)
+                    }
                 }
                 
                 VStack(alignment: .leading, spacing: 6) {
@@ -320,30 +344,45 @@ struct EnhancedProfileView: View {
             
             // Content based on selected tab
             if selectedTab == 0 {
-                // My Work (Portfolio Cards)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                // My Work - Grid layout (3 columns)
+                if portfolioCards.isEmpty && isOwnProfile {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 40))
+                            .foregroundColor(.gray)
+                        Text("Tap + to add your work")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 200)
+                    .padding()
+                } else if portfolioCards.isEmpty && !isOwnProfile {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 40))
+                            .foregroundColor(.gray)
+                        Text("No portfolio items yet")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 200)
+                    .padding()
+                } else {
+                    // Grid of portfolio cards
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 12),
+                        GridItem(.flexible(), spacing: 12),
+                        GridItem(.flexible(), spacing: 12)
+                    ], spacing: 12) {
                         ForEach(portfolioCards) { card in
                             PortfolioCardView(card: card, isOwner: isOwnProfile)
-                        }
-                        
-                        if portfolioCards.isEmpty && isOwnProfile {
-                            Text("Tap + to add your work")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                                .padding(.horizontal, 20)
-                        } else if portfolioCards.isEmpty && !isOwnProfile {
-                            Text("No portfolio items yet")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                                .padding(.horizontal, 20)
                         }
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 10)
                 }
             } else if selectedTab == 1 {
-                // My Posts
+                // My Posts (keep existing code)
                 if userPosts.isEmpty {
                     EmptyStateView(
                         icon: "briefcase",
@@ -364,7 +403,7 @@ struct EnhancedProfileView: View {
                     .padding(.vertical, 10)
                 }
             } else if selectedTab == 2 && isOwnProfile {
-                // Saved Reels
+                // Saved Reels (keep existing)
                 if savedReels.isEmpty {
                     EmptyStateView(
                         icon: "bookmark",
@@ -386,7 +425,7 @@ struct EnhancedProfileView: View {
                     .padding(.vertical, 10)
                 }
             } else if selectedTab == 3 && isOwnProfile {
-                // Saved Posts
+                // Saved Posts (keep existing)
                 if savedPosts.isEmpty {
                     EmptyStateView(
                         icon: "bookmark",

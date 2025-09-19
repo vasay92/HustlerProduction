@@ -578,7 +578,13 @@ extension FirebaseService {
         await loadUser(userId: userId)
     }
     
-    func updateUserProfile(name: String? = nil, bio: String? = nil, location: String? = nil) async throws {
+    func updateUserProfile(
+        name: String? = nil,
+        bio: String? = nil,
+        location: String? = nil,
+        profileImageURL: String? = nil,
+        isServiceProvider: Bool? = nil
+    ) async throws {
         guard let userId = currentUser?.id else {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
@@ -587,6 +593,8 @@ extension FirebaseService {
         if let name = name { updates["name"] = name }
         if let bio = bio { updates["bio"] = bio }
         if let location = location { updates["location"] = location }
+        if let profileImageURL = profileImageURL { updates["profileImageURL"] = profileImageURL }
+        if let isServiceProvider = isServiceProvider { updates["isServiceProvider"] = isServiceProvider }
         
         if !updates.isEmpty {
             try await db.collection("users").document(userId).updateData(updates)
