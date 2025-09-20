@@ -19,6 +19,7 @@ struct CameraView: View {
     @State private var capturedVideoURL: URL?
     @State private var showingImagePicker = false
     @State private var showingVideoPicker = false
+    @State private var imagePickerSourceType: UIImagePickerController.SourceType = .camera
     
     // Content creation states
     @State private var caption = ""
@@ -57,7 +58,7 @@ struct CameraView: View {
             ImagePicker(
                 images: .constant([]),
                 singleImage: $capturedImage,
-                sourceType: .camera
+                sourceType: imagePickerSourceType
             )
         }
         .sheet(isPresented: $showingVideoPicker) {
@@ -228,7 +229,7 @@ struct CameraView: View {
                 }
                 
                 // Photo option
-                Button(action: { showingImagePicker = true }) {
+                Button(action: { imagePickerSourceType = .camera; showingImagePicker = true }) {
                     HStack {
                         Image(systemName: "camera.fill")
                         Text(mode == .status ? "Take Photo" : "Use Photo")
@@ -297,9 +298,7 @@ struct CameraView: View {
         description = ""
     }
     
-    private func openGallery() {
-        // This would open a photo library picker
-        // For now, using the image picker with photo library source
+    private func openGallery() { imagePickerSourceType = .photoLibrary;
         showingImagePicker = true
     }
     

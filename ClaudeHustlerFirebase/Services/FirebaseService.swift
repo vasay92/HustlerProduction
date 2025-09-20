@@ -381,15 +381,33 @@ class FirebaseService: ObservableObject {
     
     // MARK: - Clean up expired statuses
     
+    // In FirebaseService.swift
     func cleanupExpiredStatuses() async {
+        guard let userId = currentUser?.id else {
+            print("No current user for cleanup")
+            return
+        }
+        
         do {
+            // ONLY clean up current user's expired statuses
             let expiredStatuses = try await db.collection("statuses")
+                .whereField("userId", isEqualTo: userId)  // ✅ Only user's own
                 .whereField("expiresAt", isLessThan: Date())
                 .getDocuments()
             
-            for document in expiredStatuses.documents {
-                try await document.reference.updateData(["isActive": false])
+            if expiredStatuses.documents.isEmpty {
+                print("No expired statuses to clean up")
+                return
             }
+            
+            // Use batch delete for efficiency
+            let batch = db.batch()
+            for document in expiredStatuses.documents {
+                batch.updateData(["isActive": false], forDocument: document.reference)
+            }
+            try await batch.commit()
+            
+            print("Cleaned up \(expiredStatuses.documents.count) expired statuses")
         } catch {
             print("Error cleaning up expired statuses: \(error)")
         }
