@@ -639,13 +639,19 @@ struct FullScreenReelView: View {
         commentsCount = displayReel.comments
         
         if let reelId = reel.id {
-            isSaved = await firebase.isItemSaved(itemId: reelId, type: .reel)
+            isSaved = await SavedItemsRepository.shared.isItemSaved(
+                itemId: reelId,
+                type: .reel
+            )
         }
     }
     
     private func checkSaveStatus() async {
         if let reelId = reel.id {
-            isSaved = await firebase.isItemSaved(itemId: reelId, type: .reel)
+            isSaved = await SavedItemsRepository.shared.isItemSaved(
+                itemId: reelId,
+                type: .reel
+            )
         }
     }
     
