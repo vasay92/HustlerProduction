@@ -142,64 +142,6 @@ class FirebaseService: ObservableObject {
         }
     }
     
-   
-    
-    // MARK: - Status (Stories)
-    
-    func loadStatuses() async {
-        do {
-            let snapshot = try await db.collection("statuses")
-                .whereField("expiresAt", isGreaterThan: Date())
-                .whereField("isActive", isEqualTo: true)
-                .order(by: "createdAt", descending: true)
-                .getDocuments()
-            
-            statuses = snapshot.documents.compactMap { doc in
-                if var status = try? doc.data(as: Status.self) {
-                    status.id = doc.documentID
-                    return status
-                }
-                return nil
-            }
-        } catch {
-            print("Error loading statuses: \(error)")
-        }
-    }
-    
-    func createStatus(image: UIImage, caption: String?) async throws -> String {
-        guard let userId = currentUser?.id else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        let imageURL = try await uploadImage(image, path: "statuses/\(userId)/\(UUID().uuidString).jpg")
-        
-        let statusData: [String: Any] = [
-            "userId": userId,
-            "userName": currentUser?.name ?? "Unknown",
-            "userProfileImage": currentUser?.profileImageURL ?? "",
-            "mediaURL": imageURL,
-            "caption": caption ?? "",
-            "mediaType": "image",
-            "createdAt": Date(),
-            "expiresAt": Date().addingTimeInterval(24 * 60 * 60),
-            "viewedBy": [],
-            "isActive": true
-        ]
-        
-        let docRef = try await db.collection("statuses").addDocument(data: statusData)
-        await loadStatuses()
-        print("Created status with ID: \(docRef.documentID)")
-        return docRef.documentID
-    }
-    
-    // Add this method to FirebaseService.swift (around the Status section)
-    func markStatusAsViewed(_ statusId: String) async throws {
-        guard let userId = currentUser?.id else { return }
-        
-        try await db.collection("statuses").document(statusId).updateData([
-            "viewedBy": FieldValue.arrayUnion([userId])
-        ])
-    }
     
     // MARK: - Reels
     
@@ -352,41 +294,6 @@ class FirebaseService: ObservableObject {
             throw error
         }
     }
-    
-    // MARK: - Clean up expired statuses
-    
-    // In FirebaseService.swift
-    func cleanupExpiredStatuses() async {
-        guard let userId = currentUser?.id else {
-            print("No current user for cleanup")
-            return
-        }
-        
-        do {
-            // ONLY clean up current user's expired statuses
-            let expiredStatuses = try await db.collection("statuses")
-                .whereField("userId", isEqualTo: userId)  // ✅ Only user's own
-                .whereField("expiresAt", isLessThan: Date())
-                .getDocuments()
-            
-            if expiredStatuses.documents.isEmpty {
-                print("No expired statuses to clean up")
-                return
-            }
-            
-            // Use batch delete for efficiency
-            let batch = db.batch()
-            for document in expiredStatuses.documents {
-                batch.updateData(["isActive": false], forDocument: document.reference)
-            }
-            try await batch.commit()
-            
-            print("Cleaned up \(expiredStatuses.documents.count) expired statuses")
-        } catch {
-            print("Error cleaning up expired statuses: \(error)")
-        }
-    }
-    
     // MARK: - Following System
     
     func followUser(_ targetUserId: String) async throws {
