@@ -56,7 +56,10 @@ struct CameraView: View {
             }
         }
         .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(images: $capturedImages, singleImage: .constant(nil))
+            ImagePicker(images: .constant([]), singleImage: $capturedImage)
+        }
+        .onChange(of: capturedImages) { _ in
+            capturedImage = capturedImages.first
         }
         .sheet(isPresented: $showingVideoPicker) {
             VideoPicker(videoURL: $capturedVideoURL)
@@ -328,41 +331,30 @@ struct CameraView: View {
     }
     
     private func postStatus() async throws {
-        guard let image = capturedImage else { return }
+        guard let image = capturedImage else {
+            print("No captured image")
+            return
+        }
         
         do {
-            // Upload image
             uploadProgress = 0.3
-            let userId = firebase.currentUser?.id ?? ""
-            let imageURL = try await firebase.uploadImage(image, path: "statuses/\(userId)/\(UUID().uuidString).jpg")
             
-            uploadProgress = 0.6
-            
-            // Create status
-            let statusData: [String: Any] = [
-                "userId": firebase.currentUser?.id ?? "",
-                "userName": firebase.currentUser?.name ?? "User",
-                "userProfileImage": firebase.currentUser?.profileImageURL ?? "",
-                "mediaURL": imageURL,
-                "caption": caption.isEmpty ? nil : caption,
-                "mediaType": "image",
-                "createdAt": Date(),
-                "expiresAt": Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date(),
-                "viewedBy": [],
-                "isActive": true
-            ]
-            
-            let ref = try await Firestore.firestore()
-                .collection("statuses")
-                .addDocument(data: statusData)
+            // Use StatusRepository instead of direct Firestore
+            let statusId = try await StatusRepository.shared.createStatus(
+                image: image,
+                caption: caption.isEmpty ? nil : caption
+            )
             
             uploadProgress = 1.0
             
-            print("✅ Created status with ID: \(ref.documentID)")
+            print("✅ Created status with ID: \(statusId)")
             
-            // Refresh statuses
-            await firebase.loadStatusesFromFollowing()
+            // Refresh statuses in ReelsViewModel
+            if let reelsVM = ReelsViewModel.shared {
+                await reelsVM.loadStatuses()
+            }
         } catch {
+            print("Error creating status: \(error)")
             throw error
         }
     }
