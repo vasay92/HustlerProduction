@@ -550,6 +550,9 @@ extension FirebaseService {
 extension FirebaseService {
     
     
+    // Fixed createPortfolioCard method for FirebaseService.swift
+    // Replace the existing method around line 577 with this version
+
     func createPortfolioCard(title: String, coverImage: UIImage?, mediaImages: [UIImage], description: String?) async throws {
         guard let userId = currentUser?.id else {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
@@ -557,6 +560,7 @@ extension FirebaseService {
         
         print("Creating portfolio for user: \(userId)")
         
+        // Upload media images
         var mediaURLs: [String] = []
         for (index, image) in mediaImages.enumerated() {
             let path = "portfolio/\(userId)/\(UUID().uuidString)_\(index).jpg"
@@ -565,6 +569,7 @@ extension FirebaseService {
             print("Uploaded image \(index + 1)/\(mediaImages.count)")
         }
         
+        // Upload cover image
         var coverURL: String?
         if let cover = coverImage {
             let path = "portfolio/\(userId)/covers/\(UUID().uuidString).jpg"
@@ -574,42 +579,21 @@ extension FirebaseService {
             coverURL = mediaURLs.first
         }
         
-        let existingCards = await loadPortfolioCards(for: userId)
+        // Get existing cards count for display order using PortfolioRepository
+        let existingCards = try await PortfolioRepository.shared.fetchPortfolioCards(for: userId)
         
-        let cardData: [String: Any] = [
-            "userId": userId,
-            "title": title,
-            "coverImageURL": coverURL ?? "",
-            "mediaURLs": mediaURLs,  // Use mediaURLs, not mediaItems
-            "description": description ?? "",
-            "createdAt": Date(),
-            "updatedAt": Date(),
-            "displayOrder": existingCards.count
-        ]
+        // Create the portfolio card using PortfolioRepository
+        let newCard = PortfolioCard(
+            userId: userId,
+            title: title,
+            coverImageURL: coverURL ?? "",
+            mediaURLs: mediaURLs,
+            description: description ?? "",
+            displayOrder: existingCards.count
+        )
         
-        let docRef = try await db.collection("portfolioCards").addDocument(data: cardData)
-        print("Portfolio saved with ID: \(docRef.documentID)")
-    }
-    
-    func updatePortfolioCard(_ cardId: String, title: String? = nil, description: String? = nil) async throws {
-        guard currentUser?.id != nil else { return }
-        
-        var updates: [String: Any] = ["updatedAt": Date()]
-        if let title = title { updates["title"] = title }
-        if let description = description { updates["description"] = description }
-        
-        try await db.collection("portfolioCards").document(cardId).updateData(updates)
-    }
-    
-    func deletePortfolioCard(_ cardId: String) async throws {
-        guard let userId = currentUser?.id else { return }
-        
-        let card = try await db.collection("portfolioCards").document(cardId).getDocument()
-        guard let data = card.data(), data["userId"] as? String == userId else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
-        }
-        
-        try await db.collection("portfolioCards").document(cardId).delete()
+        let cardId = try await PortfolioRepository.shared.createPortfolioCard(newCard)
+        print("Portfolio saved with ID: \(cardId)")
     }
 }
 
@@ -1097,7 +1081,6 @@ extension FirebaseService {
     
     // Listener storage
     private static var reelListeners: [String: ListenerRegistration] = [:]
-    private static var commentsListeners: [String: ListenerRegistration] = [:]
     private static var likesListeners: [String: ListenerRegistration] = [:]
     
     // MARK: - Real-time Reel Listening
@@ -1132,134 +1115,7 @@ extension FirebaseService {
         Self.reelListeners[reelId]?.remove()
         Self.reelListeners.removeValue(forKey: reelId)
     }
-    
-    // MARK: - Comments Management
-    
-    func listenToComments(for reelId: String, completion: @escaping ([Comment]) -> Void) -> ListenerRegistration {
-        Self.commentsListeners[reelId]?.remove()
-        
-        let listener = db.collection("comments")
-            .whereField("reelId", isEqualTo: reelId)
-            .whereField("isDeleted", isEqualTo: false)
-            .order(by: "timestamp", descending: false)
-            .addSnapshotListener { snapshot, error in
-                if let error = error {
-                    print("Error listening to comments: \(error)")
-                    completion([])
-                    return
-                }
-                
-                // Fix: Properly type the comments array
-                let comments: [Comment] = snapshot?.documents.compactMap { doc in
-                    var comment = try? doc.data(as: Comment.self)
-                    comment?.id = doc.documentID
-                    return comment
-                } ?? []
-                
-                completion(comments)
-            }
-        
-        Self.commentsListeners[reelId] = listener
-        return listener
-    }
-    
-    func postComment(on reelId: String, text: String, parentCommentId: String? = nil) async throws -> Comment {
-        guard let userId = currentUser?.id else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        let commentData: [String: Any] = [
-            "reelId": reelId,
-            "userId": userId,
-            "userName": currentUser?.name ?? "User",
-            "userProfileImage": currentUser?.profileImageURL ?? "",
-            "text": text,
-            "timestamp": Date(),
-            "likes": [],
-            "parentCommentId": parentCommentId ?? NSNull(),
-            "replyCount": 0,
-            "isDeleted": false
-        ]
-        
-        let docRef = try await db.collection("comments").addDocument(data: commentData)
-        
-        // Update parent comment's reply count if this is a reply
-        if let parentId = parentCommentId {
-            try await db.collection("comments").document(parentId).updateData([
-                "replyCount": FieldValue.increment(Int64(1))
-            ])
-        }
-        
-        // Update reel's comment count
-        try await db.collection("reels").document(reelId).updateData([
-            "comments": FieldValue.increment(Int64(1))
-        ])
-        
-        var newComment = Comment(
-            id: docRef.documentID,
-            reelId: reelId,
-            userId: userId,
-            userName: currentUser?.name,
-            userProfileImage: currentUser?.profileImageURL,
-            text: text,
-            parentCommentId: parentCommentId
-        )
-        
-        return newComment
-    }
-    
-    func deleteComment(_ commentId: String, reelId: String) async throws {
-        guard let userId = currentUser?.id else { return }
-        
-        let comment = try await db.collection("comments").document(commentId).getDocument()
-        guard let data = comment.data() else { return }
-        
-        let commentUserId = data["userId"] as? String ?? ""
-        
-        // Get reel owner
-        let reel = try await db.collection("reels").document(reelId).getDocument()
-        let reelOwnerId = reel.data()?["userId"] as? String ?? ""
-        
-        // Check if user can delete (own comment or reel owner)
-        guard userId == commentUserId || userId == reelOwnerId else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to delete this comment"])
-        }
-        
-        // Soft delete
-        try await db.collection("comments").document(commentId).updateData([
-            "isDeleted": true,
-            "deletedAt": Date()
-        ])
-        
-        // Update parent's reply count if this was a reply
-        if let parentId = data["parentCommentId"] as? String {
-            try await db.collection("comments").document(parentId).updateData([
-                "replyCount": FieldValue.increment(Int64(-1))
-            ])
-        }
-        
-        // Update reel's comment count
-        try await db.collection("reels").document(reelId).updateData([
-            "comments": FieldValue.increment(Int64(-1))
-        ])
-    }
-    
-    func likeComment(_ commentId: String) async throws {
-        guard let userId = currentUser?.id else { return }
-        
-        try await db.collection("comments").document(commentId).updateData([
-            "likes": FieldValue.arrayUnion([userId])
-        ])
-    }
-    
-    func unlikeComment(_ commentId: String) async throws {
-        guard let userId = currentUser?.id else { return }
-        
-        try await db.collection("comments").document(commentId).updateData([
-            "likes": FieldValue.arrayRemove([userId])
-        ])
-    }
-    
+
     // MARK: - Enhanced Likes Management
     
     func listenToReelLikes(_ reelId: String, completion: @escaping ([ReelLike]) -> Void) -> ListenerRegistration {
@@ -1313,11 +1169,6 @@ extension FirebaseService {
     }
     
     // MARK: - Cleanup
-    
-    func stopListeningToComments(_ reelId: String) {
-        Self.commentsListeners[reelId]?.remove()
-        Self.commentsListeners.removeValue(forKey: reelId)
-    }
     
     func stopListeningToLikes(_ reelId: String) {
         Self.likesListeners[reelId]?.remove()
@@ -1988,10 +1839,6 @@ extension FirebaseService {
         Self.reelListeners.values.forEach { $0.remove() }
         Self.reelListeners.removeAll()
         
-        // Remove all comment listeners
-        Self.commentsListeners.values.forEach { $0.remove() }
-        Self.commentsListeners.removeAll()
-        
         // Remove all likes listeners
         Self.likesListeners.values.forEach { $0.remove() }
         Self.likesListeners.removeAll()
@@ -2009,7 +1856,6 @@ extension FirebaseService {
         if conversationsListener != nil { count += 1 }
         if messagesListener != nil { count += 1 }
         count += Self.reelListeners.count
-        count += Self.commentsListeners.count
         count += Self.likesListeners.count
         count += Self.reviewsListeners.count
         return count

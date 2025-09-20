@@ -234,19 +234,55 @@ struct CreatePortfolioCardView: View {
         }
     }
     
-   private func createCard() async {
+    // Fixed createCard method for ProfileSupportingViews.swift
+    // Replace the existing method in CreatePortfolioCardView with this version
+
+    private func createCard() async {
         isCreating = true
         print("Creating portfolio with title: \(title)")
         print("Cover image: \(coverImage != nil)")
         print("Media images count: \(mediaImages.count)")
         
         do {
-            try await firebase.createPortfolioCard(
+            guard let userId = firebase.currentUser?.id else {
+                print("No authenticated user")
+                isCreating = false
+                return
+            }
+            
+            // Upload images first
+            var mediaURLs: [String] = []
+            for (index, image) in mediaImages.enumerated() {
+                let path = "portfolio/\(userId)/\(UUID().uuidString)_\(index).jpg"
+                let url = try await firebase.uploadImage(image, path: path)
+                mediaURLs.append(url)
+                print("Uploaded image \(index + 1)/\(mediaImages.count)")
+            }
+            
+            // Upload cover image
+            var coverURL: String?
+            if let cover = coverImage {
+                let path = "portfolio/\(userId)/covers/\(UUID().uuidString).jpg"
+                coverURL = try await firebase.uploadImage(cover, path: path)
+                print("Uploaded cover image")
+            } else if !mediaURLs.isEmpty {
+                coverURL = mediaURLs.first
+            }
+            
+            // Get existing cards for display order
+            let existingCards = try await PortfolioRepository.shared.fetchPortfolioCards(for: userId)
+            
+            // Create portfolio card using repository
+            let newCard = PortfolioCard(
+                userId: userId,
                 title: title,
-                coverImage: coverImage,
-                mediaImages: mediaImages,
-                description: description
+                coverImageURL: coverURL ?? "",
+                mediaURLs: mediaURLs,
+                description: description ?? "",
+                displayOrder: existingCards.count
             )
+            
+            _ = try await PortfolioRepository.shared.createPortfolioCard(newCard)
             print("Portfolio created successfully")
             dismiss()
         } catch {

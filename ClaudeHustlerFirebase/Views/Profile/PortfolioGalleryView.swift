@@ -305,11 +305,7 @@ struct PortfolioGalleryView: View {
         guard let cardId = card.id else { return }
         
         do {
-            try await Firestore.firestore()
-                .collection("portfolioCards")
-                .document(cardId)
-                .delete()
-            
+            try await PortfolioRepository.shared.deletePortfolioCard(cardId)  // ✅ Uses repository
             dismiss()
         } catch {
             print("Error deleting portfolio card: \(error)")
