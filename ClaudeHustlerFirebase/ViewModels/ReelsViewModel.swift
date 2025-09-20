@@ -371,8 +371,10 @@ final class ReelsViewModel: ObservableObject {
     }
     
     func saveReel(_ reelId: String) async throws -> Bool {
-        // This would use SavedItemsRepository when created
-        return try await firebase.toggleReelSave(reelId)
+        return try await SavedItemsRepository.shared.toggleSave(
+            itemId: reelId,
+            type: .reel
+        )
     }
     
     // MARK: - Real-time Listeners

@@ -455,7 +455,10 @@ struct PostDetailView: View {
     
     private func checkSaveStatus() async {
         if let postId = post.id {
-            isSaved = await firebase.isItemSaved(itemId: postId, type: .post)
+            isSaved = await SavedItemsRepository.shared.isItemSaved(
+                itemId: postId,
+                type: .post
+            )
         }
     }
     
@@ -464,7 +467,10 @@ struct PostDetailView: View {
         
         Task {
             do {
-                isSaved = try await firebase.togglePostSave(postId)
+                isSaved = try await SavedItemsRepository.shared.toggleSave(
+                    itemId: postId,
+                    type: .post
+                )
             } catch {
                 print("Error toggling save: \(error)")
             }

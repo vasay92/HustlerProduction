@@ -693,7 +693,10 @@ struct FullScreenReelView: View {
         
         Task {
             do {
-                isSaved = try await firebase.toggleReelSave(reelId)
+                isSaved = try await SavedItemsRepository.shared.toggleSave(
+                    itemId: reelId,
+                    type: .reel
+                )
             } catch {
                 print("Error toggling save: \(error)")
             }
@@ -1562,7 +1565,10 @@ struct ReelViewerView: View {
         isLiked = reel.likes.contains(firebase.currentUser?.id ?? "")
         
         if let reelId = reel.id {
-            isSaved = await firebase.isItemSaved(itemId: reelId, type: .reel)
+            isSaved = await SavedItemsRepository.shared.isItemSaved(
+                itemId: reelId,
+                type: .reel
+            )
         }
     }
     
@@ -1622,7 +1628,10 @@ struct ReelViewerView: View {
         
         Task {
             do {
-                isSaved = try await firebase.toggleReelSave(reelId)
+                isSaved = try await SavedItemsRepository.shared.toggleSave(
+                    itemId: reelId,
+                    type: .reel
+                )
             } catch {
                 print("Error toggling save: \(error)")
             }
