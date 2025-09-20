@@ -77,11 +77,7 @@ final class SavedItemsRepository {
     func fetchSavedReels() async throws -> [Reel] {
         guard let userId = Auth.auth().currentUser?.uid else { return [] }
         
-        // Check cache
-        if let cached: [Reel] = cache.retrieve([Reel].self, for: "saved_reels_\(userId)"),
-           !cache.isExpired(for: "saved_reels_\(userId)", maxAge: 600) {
-            return cached
-        }
+        // Check cache first...
         
         let savedItems = try await db.collection("savedItems")
             .whereField("userId", isEqualTo: userId)
@@ -90,10 +86,14 @@ final class SavedItemsRepository {
             .getDocuments()
         
         var reels: [Reel] = []
+        var seenIds = Set<String>() // Track unique IDs
         
         for item in savedItems.documents {
             let data = item.data()
-            if let itemId = data["itemId"] as? String {
+            if let itemId = data["itemId"] as? String,
+               !seenIds.contains(itemId) { // Check for duplicates
+                seenIds.insert(itemId)
+                
                 let reelDoc = try await db.collection("reels").document(itemId).getDocument()
                 if var reel = try? reelDoc.data(as: Reel.self) {
                     reel.id = reelDoc.documentID

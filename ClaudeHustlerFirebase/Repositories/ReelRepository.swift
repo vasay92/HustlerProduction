@@ -215,6 +215,7 @@ final class ReelRepository: RepositoryProtocol {
     }
     
     // MARK: - Delete Reel
+    // In ReelRepository.swift
     func delete(_ id: String) async throws {
         guard let currentUserId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
@@ -227,26 +228,8 @@ final class ReelRepository: RepositoryProtocol {
             throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to delete this reel"])
         }
         
-        // Delete reel
+        // Just delete the reel, not the associated content
         try await db.collection("reels").document(id).delete()
-        
-        // Delete associated comments
-        let comments = try await db.collection("comments")
-            .whereField("reelId", isEqualTo: id)
-            .getDocuments()
-        
-        for comment in comments.documents {
-            try await comment.reference.delete()
-        }
-        
-        // Delete associated likes
-        let likes = try await db.collection("reelLikes")
-            .whereField("reelId", isEqualTo: id)
-            .getDocuments()
-        
-        for like in likes.documents {
-            try await like.reference.delete()
-        }
         
         // Clear cache
         cache.remove(for: "reel_\(id)")

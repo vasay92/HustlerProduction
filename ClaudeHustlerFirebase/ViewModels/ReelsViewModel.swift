@@ -52,9 +52,10 @@ final class ReelsViewModel: ObservableObject {
     }
     
     deinit {
-        Task { @MainActor in
-            cleanupAllListeners()
-        }
+        reelListeners.values.forEach { $0.remove() }
+            reelListeners.removeAll()
+            statusListener?.remove()
+            statusListener = nil
     }
     
     // MARK: - Public Methods - Data Loading
@@ -411,15 +412,15 @@ final class ReelsViewModel: ObservableObject {
     
     // MARK: - Cleanup
     
-    private func cleanupAllListeners() {
-        // Remove all reel listeners
-        reelListeners.values.forEach { $0.remove() }
-        reelListeners.removeAll()
-        
-        // Remove status listener if exists
-        statusListener?.remove()
-        statusListener = nil
-    }
+//    nonisolated private func cleanupAllListeners() {
+//        // Remove all reel listeners
+//        reelListeners.values.forEach { $0.remove() }
+//        reelListeners.removeAll()
+//        
+//        // Remove status listener if exists
+//        statusListener?.remove()
+//        statusListener = nil
+//    }
     
     // MARK: - Helper Methods
     
