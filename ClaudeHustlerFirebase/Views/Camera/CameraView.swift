@@ -178,7 +178,7 @@ struct CameraView: View {
                             )
                             .cornerRadius(25)
                         }
-                        .disabled(mode == .reel && (title.isEmpty || description.isEmpty))
+                        .disabled(false)
                     }
                     .padding()
                 }
@@ -306,6 +306,9 @@ struct CameraView: View {
         isPosting = true
         uploadProgress = 0
         
+        print("🎬 Starting post for mode: \(mode)")
+        print("📝 Title: \(title), Description: \(description)")
+        
         do {
             if mode == .status {
                 try await postStatus()
@@ -318,6 +321,7 @@ struct CameraView: View {
                 dismiss()
             }
         } catch {
+            print("❌ Post error: \(error)")
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 showingError = true
@@ -332,7 +336,8 @@ struct CameraView: View {
         do {
             // Upload image
             uploadProgress = 0.3
-            let imageURL = try await uploadImage(image)
+            let userId = firebase.currentUser?.id ?? ""
+            let imageURL = try await firebase.uploadImage(image, path: "statuses/\(userId)/\(UUID().uuidString).jpg")
             
             uploadProgress = 0.6
             
@@ -372,32 +377,48 @@ struct CameraView: View {
             
             uploadProgress = 0.2
             
+            // Get userId first
+            guard let userId = firebase.currentUser?.id else {
+                throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
+            }
+            
             if let image = capturedImage {
                 // Upload image as both media and thumbnail
-                mediaURL = try await uploadImage(image)
+                let imagePath = "reels/\(userId)/\(UUID().uuidString).jpg"
+                mediaURL = try await firebase.uploadImage(image, path: imagePath)
                 thumbnailURL = mediaURL
             } else if let videoURL = capturedVideoURL {
                 // Upload video and generate thumbnail
-                mediaURL = try await uploadVideo(videoURL)
+                let videoPath = "reels/\(userId)/\(UUID().uuidString).mp4"
+                mediaURL = try await uploadVideo(videoURL, path: videoPath)
                 if let thumbnail = generateVideoThumbnail(from: videoURL) {
-                    thumbnailURL = try await uploadImage(thumbnail)
+                    let thumbPath = "reels/\(userId)/thumbnails/\(UUID().uuidString).jpg"
+                    thumbnailURL = try await firebase.uploadImage(thumbnail, path: thumbPath)
                 }
             }
             
             uploadProgress = 0.6
             
-            // Create reel
+            // Ensure title has a value
+            let reelTitle = title.isEmpty ? "Untitled Reel" : title
+            let reelDescription = description.isEmpty ? "" : description
+            
+            print("📝 Creating reel with title: \(reelTitle)")
+            print("📸 Media URL: \(mediaURL)")
+            print("🖼 Thumbnail URL: \(thumbnailURL)")
+            
+            // Create reel data with proper Timestamp
             let reelData: [String: Any] = [
-                "userId": firebase.currentUser?.id ?? "",
+                "userId": userId,
                 "userName": firebase.currentUser?.name ?? "User",
                 "userProfileImage": firebase.currentUser?.profileImageURL ?? "",
-                "videoURL": mediaURL,
-                "thumbnailURL": thumbnailURL,
-                "title": title,
-                "description": description,
+                "videoURL": mediaURL.isEmpty ? thumbnailURL : mediaURL,  // Ensure videoURL is never empty
+                "thumbnailURL": thumbnailURL.isEmpty ? mediaURL : thumbnailURL,  // Ensure thumbnailURL is never empty
+                "title": reelTitle,
+                "description": reelDescription,
                 "category": selectedCategory.rawValue,
-                "hashtags": extractHashtags(from: description),
-                "createdAt": Date(),
+                "hashtags": extractHashtags(from: reelDescription),
+                "createdAt": Timestamp(date: Date()),  // ✅ Use Firestore Timestamp
                 "likes": [],
                 "comments": 0,
                 "shares": 0,
@@ -406,6 +427,8 @@ struct CameraView: View {
             ]
             
             uploadProgress = 0.8
+            
+            print("📤 Sending to Firestore: \(reelData)")
             
             let ref = try await Firestore.firestore()
                 .collection("reels")
@@ -418,19 +441,28 @@ struct CameraView: View {
             // Refresh reels
             await firebase.loadReels()
         } catch {
+            print("❌ Error in postReel: \(error)")
             throw error
         }
     }
     
     private func uploadImage(_ image: UIImage) async throws -> String {
+        guard let userId = firebase.currentUser?.id else {
+            throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
+        }
+        
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
             throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to process image"])
         }
         
         let fileName = "\(UUID().uuidString).jpg"
-        let storageRef = Storage.storage().reference()
-            .child(mode == .status ? "statuses" : "reels")
-            .child(fileName)
+        let path = mode == .status ?
+            "statuses/\(userId)/\(fileName)" :
+            "reels/\(userId)/thumbnails/\(fileName)"
+        
+        print("📸 Uploading image to: \(path)")
+        
+        let storageRef = Storage.storage().reference().child(path)
         
         let _ = try await storageRef.putDataAsync(imageData)
         let downloadURL = try await storageRef.downloadURL()
@@ -438,13 +470,17 @@ struct CameraView: View {
         return downloadURL.absoluteString
     }
     
-    private func uploadVideo(_ url: URL) async throws -> String {
+    private func uploadVideo(_ url: URL, path: String? = nil) async throws -> String {
+        guard let userId = firebase.currentUser?.id else {
+            throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
+        }
+        
         let videoData = try Data(contentsOf: url)
         
-        let fileName = "\(UUID().uuidString).mp4"
-        let storageRef = Storage.storage().reference()
-            .child("reels")
-            .child(fileName)
+        let finalPath = path ?? "reels/\(userId)/\(UUID().uuidString).mp4"
+        print("🎥 Uploading video to: \(finalPath)")
+        
+        let storageRef = Storage.storage().reference().child(finalPath)
         
         let _ = try await storageRef.putDataAsync(videoData)
         let downloadURL = try await storageRef.downloadURL()
