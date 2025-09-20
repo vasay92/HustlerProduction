@@ -21,6 +21,9 @@ struct EnhancedProfileView: View {
     @State private var expandedReviews = false
     @State private var showingMessageView = false
     @State private var showingEditProfile = false
+    private let portfolioRepository = PortfolioRepository.shared
+    private let savedItemsRepository = SavedItemsRepository.shared
+    private let reviewRepository = ReviewRepository.shared
     @Environment(\.dismiss) var dismiss
     
     // Real-time review listener
@@ -114,8 +117,7 @@ struct EnhancedProfileView: View {
                 // Clean up listener when view disappears
                 reviewsListener?.remove()
                 reviewsListener = nil
-                firebase.stopListeningToReviews(for: userId)
-                
+                reviewRepository.stopListeningToUserReviews(userId: userId)
             }
             .sheet(isPresented: $showingEditProfile) {
                 EditProfileView()
@@ -630,13 +632,6 @@ struct EnhancedProfileView: View {
         print("Loading profile for userId: \(userId)")
         print("Current user ID: \(firebase.currentUser?.id ?? "nil")")
         print("Is own profile: \(isOwnProfile)")
-        // Add this temporarily in EnhancedProfileView's loadProfileData:
-        print("Loading portfolios for user: \(userId)")
-        let portfolios = await firebase.loadPortfolioCards(for: userId)
-        print("Found \(portfolios.count) portfolios")
-        for portfolio in portfolios {
-            print("Portfolio: \(portfolio.title), URLs: \(portfolio.mediaURLs.count)")
-        }
         
         if isOwnProfile {
             await firebase.updateLastActive()
@@ -657,10 +652,19 @@ struct EnhancedProfileView: View {
             print("Error loading user profile: \(error)")
         }
         
-        // Load portfolio cards
-        portfolioCards = await firebase.loadPortfolioCards(for: userId)
+        // Load portfolio cards using the new repository
+        do {
+            portfolioCards = try await portfolioRepository.fetchPortfolioCards(for: userId)
+            print("Found \(portfolioCards.count) portfolios")
+            for portfolio in portfolioCards {
+                print("Portfolio: \(portfolio.title), URLs: \(portfolio.mediaURLs.count)")
+            }
+        } catch {
+            print("Error loading portfolio cards: \(error)")
+            portfolioCards = []
+        }
         
-        // Load user's posts
+        // Load user's posts (keep using firebase for now)
         userPosts = await firebase.loadUserPosts(for: userId)
         
         // Start listening to reviews with real-time updates
@@ -669,10 +673,16 @@ struct EnhancedProfileView: View {
         // Load review stats
         reviewStats = await firebase.getReviewStats(for: userId)
         
-        // Load saved items if own profile
+        // Load saved items if own profile using the new repository
         if isOwnProfile {
-            savedReels = await firebase.loadSavedReels()
-            savedPosts = await firebase.loadSavedPosts()
+            do {
+                savedReels = try await savedItemsRepository.fetchSavedReels()
+                savedPosts = try await savedItemsRepository.fetchSavedPosts()
+            } catch {
+                print("Error loading saved items: \(error)")
+                savedReels = []
+                savedPosts = []
+            }
         }
     }
     
@@ -692,15 +702,15 @@ struct EnhancedProfileView: View {
         // Remove any existing listener
         reviewsListener?.remove()
         
-        // Start new listener
-        reviewsListener = firebase.listenToReviews(for: userId) { updatedReviews in
+        // Use ReviewRepository instead of FirebaseService
+        reviewsListener = reviewRepository.listenToUserReviews(userId: userId) { updatedReviews in
             withAnimation(.easeInOut(duration: 0.3)) {
                 self.reviews = updatedReviews
             }
             
             // Update stats when reviews change
             Task {
-                self.reviewStats = await firebase.getReviewStats(for: userId)
+                self.reviewStats = await self.firebase.getReviewStats(for: userId)
                 
                 // Update user rating display if available
                 if let updatedUser = try? await Firestore.firestore()
