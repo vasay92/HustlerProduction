@@ -352,8 +352,7 @@ struct FullScreenReelView: View {
         .sheet(isPresented: $showingComments) {
             CommentsView(
                 contentId: reel.id ?? "",
-                contentType: .reel,
-                contentOwnerId: reel.userId
+                contentType: "reel"  // Fixed: Changed to String literal
             )
         }
         .sheet(isPresented: $showingLikesList) {
@@ -361,13 +360,16 @@ struct FullScreenReelView: View {
         }
         .sheet(isPresented: $showingMessageView) {
             if let reelId = reel.id {
-                MessageUserView(
+                ChatView(  // Fixed: Changed from MessageUserView to ChatView
                     recipientId: reel.userId,
-                    recipientName: reel.userName ?? "User",
                     contextType: .reel,
                     contextId: reelId,
-                    contextTitle: reel.title,
-                    contextImage: reel.thumbnailURL
+                    contextData: (
+                        title: reel.title,
+                        image: reel.thumbnailURL,
+                        userId: reel.userId
+                    ),
+                    isFromContentView: true
                 )
             }
         }
@@ -618,8 +620,9 @@ struct FullScreenReelView: View {
     private func setupReelListener() {
         guard let reelId = reel.id else { return }
         
-        reelListener = firebase.listenToReel(reelId) { [weak self] updatedReel in
-            guard let self = self, let updatedReel = updatedReel else { return }
+        // Fixed: Removed [weak self] as structs can't be weak referenced
+        reelListener = firebase.listenToReel(reelId) { updatedReel in
+            guard let updatedReel = updatedReel else { return }
             
             Task { @MainActor in
                 self.currentReel = updatedReel
@@ -696,9 +699,14 @@ struct FullScreenReelView: View {
     private func shareReel() {
         showingShareSheet = true
         
+        // Fixed: Use ReelRepository for incrementShareCount
         Task {
             if let reelId = reel.id {
-                try? await firebase.incrementShareCount(for: reelId)
+                do {
+                    try await ReelRepository.shared.incrementShareCount(for: reelId)
+                } catch {
+                    print("Error incrementing share count: \(error)")
+                }
             }
         }
     }
