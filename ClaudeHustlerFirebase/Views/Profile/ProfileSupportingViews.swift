@@ -586,7 +586,7 @@ struct ReviewCard: View {
         
         Task {
             do {
-                let result = try await firebase.toggleHelpfulVote(for: reviewId)
+                let result = try await ReviewRepository.shared.toggleHelpfulVote(for: reviewId)
                 
                 await MainActor.run {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -868,12 +868,12 @@ struct CreateReviewView: View {
             try await Task.sleep(nanoseconds: 200_000_000)
             submitProgress = 0.5
             
-            _ = try await firebase.createReview(
-                for: userId,
-                rating: rating,
-                text: reviewText,
-                images: reviewImages
-            )
+            _ = try await ReviewRepository.shared.createReview(
+                        for: userId,
+                        rating: rating,
+                        text: reviewText,
+                        images: reviewImages
+                    )
             
             submitProgress = 1.0
             
@@ -1075,7 +1075,7 @@ struct ReplyToReviewView: View {
                         Task {
                             isSubmitting = true
                             do {
-                                try await firebase.replyToReview(reviewId, replyText: replyText)
+                                try await ReviewRepository.shared.replyToReview(reviewId, replyText: replyText)
                                 dismiss()
                             } catch {
                                 print("Error replying: \(error)")

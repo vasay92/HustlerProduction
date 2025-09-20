@@ -676,7 +676,7 @@ struct EnhancedProfileView: View {
         startListeningToReviews()
         
         // Load review stats
-        reviewStats = await firebase.getReviewStats(for: userId)
+        reviewStats = await ReviewRepository.shared.getReviewStats(for: userId)
         
         // Load saved items if own profile using the new repository
         if isOwnProfile {
@@ -715,17 +715,12 @@ struct EnhancedProfileView: View {
             
             // Update stats when reviews change
             Task {
-                self.reviewStats = await self.firebase.getReviewStats(for: userId)
+                self.reviewStats = await ReviewRepository.shared.getReviewStats(for: userId)
                 
                 // Update user rating display if available
-                if let updatedUser = try? await Firestore.firestore()
-                    .collection("users")
-                    .document(userId)
-                    .getDocument()
-                    .data(as: User.self) {
-                    self.user = updatedUser
-                    self.user?.id = userId
-                }
+                if let updatedUser = try? await UserRepository.shared.fetchById(self.userId) {
+                        self.user = updatedUser
+                    }
             }
         }
     }
