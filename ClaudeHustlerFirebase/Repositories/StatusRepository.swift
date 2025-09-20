@@ -164,4 +164,36 @@ final class StatusRepository: RepositoryProtocol {
         status.id = doc.documentID
         return status.isExpired == false ? status : nil
     }
+    
+    // Add to StatusRepository.swift
+    func createStatus(image: UIImage, caption: String?) async throws -> String {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "StatusRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        
+        // Upload image using FirebaseService
+        let imageURL = try await FirebaseService.shared.uploadImage(
+            image,
+            path: "statuses/\(userId)/\(UUID().uuidString).jpg"
+        )
+        
+        // Get user info
+        let userDoc = try await db.collection("users").document(userId).getDocument()
+        let userData = try? userDoc.data(as: User.self)
+        
+        // Create status
+        let status = Status(
+            userId: userId,
+            userName: userData?.name ?? "Unknown",
+            userProfileImage: userData?.profileImageURL ?? "",
+            mediaURL: imageURL,
+            caption: caption,
+            mediaType: .image,
+            expiresAt: Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date(),
+            viewedBy: [],
+            isActive: true
+        )
+        
+        return try await create(status)
+    }
 }

@@ -1136,7 +1136,11 @@ struct EditReviewView: View {
                         Task {
                             isSubmitting = true
                             do {
-                                try await firebase.updateReview(review.id ?? "", rating: rating, text: reviewText)
+                                _ = try await ReviewRepository.shared.updateReview(
+                                    review.id ?? "",
+                                    rating: rating,
+                                    text: reviewText
+                                )
                                 dismiss()
                             } catch {
                                 print("Error updating review: \(error)")
