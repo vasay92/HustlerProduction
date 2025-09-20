@@ -27,6 +27,7 @@ final class ReelsViewModel: ObservableObject {
     // MARK: - Private Properties
     private let reelRepository = ReelRepository.shared
     private let statusRepository = StatusRepository.shared
+    private let firebase = FirebaseService.shared
     private var reelsLastDocument: DocumentSnapshot?
     private var userReelsLastDocument: DocumentSnapshot?
     private let pageSize = 20

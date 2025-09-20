@@ -22,8 +22,15 @@ final class PortfolioRepository {
             throw NSError(domain: "PortfolioRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        var newCard = card
-        newCard.userId = userId
+        // Create new card with userId set
+        let newCard = PortfolioCard(
+            userId: userId,
+            title: card.title,
+            coverImageURL: card.coverImageURL,
+            mediaURLs: card.mediaURLs,
+            description: card.description,
+            displayOrder: card.displayOrder
+        )
         
         let docRef = try await db.collection("portfolioCards").addDocument(from: newCard)
         
@@ -40,10 +47,19 @@ final class PortfolioRepository {
             throw NSError(domain: "PortfolioRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
         }
         
-        var updatedCard = card
-        updatedCard.updatedAt = Date()
+        // Create updated card with new timestamp
+        let updatedCard = PortfolioCard(
+            id: cardId,
+            userId: userId,
+            title: card.title,
+            coverImageURL: card.coverImageURL,
+            mediaURLs: card.mediaURLs,
+            description: card.description,
+            updatedAt: Date(),
+            displayOrder: card.displayOrder
+        )
         
-        try await db.collection("portfolioCards").document(cardId).setData(from: updatedCard)
+        try db.collection("portfolioCards").document(cardId).setData(from: updatedCard)
         
         // Clear cache
         cache.remove(for: "portfolio_\(userId)")
