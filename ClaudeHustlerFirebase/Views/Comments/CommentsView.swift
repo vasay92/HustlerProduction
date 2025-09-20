@@ -55,7 +55,7 @@ struct CommentsView: View {
         }
         .onDisappear {
             commentsListener?.remove()
-            firebase.stopListeningToComments(reelId)
+            CommentRepository.shared.stopListeningToComments(reelId)
         }
         .confirmationDialog("Delete Comment?", isPresented: $showingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -152,7 +152,7 @@ struct CommentsView: View {
     
     // In CommentsView, after fetching comments:
     private func startListeningToComments() {
-        commentsListener = firebase.listenToComments(for: reelId) { updatedComments in
+        commentsListener = CommentRepository.shared.listenToComments(for: reelId) { updatedComments in
             withAnimation {
                 self.comments = updatedComments
                 

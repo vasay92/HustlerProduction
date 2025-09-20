@@ -619,43 +619,7 @@ extension FirebaseService {
     // Listener property for reviews
     private static var reviewsListeners: [String: ListenerRegistration] = [:]
     
-    // MARK: - Real-time Review Listening
-    
-    func listenToReviews(for userId: String, completion: @escaping ([Review]) -> Void) -> ListenerRegistration {
-        // Remove any existing listener for this user
-        if let existingListener = Self.reviewsListeners[userId] {
-            existingListener.remove()
-        }
-        
-        let listener = db.collection("reviews")
-            .whereField("reviewedUserId", isEqualTo: userId)
-            .order(by: "createdAt", descending: true)
-            .addSnapshotListener { snapshot, error in
-                if let error = error {
-                    print("Error listening to reviews: \(error)")
-                    return
-                }
-                
-                // Explicitly type the reviews array
-                let reviews: [Review] = snapshot?.documents.compactMap { doc in
-                    var review = try? doc.data(as: Review.self)
-                    review?.id = doc.documentID
-                    return review
-                } ?? []
-                
-                completion(reviews)
-            }
-        
-        Self.reviewsListeners[userId] = listener
-        return listener
-    }
-    
-    func stopListeningToReviews(for userId: String) {
-        Self.reviewsListeners[userId]?.remove()
-        Self.reviewsListeners.removeValue(forKey: userId)
-    }
-    
-    // MARK: - Load Reviews (One-time fetch)
+
     
     // MARK: - Load Reviews (One-time fetch)
 
