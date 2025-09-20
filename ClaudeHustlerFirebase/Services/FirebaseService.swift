@@ -302,33 +302,7 @@ class FirebaseService: ObservableObject {
         return docRef.documentID
     }
     
-//    // MARK: - Reel Interactions
-//    
-//    func likeReel(_ reelId: String) async {
-//        guard let userId = currentUser?.id else { return }
-//        
-//        do {
-//            let reelRef = db.collection("reels").document(reelId)
-//            try await reelRef.updateData([
-//                "likes": FieldValue.arrayUnion([userId])
-//            ])
-//        } catch {
-//            print("Error liking reel: \(error)")
-//        }
-//    }
-//    
-//    func unlikeReel(_ reelId: String) async {
-//        guard let userId = currentUser?.id else { return }
-//        
-//        do {
-//            let reelRef = db.collection("reels").document(reelId)
-//            try await reelRef.updateData([
-//                "likes": FieldValue.arrayRemove([userId])
-//            ])
-//        } catch {
-//            print("Error unliking reel: \(error)")
-//        }
-//    }
+
     
     // MARK: - Status Interactions
     
@@ -575,25 +549,6 @@ extension FirebaseService {
 // MARK: - Portfolio Management Extension
 extension FirebaseService {
     
-    func loadPortfolioCards(for userId: String) async -> [PortfolioCard] {
-        do {
-            let snapshot = try await db.collection("portfolioCards")
-                .whereField("userId", isEqualTo: userId)
-                .order(by: "displayOrder")
-                .getDocuments()
-            
-            return snapshot.documents.compactMap { doc in
-                if var card = try? doc.data(as: PortfolioCard.self) {
-                    card.id = doc.documentID
-                    return card
-                }
-                return nil
-            }
-        } catch {
-            print("Error loading portfolio cards: \(error)")
-            return []
-        }
-    }
     
     func createPortfolioCard(title: String, coverImage: UIImage?, mediaImages: [UIImage], description: String?) async throws {
         guard let userId = currentUser?.id else {
@@ -1146,67 +1101,7 @@ extension FirebaseService {
         print("Item unsaved successfully")
     }
     
-    func loadSavedReels() async -> [Reel] {
-        guard let userId = currentUser?.id else { return [] }
-        
-        do {
-            let savedItems = try await db.collection("savedItems")
-                .whereField("userId", isEqualTo: userId)
-                .whereField("itemType", isEqualTo: SavedItem.SavedItemType.reel.rawValue)
-                .order(by: "savedAt", descending: true)
-                .getDocuments()
-            
-            var reels: [Reel] = []
-            
-            for item in savedItems.documents {
-                let data = item.data()
-                if let itemId = data["itemId"] as? String {
-                    let reelDoc = try await db.collection("reels").document(itemId).getDocument()
-                    if var reel = try? reelDoc.data(as: Reel.self) {
-                        reel.id = reelDoc.documentID
-                        reels.append(reel)
-                    }
-                }
-            }
-            
-            print("Loaded \(reels.count) saved reels")
-            return reels
-        } catch {
-            print("Error loading saved reels: \(error)")
-            return []
-        }
-    }
-    
-    func loadSavedPosts() async -> [ServicePost] {
-        guard let userId = currentUser?.id else { return [] }
-        
-        do {
-            let savedItems = try await db.collection("savedItems")
-                .whereField("userId", isEqualTo: userId)
-                .whereField("itemType", isEqualTo: SavedItem.SavedItemType.post.rawValue)
-                .order(by: "savedAt", descending: true)
-                .getDocuments()
-            
-            var posts: [ServicePost] = []
-            
-            for item in savedItems.documents {
-                let data = item.data()
-                if let itemId = data["itemId"] as? String {
-                    let postDoc = try await db.collection("posts").document(itemId).getDocument()
-                    if var post = try? postDoc.data(as: ServicePost.self) {
-                        post.id = postDoc.documentID
-                        posts.append(post)
-                    }
-                }
-            }
-            
-            print("Loaded \(posts.count) saved posts")
-            return posts
-        } catch {
-            print("Error loading saved posts: \(error)")
-            return []
-        }
-    }
+  
     
     func toggleReelSave(_ reelId: String) async throws -> Bool {
         let isSaved = await isItemSaved(itemId: reelId, type: .reel)
@@ -1430,50 +1325,6 @@ extension FirebaseService {
         return listener
     }
     
-    func likeReel(_ reelId: String) async {
-        guard let userId = currentUser?.id else { return }
-        
-        do {
-            // Add to likes array
-            let reelRef = db.collection("reels").document(reelId)
-            try await reelRef.updateData([
-                "likes": FieldValue.arrayUnion([userId])
-            ])
-            
-            // Add to reelLikes collection for detailed tracking
-            let likeData: [String: Any] = [
-                "reelId": reelId,
-                "userId": userId,
-                "userName": currentUser?.name ?? "User",
-                "userProfileImage": currentUser?.profileImageURL ?? "",
-                "likedAt": Date()
-            ]
-            
-            // Use userId-reelId as document ID to prevent duplicates
-            let likeId = "\(userId)_\(reelId)"
-            try await db.collection("reelLikes").document(likeId).setData(likeData)
-        } catch {
-            print("Error liking reel: \(error)")
-        }
-    }
-    
-    func unlikeReel(_ reelId: String) async {
-        guard let userId = currentUser?.id else { return }
-        
-        do {
-            // Remove from likes array
-            let reelRef = db.collection("reels").document(reelId)
-            try await reelRef.updateData([
-                "likes": FieldValue.arrayRemove([userId])
-            ])
-            
-            // Remove from reelLikes collection
-            let likeId = "\(userId)_\(reelId)"
-            try await db.collection("reelLikes").document(likeId).delete()
-        } catch {
-            print("Error unliking reel: \(error)")
-        }
-    }
     
     // MARK: - Update Reel Caption (remove placeholders)
     
@@ -2077,65 +1928,7 @@ extension FirebaseService {
 // MARK: - Edit/Delete Operations Extension
 extension FirebaseService {
     
-    // MARK: - Reels
-    
-    /// Delete a reel
-    func deleteReel(_ reelId: String) async throws {
-        guard let currentUserId = currentUser?.id else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        // Verify ownership
-        let reel = try await db.collection("reels").document(reelId).getDocument()
-        guard let data = reel.data(),
-              data["userId"] as? String == currentUserId else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to delete this reel"])
-        }
-        
-        // Delete the reel
-        try await db.collection("reels").document(reelId).delete()
-        
-        // Also delete associated comments
-        let comments = try await db.collection("comments")
-            .whereField("reelId", isEqualTo: reelId)
-            .getDocuments()
-        
-        for comment in comments.documents {
-            try await comment.reference.delete()
-        }
-        
-        // Refresh reels
-        await loadReels()
-        
-        print("Deleted reel with ID: \(reelId)")
-    }
-    
-//    /// Update reel caption
-//    func updateReelCaption(_ reelId: String, title: String, description: String) async throws {
-//        guard let currentUserId = currentUser?.id else {
-//            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-//        }
-//        
-//        // Verify ownership
-//        let reel = try await db.collection("reels").document(reelId).getDocument()
-//        guard let data = reel.data(),
-//              data["userId"] as? String == currentUserId else {
-//            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to edit this reel"])
-//        }
-//        
-//        // Update the reel
-//        try await db.collection("reels").document(reelId).updateData([
-//            "title": title,
-//            "description": description,
-//            "updatedAt": Date()
-//        ])
-//        
-//        // Refresh reels
-//        await loadReels()
-//        
-//        print("Updated reel caption for ID: \(reelId)")
-//    }
-    
+   
     // MARK: - Status
     
     /// Delete a status

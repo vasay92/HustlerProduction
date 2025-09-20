@@ -656,22 +656,18 @@ struct FullScreenReelView: View {
     
     private func toggleLike() {
         Task {
-            if isLiked {
-                do {
+            do {
+                if isLiked {
                     try await ReelRepository.shared.unlikeReel(reel.id ?? "")
-                } catch {
-                    print("Error unliking reel: \(error)")
-                }
-                isLiked = false
-                likesCount = max(0, likesCount - 1)
-            } else {
-                do {
+                    isLiked = false
+                    likesCount = max(0, likesCount - 1)
+                } else {
                     try await ReelRepository.shared.likeReel(reel.id ?? "")
-                } catch {
-                    print("Error liking reel: \(error)")
+                    isLiked = true
+                    likesCount += 1
                 }
-                isLiked = true
-                likesCount += 1
+            } catch {
+                print("Error toggling like: \(error)")
             }
         }
     }
@@ -726,7 +722,7 @@ struct FullScreenReelView: View {
         
         do {
             try await ReelRepository.shared.delete(reelId)
-            onDismiss()
+            onDismiss()  // or dismiss() depending on the view
         } catch {
             print("Error deleting reel: \(error)")
             isDeleting = false
@@ -1570,22 +1566,34 @@ struct ReelViewerView: View {
         }
     }
     
+    // In ReelViewerView struct (around line 1560-1580):
     private func toggleLike() {
         Task {
-            if isLiked {
-                do {
+            do {
+                if isLiked {
                     try await ReelRepository.shared.unlikeReel(reel.id ?? "")
-                } catch {
-                    print("Error unliking reel: \(error)")
-                }
-            } else {
-                do {
+                } else {
                     try await ReelRepository.shared.likeReel(reel.id ?? "")
-                } catch {
-                    print("Error liking reel: \(error)")
                 }
+                isLiked.toggle()  // Just toggle, no likesCount
+            } catch {
+                print("Error toggling like: \(error)")
             }
-            isLiked.toggle()
+        }
+    }
+
+    // And for deleteReel in ReelViewerView:
+    private func deleteReel() async {
+        guard let reelId = reel.id else { return }
+        
+        isDeleting = true
+        
+        do {
+            try await ReelRepository.shared.delete(reelId)
+            dismiss()  // NOT onDismiss() - use dismiss
+        } catch {
+            print("Error deleting reel: \(error)")
+            isDeleting = false
         }
     }
     
@@ -1625,19 +1633,7 @@ struct ReelViewerView: View {
         showingShareSheet = true
     }
     
-    private func deleteReel() async {
-        guard let reelId = reel.id else { return }
-        
-        isDeleting = true
-        
-        do {
-            try await ReelRepository.shared.delete(reelId)
-            dismiss()
-        } catch {
-            print("Error deleting reel: \(error)")
-            isDeleting = false
-        }
-    }
+    
 }
 
 

@@ -150,10 +150,19 @@ struct CommentsView: View {
     
     // MARK: - Methods
     
+    // In CommentsView, after fetching comments:
     private func startListeningToComments() {
         commentsListener = firebase.listenToComments(for: reelId) { updatedComments in
             withAnimation {
                 self.comments = updatedComments
+                
+                // DEBUG: Check replies
+                let repliesCount = updatedComments.filter { $0.parentCommentId != nil }.count
+                print("📝 Total comments: \(updatedComments.count)")
+                print("📝 Replies: \(repliesCount)")
+                for comment in updatedComments where comment.parentCommentId != nil {
+                    print("  Reply: \(comment.text) -> Parent: \(comment.parentCommentId ?? "")")
+                }
             }
         }
     }
