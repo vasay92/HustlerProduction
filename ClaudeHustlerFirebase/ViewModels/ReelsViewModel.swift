@@ -7,6 +7,7 @@ import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
 import Combine
+import Firebase
 
 // MARK: - Reels ViewModel
 @MainActor
@@ -25,7 +26,7 @@ final class ReelsViewModel: ObservableObject {
     
     // MARK: - Private Properties
     private let reelRepository = ReelRepository.shared
-    private let firebase = FirebaseService.shared // For status operations until we have StatusRepository
+    private let statusRepository = StatusRepository.shared
     private var reelsLastDocument: DocumentSnapshot?
     private var userReelsLastDocument: DocumentSnapshot?
     private let pageSize = 20
@@ -209,17 +210,29 @@ final class ReelsViewModel: ObservableObject {
     func loadStatuses() async {
         isLoadingStatuses = true
         
-        // Load statuses from following users
-        await firebase.loadStatusesFromFollowing()
-        statuses = firebase.statuses
-        
-        // Check if current user has a status
-        if let userId = currentUserId {
-            currentUserStatus = statuses.first { $0.userId == userId }
+        guard let currentUser = firebase.currentUser else {
+            statuses = []
+            isLoadingStatuses = false
+            return
         }
         
-        // Cleanup expired statuses
-        await cleanupExpiredStatuses()
+        // Get user IDs to load statuses from
+        var userIds = currentUser.following
+        if let myId = currentUser.id {
+            userIds.append(myId)
+        }
+        
+        do {
+            statuses = try await statusRepository.fetchStatusesFromFollowing(userIds: userIds)
+            
+            // Check if current user has a status
+            if let userId = currentUserId {
+                currentUserStatus = statuses.first { $0.userId == userId }
+            }
+        } catch {
+            print("Error loading statuses: \(error)")
+            statuses = []
+        }
         
         isLoadingStatuses = false
     }
@@ -229,7 +242,11 @@ final class ReelsViewModel: ObservableObject {
         statuses.removeAll { $0.isExpired }
         
         // Clean up in Firebase
-        await firebase.cleanupExpiredStatuses()
+        do {
+            try await statusRepository.cleanupExpiredStatuses()
+        } catch {
+            print("Error cleaning up statuses: \(error)")
+        }
     }
     
     func createStatus(_ status: Status) async throws {

@@ -36,6 +36,10 @@
 		EBD038E02E7D0511004E0CBD /* ReelRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038DF2E7D0511004E0CBD /* ReelRepository.swift */; };
 		EBD038E22E7D06C4004E0CBD /* ReelsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038E12E7D06C4004E0CBD /* ReelsViewModel.swift */; };
 		EBD038E42E7D06DE004E0CBD /* MessagesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */; };
+		EBD039102E7E3967004E0CBD /* StatusRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD0390F2E7E3966004E0CBD /* StatusRepository.swift */; };
+		EBD039122E7E3A0B004E0CBD /* CommentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD039112E7E3A0A004E0CBD /* CommentRepository.swift */; };
+		EBD039142E7E3A1E004E0CBD /* SavedItemsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD039132E7E3A1E004E0CBD /* SavedItemsRepository.swift */; };
+		EBD039162E7E3A32004E0CBD /* PortfolioRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD039152E7E3A31004E0CBD /* PortfolioRepository.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,6 +87,10 @@
 		EBD038DF2E7D0511004E0CBD /* ReelRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelRepository.swift; sourceTree = "<group>"; };
 		EBD038E12E7D06C4004E0CBD /* ReelsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelsViewModel.swift; sourceTree = "<group>"; };
 		EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesViewModel.swift; sourceTree = "<group>"; };
+		EBD0390F2E7E3966004E0CBD /* StatusRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusRepository.swift; sourceTree = "<group>"; };
+		EBD039112E7E3A0A004E0CBD /* CommentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentRepository.swift; sourceTree = "<group>"; };
+		EBD039132E7E3A1E004E0CBD /* SavedItemsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedItemsRepository.swift; sourceTree = "<group>"; };
+		EBD039152E7E3A31004E0CBD /* PortfolioRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioRepository.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -272,6 +280,10 @@
 		EB6E08A02E7C9641004B253C /* Repositories */ = {
 			isa = PBXGroup;
 			children = (
+				EBD039152E7E3A31004E0CBD /* PortfolioRepository.swift */,
+				EBD039132E7E3A1E004E0CBD /* SavedItemsRepository.swift */,
+				EBD039112E7E3A0A004E0CBD /* CommentRepository.swift */,
+				EBD0390F2E7E3966004E0CBD /* StatusRepository.swift */,
 				EB6E089F2E7C9641004B253C /* PostRepository.swift */,
 				EBD038DF2E7D0511004E0CBD /* ReelRepository.swift */,
 				EBD038DD2E7D050D004E0CBD /* MessageRepository.swift */,
@@ -470,8 +482,10 @@
 				EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */,
 				EB6BBB372E70D070006DB468 /* ContentPreviewCard.swift in Sources */,
 				EBD038DE2E7D050E004E0CBD /* MessageRepository.swift in Sources */,
+				EBD039122E7E3A0B004E0CBD /* CommentRepository.swift in Sources */,
 				EB6E08922E7C918A004B253C /* CacheService.swift in Sources */,
 				EBD038DC2E7D050B004E0CBD /* UserRepository.swift in Sources */,
+				EBD039142E7E3A1E004E0CBD /* SavedItemsRepository.swift in Sources */,
 				EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */,
 				EB6E086B2E7C8B2C004B253C /* SecurityService.swift in Sources */,
 				EB6E08A42E7C9641004B253C /* PostRepository.swift in Sources */,
@@ -482,7 +496,9 @@
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
 				EBD038E02E7D0511004E0CBD /* ReelRepository.swift in Sources */,
 				EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */,
+				EBD039102E7E3967004E0CBD /* StatusRepository.swift in Sources */,
 				EBD038DA2E7D0505004E0CBD /* ReviewRepository.swift in Sources */,
+				EBD039162E7E3A32004E0CBD /* PortfolioRepository.swift in Sources */,
 				EBD038E22E7D06C4004E0CBD /* ReelsViewModel.swift in Sources */,
 				EBD038E42E7D06DE004E0CBD /* MessagesViewModel.swift in Sources */,
 				EBD038D42E7CF9AB004E0CBD /* ListenerManageable.swift in Sources */,
