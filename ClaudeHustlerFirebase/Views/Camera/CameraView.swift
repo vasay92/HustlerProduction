@@ -20,6 +20,7 @@ struct CameraView: View {
     @State private var showingImagePicker = false
     @State private var showingVideoPicker = false
     @State private var imagePickerSourceType: UIImagePickerController.SourceType = .camera
+    @State private var capturedImages: [UIImage] = []
     
     // Content creation states
     @State private var caption = ""
@@ -55,11 +56,7 @@ struct CameraView: View {
             }
         }
         .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(
-                images: .constant([]),
-                singleImage: $capturedImage,
-                sourceType: imagePickerSourceType
-            )
+            ImagePicker(images: $capturedImages, singleImage: .constant(nil))
         }
         .sheet(isPresented: $showingVideoPicker) {
             VideoPicker(videoURL: $capturedVideoURL)
@@ -562,39 +559,63 @@ struct VideoPicker: UIViewControllerRepresentable {
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var images: [UIImage]
     @Binding var singleImage: UIImage?
-    var sourceType: UIImagePickerController.SourceType = .photoLibrary
     @Environment(\.dismiss) var dismiss
     
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = sourceType
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        
+        // If singleImage binding is used, limit to 1; otherwise allow multiple
+        if singleImage != nil {
+            config.selectionLimit = 1
+        } else {
+            config.selectionLimit = 0  // 0 means unlimited
+        }
+        
+        let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
         return picker
     }
     
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
     
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
     
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
         let parent: ImagePicker
         
         init(_ parent: ImagePicker) {
             self.parent = parent
         }
         
-        func imagePickerController(_ picker: UIImagePickerController,
-                                 didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.singleImage = image
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            parent.dismiss()
+            
+            guard !results.isEmpty else { return }
+            
+            if parent.singleImage != nil {
+                // Single image mode - for cover image
+                results.first?.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                    if let image = image as? UIImage {
+                        DispatchQueue.main.async {
+                            self.parent.singleImage = image
+                        }
+                    }
+                }
+            } else {
+                // Multiple images mode - for portfolio images
+                for result in results {
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                        if let image = image as? UIImage {
+                            DispatchQueue.main.async {
+                                self.parent.images.append(image)
+                            }
+                        }
+                    }
+                }
             }
-            parent.dismiss()
-        }
-        
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
         }
     }
 }

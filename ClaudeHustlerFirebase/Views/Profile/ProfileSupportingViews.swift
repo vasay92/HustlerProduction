@@ -189,6 +189,8 @@ struct CreatePortfolioCardView: View {
                 }
                 
                 Section("Portfolio Images") {
+                    Text("Selected: \(mediaImages.count) images")
+                            .foregroundColor(.blue)
                     if !mediaImages.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack {
@@ -234,9 +236,8 @@ struct CreatePortfolioCardView: View {
         }
     }
     
-    // Fixed createCard method for ProfileSupportingViews.swift
-    // Replace the existing method in CreatePortfolioCardView with this version
-
+    
+    // Replace the entire createCard() method with this complete version:
     private func createCard() async {
         isCreating = true
         print("Creating portfolio with title: \(title)")
@@ -250,13 +251,13 @@ struct CreatePortfolioCardView: View {
                 return
             }
             
-            // Upload images first
+            // Upload media images first
             var mediaURLs: [String] = []
             for (index, image) in mediaImages.enumerated() {
                 let path = "portfolio/\(userId)/\(UUID().uuidString)_\(index).jpg"
                 let url = try await firebase.uploadImage(image, path: path)
                 mediaURLs.append(url)
-                print("Uploaded image \(index + 1)/\(mediaImages.count)")
+                print("Uploaded image \(index + 1)/\(mediaImages.count): \(url)")
             }
             
             // Upload cover image
@@ -264,9 +265,10 @@ struct CreatePortfolioCardView: View {
             if let cover = coverImage {
                 let path = "portfolio/\(userId)/covers/\(UUID().uuidString).jpg"
                 coverURL = try await firebase.uploadImage(cover, path: path)
-                print("Uploaded cover image")
+                print("Uploaded cover image: \(coverURL ?? "nil")")
             } else if !mediaURLs.isEmpty {
                 coverURL = mediaURLs.first
+                print("Using first media image as cover: \(coverURL ?? "nil")")
             }
             
             // Get existing cards for display order
@@ -277,13 +279,20 @@ struct CreatePortfolioCardView: View {
                 userId: userId,
                 title: title,
                 coverImageURL: coverURL ?? "",
-                mediaURLs: mediaURLs,
-                description: description ?? "",
+                mediaURLs: mediaURLs,  // This is where your images are saved
+                description: description.isEmpty ? nil : description,
                 displayOrder: existingCards.count
             )
             
-            _ = try await PortfolioRepository.shared.createPortfolioCard(newCard)
-            print("Portfolio created successfully")
+            print("Creating portfolio with:")
+            print("  - Title: \(newCard.title)")
+            print("  - Cover URL: \(newCard.coverImageURL)")
+            print("  - Media URLs count: \(newCard.mediaURLs.count)")
+            print("  - Media URLs: \(newCard.mediaURLs)")
+            
+            let cardId = try await PortfolioRepository.shared.createPortfolioCard(newCard)
+            print("Portfolio saved with ID: \(cardId)")
+            
             dismiss()
         } catch {
             print("Error creating card: \(error)")
