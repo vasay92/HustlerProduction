@@ -40,6 +40,8 @@ final class PortfolioRepository {
         return docRef.documentID
     }
     
+    // In PortfolioRepository.swift, replace updatePortfolioCard with:
+
     func updatePortfolioCard(_ card: PortfolioCard) async throws {
         guard let cardId = card.id,
               let userId = Auth.auth().currentUser?.uid,
@@ -47,24 +49,21 @@ final class PortfolioRepository {
             throw NSError(domain: "PortfolioRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
         }
         
-        // Create updated card with new timestamp
-        let updatedCard = PortfolioCard(
-            id: cardId,
-            userId: userId,
-            title: card.title,
-            coverImageURL: card.coverImageURL,
-            mediaURLs: card.mediaURLs,
-            description: card.description,
-            updatedAt: Date(),
-            displayOrder: card.displayOrder
-        )
+        // Use updateData instead of setData to avoid DocumentID issues
+        let updateData: [String: Any] = [
+            "title": card.title,
+            "coverImageURL": card.coverImageURL ?? "",
+            "mediaURLs": card.mediaURLs,
+            "description": card.description ?? "",
+            "updatedAt": Date(),
+            "displayOrder": card.displayOrder
+        ]
         
-        try db.collection("portfolioCards").document(cardId).setData(from: updatedCard)
+        try await db.collection("portfolioCards").document(cardId).updateData(updateData)
         
         // Clear cache
         cache.remove(for: "portfolio_\(userId)")
     }
-    
     func deletePortfolioCard(_ cardId: String) async throws {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         

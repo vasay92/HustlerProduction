@@ -93,7 +93,7 @@ struct PortfolioCardView: View {
         guard let cardId = card.id else { return }
         
         do {
-            try await firebase.deletePortfolioCard(cardId)
+            try await PortfolioRepository.shared.deletePortfolioCard(cardId)
         } catch {
             print("Error deleting portfolio: \(error)")
         }

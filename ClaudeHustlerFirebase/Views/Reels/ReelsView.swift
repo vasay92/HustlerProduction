@@ -738,11 +738,11 @@ struct FullScreenReelView: View {
         }
         
         if showingComments {
-            firebase.stopListeningToComments(reel.id ?? "")
+            CommentRepository.shared.stopListeningToComments(reel.id ?? "")
         }
         
         if showingLikesList {
-            firebase.stopListeningToLikes(reel.id ?? "")
+            firebase.stopListeningToLikes(reel.id ?? "")  //  Keep this (still in FirebaseService)
         }
     }
 }

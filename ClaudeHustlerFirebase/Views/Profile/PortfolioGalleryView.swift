@@ -247,6 +247,7 @@ struct PortfolioGalleryView: View {
     
     // MARK: - Helper Functions
     
+    // Replace addMoreImages method around line 45:
     private func addMoreImages(_ images: [UIImage]) async {
         isAddingImages = true
         
@@ -261,17 +262,13 @@ struct PortfolioGalleryView: View {
                 newURLs.append(url)
             }
             
-            // Update the card with new images
+            // Update the card using repository
             mediaURLs.append(contentsOf: newURLs)
             
-            // Update in Firestore
-            try await Firestore.firestore()
-                .collection("portfolioCards")
-                .document(cardId)
-                .updateData([
-                    "mediaURLs": mediaURLs,
-                    "updatedAt": Date()
-                ])
+            var updatedCard = card
+            updatedCard.mediaURLs = mediaURLs
+            
+            try await PortfolioRepository.shared.updatePortfolioCard(updatedCard)
             
             newImages = []
         } catch {
@@ -280,7 +277,8 @@ struct PortfolioGalleryView: View {
         
         isAddingImages = false
     }
-    
+
+    // Replace deleteImage method:
     private func deleteImage(url: String) {
         guard let cardId = card.id else { return }
         
@@ -288,13 +286,10 @@ struct PortfolioGalleryView: View {
         
         Task {
             do {
-                try await Firestore.firestore()
-                    .collection("portfolioCards")
-                    .document(cardId)
-                    .updateData([
-                        "mediaURLs": mediaURLs,
-                        "updatedAt": Date()
-                    ])
+                var updatedCard = card
+                updatedCard.mediaURLs = mediaURLs
+                
+                try await PortfolioRepository.shared.updatePortfolioCard(updatedCard)
             } catch {
                 print("Error deleting image: \(error)")
             }
@@ -442,11 +437,12 @@ struct EditPortfolioDetailsView: View {
         isSaving = true
         
         do {
-            try await firebase.updatePortfolioCard(
-                cardId,
-                title: title,
-                description: description
-            )
+            // Create updated card with new details
+            var updatedCard = card
+            updatedCard.title = title
+            updatedCard.description = description
+            
+            try await PortfolioRepository.shared.updatePortfolioCard(updatedCard)
             dismiss()
         } catch {
             print("Error updating details: \(error)")
