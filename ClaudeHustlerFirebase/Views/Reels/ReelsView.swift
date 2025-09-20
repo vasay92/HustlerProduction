@@ -657,11 +657,19 @@ struct FullScreenReelView: View {
     private func toggleLike() {
         Task {
             if isLiked {
-                await firebase.unlikeReel(reel.id ?? "")
+                do {
+                    try await ReelRepository.shared.unlikeReel(reel.id ?? "")
+                } catch {
+                    print("Error unliking reel: \(error)")
+                }
                 isLiked = false
                 likesCount = max(0, likesCount - 1)
             } else {
-                await firebase.likeReel(reel.id ?? "")
+                do {
+                    try await ReelRepository.shared.likeReel(reel.id ?? "")
+                } catch {
+                    print("Error liking reel: \(error)")
+                }
                 isLiked = true
                 likesCount += 1
             }
@@ -717,7 +725,7 @@ struct FullScreenReelView: View {
         isDeleting = true
         
         do {
-            try await firebase.deleteReel(reelId)
+            try await ReelRepository.shared.delete(reelId)
             onDismiss()
         } catch {
             print("Error deleting reel: \(error)")
@@ -1565,9 +1573,17 @@ struct ReelViewerView: View {
     private func toggleLike() {
         Task {
             if isLiked {
-                await firebase.unlikeReel(reel.id ?? "")
+                do {
+                    try await ReelRepository.shared.unlikeReel(reel.id ?? "")
+                } catch {
+                    print("Error unliking reel: \(error)")
+                }
             } else {
-                await firebase.likeReel(reel.id ?? "")
+                do {
+                    try await ReelRepository.shared.likeReel(reel.id ?? "")
+                } catch {
+                    print("Error liking reel: \(error)")
+                }
             }
             isLiked.toggle()
         }
@@ -1615,7 +1631,7 @@ struct ReelViewerView: View {
         isDeleting = true
         
         do {
-            try await firebase.deleteReel(reelId)
+            try await ReelRepository.shared.delete(reelId)
             dismiss()
         } catch {
             print("Error deleting reel: \(error)")
