@@ -58,9 +58,7 @@ struct CameraView: View {
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(images: .constant([]), singleImage: $capturedImage)
         }
-        .onChange(of: capturedImages) { _ in
-            capturedImage = capturedImages.first
-        }
+        
         .sheet(isPresented: $showingVideoPicker) {
             VideoPicker(videoURL: $capturedVideoURL)
         }
@@ -548,6 +546,7 @@ struct VideoPicker: UIViewControllerRepresentable {
 
 // Note: ImagePicker should already exist in your project
 // If not, here's a basic implementation:
+
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var images: [UIImage]
     @Binding var singleImage: UIImage?
@@ -556,13 +555,7 @@ struct ImagePicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.filter = .images
-        
-        // If singleImage binding is used, limit to 1; otherwise allow multiple
-        if singleImage != nil {
-            config.selectionLimit = 1
-        } else {
-            config.selectionLimit = 0  // 0 means unlimited
-        }
+        config.selectionLimit = 1
         
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
@@ -585,26 +578,13 @@ struct ImagePicker: UIViewControllerRepresentable {
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             parent.dismiss()
             
-            guard !results.isEmpty else { return }
+            guard let result = results.first else { return }
             
-            if parent.singleImage != nil {
-                // Single image mode - for cover image
-                results.first?.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
-                    if let image = image as? UIImage {
-                        DispatchQueue.main.async {
-                            self.parent.singleImage = image
-                        }
-                    }
-                }
-            } else {
-                // Multiple images mode - for portfolio images
-                for result in results {
-                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
-                        if let image = image as? UIImage {
-                            DispatchQueue.main.async {
-                                self.parent.images.append(image)
-                            }
-                        }
+            result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                if let image = image as? UIImage {
+                    DispatchQueue.main.async {
+                        self.parent.singleImage = image
+                        print("✅ Image set: \(image.size)")
                     }
                 }
             }
