@@ -176,7 +176,7 @@ struct CommentsView: View {
         
         Task {
             do {
-                _ = try await firebase.postComment(
+                _ = try await CommentRepository.shared.postComment(
                     on: reelId,
                     text: text,
                     parentCommentId: replyingTo?.id
@@ -203,7 +203,7 @@ struct CommentsView: View {
         
         Task {
             do {
-                try await firebase.deleteComment(commentId, reelId: reelId)
+                try await CommentRepository.shared.deleteComment(commentId, reelId: reelId)
             } catch {
                 print("Error deleting comment: \(error)")
             }
@@ -354,16 +354,11 @@ struct CommentCell: View {
         Task {
             do {
                 if isLiked {
-                    try await firebase.unlikeComment(commentId)
-                    await MainActor.run {
-                        isLiked = false
-                    }
+                    try await CommentRepository.shared.unlikeComment(commentId)
                 } else {
-                    try await firebase.likeComment(commentId)
-                    await MainActor.run {
-                        isLiked = true
-                    }
+                    try await CommentRepository.shared.likeComment(commentId)
                 }
+                
             } catch {
                 print("Error toggling like: \(error)")
             }
