@@ -351,8 +351,8 @@ struct FullScreenReelView: View {
         }
         .sheet(isPresented: $showingComments) {
             CommentsView(
-                contentId: reel.id ?? "",
-                contentType: "reel"  // Fixed: Changed to String literal
+                reelId: reel.id ?? "",
+                reelOwnerId: reel.userId
             )
         }
         .sheet(isPresented: $showingLikesList) {
@@ -1495,7 +1495,10 @@ struct ReelViewerView: View {
             }
         }
         .sheet(isPresented: $showingComments) {
-            CommentsView(reelId: reel.id ?? "", reelOwnerId: reel.userId)
+            CommentsView(
+                reelId: reel.id ?? "",
+                reelOwnerId: reel.userId
+            )
         }
         .sheet(isPresented: $showingEditSheet) {
             EditReelCaptionView(reel: reel)
