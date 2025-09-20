@@ -1690,54 +1690,6 @@ extension FirebaseService {
     }
 }
 
-// Add this extension to FirebaseService.swift
-
-// MARK: - User Posts Extension
-extension FirebaseService {
-    
-    /// Load all posts (offers and requests) created by a specific user
-    func loadUserPosts(for userId: String) async -> [ServicePost] {
-        do {
-            let snapshot = try await db.collection("posts")
-                .whereField("userId", isEqualTo: userId)
-                .order(by: "createdAt", descending: true)
-                .getDocuments()
-            
-            let posts = snapshot.documents.compactMap { doc in
-                if var post = try? doc.data(as: ServicePost.self) {
-                    // IMPORTANT: Set the document ID
-                    post.id = doc.documentID
-                    return post
-                }
-                return nil
-            }
-            
-            print("Loaded \(posts.count) posts for user \(userId)")
-            return posts
-        } catch {
-            print("Error loading user posts: \(error)")
-            return []
-        }
-    }
-    
-    /// Get count of active posts for a user
-    func getUserPostCount(for userId: String) async -> Int {
-        do {
-            let snapshot = try await db.collection("posts")
-                .whereField("userId", isEqualTo: userId)
-                .whereField("status", isEqualTo: ServicePost.PostStatus.active.rawValue)
-                .getDocuments()
-            
-            return snapshot.documents.count
-        } catch {
-            print("Error getting user post count: \(error)")
-            return 0
-        }
-    }
-    
-    
-}
-
 // Add these methods to FirebaseService.swift
 
 // MARK: - Edit/Delete Operations Extension

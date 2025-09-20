@@ -237,4 +237,66 @@ final class PostRepository: RepositoryProtocol {
         
         return Array(posts.prefix(limit))
     }
+    
+    // MARK: - User Posts
+    func fetchUserPosts(userId: String, limit: Int = 100) async throws -> [ServicePost] {
+        let snapshot = try await db.collection("posts")
+            .whereField("userId", isEqualTo: userId)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        
+        let posts = snapshot.documents.compactMap { doc -> ServicePost? in
+            var post = try? doc.data(as: ServicePost.self)
+            post?.id = doc.documentID
+            return post
+        }
+        
+        // Cache user posts
+        cache.store(posts, for: "user_posts_\(userId)")
+        
+        return posts
+    }
+
+    func fetchUserPostCount(userId: String) async throws -> Int {
+        let snapshot = try await db.collection("posts")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("status", isEqualTo: ServicePost.PostStatus.active.rawValue)
+            .getDocuments()
+        
+        return snapshot.documents.count
+    }
+    
+    // Add to PostRepository.swift
+    func searchPosts(
+        query: String,
+        category: ServiceCategory? = nil,
+        isRequest: Bool? = nil,
+        limit: Int = 20
+    ) async throws -> [ServicePost] {
+        var firestoreQuery = db.collection("posts")
+            .order(by: "updatedAt", descending: true)
+        
+        if let category = category {
+            firestoreQuery = firestoreQuery.whereField("category", isEqualTo: category.rawValue)
+        }
+        
+        if let isRequest = isRequest {
+            firestoreQuery = firestoreQuery.whereField("isRequest", isEqualTo: isRequest)
+        }
+        
+        let snapshot = try await firestoreQuery.limit(to: 100).getDocuments()
+        
+        let posts = snapshot.documents.compactMap { doc -> ServicePost? in
+            var post = try? doc.data(as: ServicePost.self)
+            post?.id = doc.documentID
+            return post
+        }.filter {
+            query.isEmpty ||
+            $0.title.localizedCaseInsensitiveContains(query) ||
+            $0.description.localizedCaseInsensitiveContains(query)
+        }
+        
+        return Array(posts.prefix(limit))
+    }
 }

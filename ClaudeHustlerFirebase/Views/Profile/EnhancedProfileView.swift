@@ -665,7 +665,12 @@ struct EnhancedProfileView: View {
         }
         
         // Load user's posts (keep using firebase for now)
-        userPosts = await firebase.loadUserPosts(for: userId)
+        do {
+            userPosts = try await PostRepository.shared.fetchUserPosts(userId: userId)
+        } catch {
+            print("Error loading user posts: \(error)")
+            userPosts = []
+        }
         
         // Start listening to reviews with real-time updates
         startListeningToReviews()
