@@ -21,6 +21,7 @@ final class MessagesViewModel: ObservableObject {
     init() {
         Self.shared = self
         self.currentUserId = Auth.auth().currentUser?.uid
+        print("DEBUG - MessagesViewModel init - currentUserId: \(self.currentUserId ?? "nil")")
     }
     
     func loadConversations() async {
@@ -51,8 +52,17 @@ final class MessagesViewModel: ObservableObject {
     }
     
     func sendMessage(text: String, conversationId: String) async {
+        // Add debugging
+        print("DEBUG - currentUserId: \(currentUserId ?? "nil")")
+        print("DEBUG - firebase.currentUser?.id: \(firebase.currentUser?.id ?? "nil")")
+        print("DEBUG - firebase.currentUser?.name: \(firebase.currentUser?.name ?? "nil")")
+        print("DEBUG - Auth.auth().currentUser?.uid: \(Auth.auth().currentUser?.uid ?? "nil")")
+        
         guard let userId = currentUserId,
-              let userName = firebase.currentUser?.name else { return }
+              let userName = firebase.currentUser?.name else {
+            print("DEBUG - Guard failed: userId or userName is nil")
+            return
+        }
         
         let message = Message(
             senderId: userId,

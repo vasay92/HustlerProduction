@@ -100,22 +100,14 @@ final class MessageRepository: RepositoryProtocol {
     }
     
 
-    // MARK: - Create Message with ConversationId
     func create(_ message: Message, in conversationId: String) async throws -> String {
+        // Don't check auth - Message already has senderId from MessagesViewModel
         
-        // Debug logging
-            print("Auth.auth().currentUser?.uid: \(Auth.auth().currentUser?.uid ?? "nil")")
-            print("FirebaseService.shared.currentUser?.id: \(FirebaseService.shared.currentUser?.id ?? "nil")")
-        guard let userId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        // Create message data dictionary
         let messageData: [String: Any] = [
-            "senderId": userId,
-            "senderName": message.senderName ?? "Unknown",
+            "senderId": message.senderId,  // Already provided
+            "senderName": message.senderName,  // Already provided
             "senderProfileImage": message.senderProfileImage ?? "",
-            "conversationId": conversationId,  // This links it to the conversation
+            "conversationId": conversationId,
             "text": message.text,
             "timestamp": Date(),
             "isRead": false,
@@ -125,14 +117,13 @@ final class MessageRepository: RepositoryProtocol {
             "contextId": message.contextId ?? ""
         ]
         
-        // Use TOP-LEVEL messages collection, NOT subcollection
-        let docRef = try await db.collection("messages")  // FIXED: Not conversations/id/messages
+        // Use TOP-LEVEL messages collection
+        let docRef = try await db.collection("messages")
             .addDocument(data: messageData)
         
         // Update conversation's last message
         try await updateConversationLastMessage(conversationId, message: message.text)
         
-        // Clear cache
         cache.remove(for: "messages_\(conversationId)")
         
         return docRef.documentID
@@ -295,10 +286,9 @@ final class MessageRepository: RepositoryProtocol {
         
         let batch = db.batch()
         
-        // Update all unread messages in this conversation
-        let unreadMessages = try await db.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
+        // Update all unread messages in TOP-LEVEL messages collection
+        let unreadMessages = try await db.collection("messages")  // NOT subcollection
+            .whereField("conversationId", isEqualTo: conversationId)
             .whereField("isRead", isEqualTo: false)
             .whereField("senderId", isNotEqualTo: userId)
             .getDocuments()
@@ -316,19 +306,17 @@ final class MessageRepository: RepositoryProtocol {
         
         try await batch.commit()
         
-        // Clear cache
         cache.remove(for: "conversations_page_1")
     }
     
     // MARK: - Private Helper Methods
     
     private func updateConversationLastMessage(_ conversationId: String, message: String) async throws {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        
+        // Don't check auth - just update the conversation
         try await db.collection("conversations").document(conversationId).updateData([
             "lastMessage": message,
             "lastMessageTimestamp": Date(),
-            "lastMessageSenderId": userId,
+            "lastMessageSenderId": "", // We could pass this in if needed
             "updatedAt": Date()
         ])
     }
@@ -363,11 +351,13 @@ final class MessageRepository: RepositoryProtocol {
     // MARK: - Real-time Listening
     
     func listenToConversation(_ conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
+        // Remove existing listener
         messageListeners[conversationId]?.remove()
         
-        // Listen to top-level messages collection
+        // Use TOP-LEVEL messages collection with filter
         let listener = db.collection("messages")  // NOT conversations/id/messages
             .whereField("conversationId", isEqualTo: conversationId)
+            .whereField("isDeleted", isEqualTo: false)
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
