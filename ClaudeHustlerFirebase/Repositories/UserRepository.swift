@@ -205,15 +205,7 @@ final class UserRepository: RepositoryProtocol {
             "followers": FieldValue.arrayUnion([currentUserId])
         ], forDocument: targetUserRef)
         
-        // Create follow activity (optional)
-        let activityRef = db.collection("activities").document()
-        let activityData: [String: Any] = [
-            "type": "follow",
-            "fromUserId": currentUserId,
-            "toUserId": targetUserId,
-            "timestamp": Date()
-        ]
-        batch.setData(activityData, forDocument: activityRef)
+        // REMOVED: Activity tracking that was causing permission errors
         
         try await batch.commit()
         

@@ -355,19 +355,22 @@ extension FirebaseService {
         profileImageURL: String? = nil,
         isServiceProvider: Bool? = nil
     ) async throws {
-        guard let userId = currentUser?.id else {
+        guard var user = currentUser else {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        var updates: [String: Any] = [:]
-        if let name = name { updates["name"] = name }
-        if let bio = bio { updates["bio"] = bio }
-        if let location = location { updates["location"] = location }
-        if let profileImageURL = profileImageURL { updates["profileImageURL"] = profileImageURL }
-        if let isServiceProvider = isServiceProvider { updates["isServiceProvider"] = isServiceProvider }
+        // Update the user object with new values
+        if let name = name { user.name = name }
+        if let bio = bio { user.bio = bio }
+        if let location = location { user.location = location }
+        if let profileImageURL = profileImageURL { user.profileImageURL = profileImageURL }
+        if let isServiceProvider = isServiceProvider { user.isServiceProvider = isServiceProvider }
         
-        if !updates.isEmpty {
-            try await db.collection("users").document(userId).updateData(updates)
+        // Use UserRepository to update
+        try await UserRepository.shared.update(user)
+        
+        // Reload current user
+        if let userId = user.id {
             await loadUser(userId: userId)
         }
     }
@@ -570,44 +573,22 @@ extension FirebaseService {
 // MARK: - Followers/Following Lists Extension
 extension FirebaseService {
     
+    // Update getFollowers/getFollowing in FirebaseService:
     func getFollowers(for userId: String) async -> [User] {
         do {
-            let document = try await db.collection("users").document(userId).getDocument()
-            if let user = try? document.data(as: User.self) {
-                var followers: [User] = []
-                for followerId in user.followers {
-                    let followerDoc = try await db.collection("users").document(followerId).getDocument()
-                    if var follower = try? followerDoc.data(as: User.self) {
-                        follower.id = followerDoc.documentID
-                        followers.append(follower)
-                    }
-                }
-                return followers
-            }
+            return try await UserRepository.shared.fetchFollowers(for: userId)
         } catch {
-            print("Error getting followers: \(error)")
+            return []
         }
-        return []
     }
 
     func getFollowing(for userId: String) async -> [User] {
         do {
-            let document = try await db.collection("users").document(userId).getDocument()
-            if let user = try? document.data(as: User.self) {
-                var following: [User] = []
-                for followingId in user.following {
-                    let followingDoc = try await db.collection("users").document(followingId).getDocument()
-                    if var followingUser = try? followingDoc.data(as: User.self) {
-                        followingUser.id = followingDoc.documentID
-                        following.append(followingUser)
-                    }
-                }
-                return following
-            }
+            return try await UserRepository.shared.fetchFollowing(for: userId)
         } catch {
             print("Error getting following: \(error)")
+            return []
         }
-        return []
     }
 }
 
