@@ -512,8 +512,52 @@ extension FirebaseService {
 // MARK: - Messaging Extension (Delegating to MessageRepository)
 extension FirebaseService {
     
-    func findOrCreateConversation(with otherUserId: String) async throws -> String {
-        return try await MessageRepository.shared.findOrCreateConversation(with: otherUserId)
+    func findOrCreateConversation(with recipientId: String) async throws -> String {
+        guard let currentUserId = currentUser?.id else {
+            throw NSError(domain: "MessagingError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        
+        // Try to find existing conversation where BOTH users are participants
+        let conversations1 = try await db.collection("conversations")
+            .whereField("participantIds", arrayContains: currentUserId)
+            .getDocuments()
+        
+        for doc in conversations1.documents {
+            if let participantIds = doc.data()["participantIds"] as? [String],
+               participantIds.contains(recipientId) && participantIds.count == 2 {
+                return doc.documentID
+            }
+        }
+        
+        // Also check if the OTHER user created a conversation with us
+        let conversations2 = try await db.collection("conversations")
+            .whereField("participantIds", arrayContains: recipientId)
+            .getDocuments()
+        
+        for doc in conversations2.documents {
+            if let participantIds = doc.data()["participantIds"] as? [String],
+               participantIds.contains(currentUserId) && participantIds.count == 2 {
+                return doc.documentID
+            }
+        }
+        
+        // Create new conversation if none exists
+        let conversationData: [String: Any] = [
+            "participantIds": [currentUserId, recipientId],
+            "participantNames": [:],
+            "participantImages": [:],
+            "lastMessage": "",
+            "lastMessageTimestamp": Date(),
+            "lastMessageSenderId": "",
+            "unreadCounts": [currentUserId: 0, recipientId: 0],
+            "lastReadTimestamps": [:],
+            "createdAt": Date(),
+            "updatedAt": Date(),
+            "blockedUsers": []
+        ]
+        
+        let docRef = try await db.collection("conversations").addDocument(data: conversationData)
+        return docRef.documentID
     }
     
     func loadConversations() async -> [Conversation] {
@@ -554,7 +598,6 @@ extension FirebaseService {
         
         messagesListener = db.collection("messages")
             .whereField("conversationId", isEqualTo: conversationId)
-            .whereField("isDeleted", isEqualTo: false)
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
@@ -565,45 +608,71 @@ extension FirebaseService {
                 print("DEBUG - Listener received \(snapshot?.documents.count ?? 0) documents")
                 
                 let messages: [Message] = snapshot?.documents.compactMap { doc in
-                    var data = doc.data()
-                    print("DEBUG - Document data: \(data)")
+                    let data = doc.data()
                     
-                    // Clean up empty strings before decoding
-                    if let contextType = data["contextType"] as? String, contextType.isEmpty {
-                        data.removeValue(forKey: "contextType")
-                    }
-                    if let contextId = data["contextId"] as? String, contextId.isEmpty {
-                        data.removeValue(forKey: "contextId")
-                    }
-                    
-                    do {
-                        var message = try Firestore.Decoder().decode(Message.self, from: data)
-                        message.id = doc.documentID
-                        return message
-                    } catch {
-                        print("Failed to decode message: \(error)")
-                        // Try manual creation as fallback
-                        if let senderId = data["senderId"] as? String,
-                           let text = data["text"] as? String,
-                           let conversationId = data["conversationId"] as? String {
-                            var message = Message(
-                                senderId: senderId,
-                                senderName: data["senderName"] as? String ?? "Unknown",
-                                senderProfileImage: data["senderProfileImage"] as? String,
-                                conversationId: conversationId,
-                                text: text
-                            )
-                            message.id = doc.documentID
-                            return message
-                        }
+                    // Filter out deleted messages
+                    if let isDeleted = data["isDeleted"] as? Bool, isDeleted {
                         return nil
                     }
+                    
+                    // Always use manual creation - skip Firestore.Decoder completely
+                    guard let senderId = data["senderId"] as? String,
+                          let text = data["text"] as? String,
+                          let conversationId = data["conversationId"] as? String else {
+                        return nil
+                    }
+                    
+                    var message = Message(
+                        senderId: senderId,
+                        senderName: data["senderName"] as? String ?? "Unknown",
+                        senderProfileImage: data["senderProfileImage"] as? String,
+                        conversationId: conversationId,
+                        text: text
+                    )
+                    
+                    // Set optional fields
+                    message.id = doc.documentID
+                    
+                    // Handle timestamps
+                    if let timestamp = data["timestamp"] as? Timestamp {
+                        message.timestamp = timestamp.dateValue()
+                    }
+                    
+                    // Handle delivery/read status
+                    message.isDelivered = data["isDelivered"] as? Bool ?? false
+                    message.isRead = data["isRead"] as? Bool ?? false
+                    
+                    if let deliveredAt = data["deliveredAt"] as? Timestamp {
+                        message.deliveredAt = deliveredAt.dateValue()
+                    }
+                    
+                    if let readAt = data["readAt"] as? Timestamp {
+                        message.readAt = readAt.dateValue()
+                    }
+                    
+                    // Handle context fields
+                    if let contextType = data["contextType"] as? String, !contextType.isEmpty {
+                        message.contextType = Message.MessageContextType(rawValue: contextType)
+                    }
+                    
+                    if let contextId = data["contextId"] as? String, !contextId.isEmpty {
+                        message.contextId = contextId
+                    }
+                    
+                    message.contextTitle = data["contextTitle"] as? String
+                    message.contextImage = data["contextImage"] as? String
+                    message.contextUserId = data["contextUserId"] as? String
+                    
+                    // Handle edit status
+                    message.isEdited = data["isEdited"] as? Bool ?? false
+                    if let editedAt = data["editedAt"] as? Timestamp {
+                        message.editedAt = editedAt.dateValue()
+                    }
+                    
+                    return message
                 } ?? []
                 
                 print("DEBUG - Listener triggered with \(messages.count) messages")
-                for msg in messages {
-                    print("  - Message: \(msg.text) from \(msg.senderId)")
-                }
                 
                 completion(messages)
             }

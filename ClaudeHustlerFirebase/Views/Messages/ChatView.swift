@@ -83,16 +83,34 @@ struct ChatView: View {
                     // Custom Navigation Bar
                     customNavigationBar
                     
+                    // DEBUG: Show message count in UI
+                    Text("Messages count: \(messages.count)")
+                        .foregroundColor(.red)
+                        .padding()
+                    
                     // Messages List
                     ScrollViewReader { scrollProxy in
                         ScrollView {
                             LazyVStack(spacing: 12) {
-                                ForEach(messages) { message in
-                                    MessageBubbleView(
-                                        message: message,
-                                        isFromCurrentUser: message.senderId == firebase.currentUser?.id
-                                    )
-                                    .id(message.id)
+                                // DEBUG: Simple test to see if ForEach works
+                                if messages.isEmpty {
+                                    Text("No messages to display")
+                                        .foregroundColor(.gray)
+                                        .padding()
+                                } else {
+                                    ForEach(messages) { message in
+                                        // DEBUG: Try simple Text first
+                                        Text("\(message.text) - ID: \(message.id ?? "nil")")
+                                            .foregroundColor(.blue)
+                                            .padding()
+                                        
+                                         
+                                         MessageBubbleView(
+                                             message: message,
+                                             isFromCurrentUser: message.senderId == firebase.currentUser?.id
+                                         )
+                                         .id(message.id)
+                                    }
                                 }
                                 
                                 Color.clear
@@ -101,13 +119,11 @@ struct ChatView: View {
                             }
                             .padding()
                         }
-                        .onChange(of: messages.count) { _, _ in
+                        .onChange(of: messages.count) { oldCount, newCount in
+                            print("DEBUG - messages.count changed from \(oldCount) to \(newCount)")
                             withAnimation {
                                 scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
                             }
-                        }
-                        .onAppear {
-                            scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
                         }
                     }
                     
@@ -121,29 +137,6 @@ struct ChatView: View {
             }
             .onDisappear {
                 messagesListener?.remove()
-            }
-            .confirmationDialog("Block User?", isPresented: $showingBlockConfirmation) {
-                Button("Block", role: .destructive) {
-                    Task { await blockUser() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("You won't receive messages from this user anymore.")
-            }
-            .confirmationDialog("Clear Chat?", isPresented: $showingClearConfirmation) {
-                Button("Clear All Messages", role: .destructive) {
-                    Task { await clearChat() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will delete all messages in this conversation for both users. This action cannot be undone.")
-            }
-            .sheet(isPresented: $showingReportSheet) {
-                ReportMessageView(
-                    messageId: reportMessageId,
-                    conversationId: currentConversationId ?? "",
-                    reportedUserId: otherUserId ?? ""
-                )
             }
         }
     }
@@ -320,8 +313,13 @@ struct ChatView: View {
             // Get or create conversation
             if let conversation = conversation {
                 currentConversationId = conversation.id
+                print("DEBUG - Using existing conversation: \(conversation.id ?? "nil")")
+                print("DEBUG - Participants: \(conversation.participantIds)")
             } else if let recipientId = recipientId {
+                print("DEBUG - Creating/finding conversation with recipient: \(recipientId)")
+                print("DEBUG - Current user: \(firebase.currentUser?.id ?? "nil")")
                 currentConversationId = try await firebase.findOrCreateConversation(with: recipientId)
+                print("DEBUG - Got conversation ID: \(currentConversationId ?? "nil")")
             }
             
             // Load other user info
@@ -334,33 +332,37 @@ struct ChatView: View {
                 otherUser?.id = otherUserId
             }
             
-            // Load messages
+            // Load messages - this should work even if marking as read fails
             if let conversationId = currentConversationId {
                 messages = await firebase.loadMessages(for: conversationId)
                 
-                // Mark messages as read
-                try await firebase.markMessagesAsRead(in: conversationId)
+                // Try to mark messages as read, but don't fail if permissions denied
+                do {
+                    try await firebase.markMessagesAsRead(in: conversationId)
+                } catch {
+                    print("Could not mark messages as read (non-critical): \(error)")
+                }
                 
                 // Start listening for new messages
-                // Start listening for new messages
                 messagesListener = firebase.listenToMessages(in: conversationId) { newMessages in
-                    print("DEBUG - Listener triggered with \(newMessages.count) messages")
-                    for msg in newMessages {
-                        print("  - Message: \(msg.text) from \(msg.senderId)")
-                    }
-                    
-                    withAnimation {
+                    DispatchQueue.main.async {
                         self.messages = newMessages
-                    }
-                    
-                    // Mark new messages as read
-                    Task {
-                        try? await firebase.markMessagesAsRead(in: conversationId)
                     }
                 }
             }
         } catch {
             print("Error setting up chat: \(error)")
+            // Still try to load messages even if setup partially fails
+            if let conversationId = currentConversationId {
+                messages = await firebase.loadMessages(for: conversationId)
+                
+                // Start listening anyway
+                messagesListener = firebase.listenToMessages(in: conversationId) { newMessages in
+                    DispatchQueue.main.async {
+                        self.messages = newMessages
+                    }
+                }
+            }
         }
         
         isLoadingMessages = false
@@ -440,45 +442,30 @@ struct MessageBubbleView: View {
             if isFromCurrentUser { Spacer() }
             
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                // Content preview if exists - NO NavigationLink wrapping
+                // Content preview if exists
                 if message.contextType != nil {
                     ContentPreviewCard(message: message)
                 }
                 
                 // Message bubble
-                HStack {
-                    Text(message.text)
-                        .font(.body)
-                        .foregroundColor(isFromCurrentUser ? .white : .primary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                }
-                .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
-                .cornerRadius(18)
+                Text(message.text)
+                    .font(.body)
+                    .foregroundColor(isFromCurrentUser ? .white : .black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
+                    .cornerRadius(18)
                 
-                // Timestamp and read receipt
-                HStack(spacing: 4) {
-                    Text(message.timestamp, style: .time)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    
-                    if isFromCurrentUser {
-                        if message.isRead {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption2)
-                                .foregroundColor(.blue)
-                        } else if message.isDelivered {
-                            Image(systemName: "checkmark.circle")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
+                // Timestamp
+                Text(message.timestamp, style: .time)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: isFromCurrentUser ? .trailing : .leading)
             
             if !isFromCurrentUser { Spacer() }
         }
+        .padding(.horizontal)
     }
 }
 
