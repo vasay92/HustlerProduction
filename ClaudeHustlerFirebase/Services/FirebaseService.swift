@@ -296,79 +296,39 @@ class FirebaseService: ObservableObject {
     }
     // MARK: - Following System
     
+    // In FirebaseService.swift, replace the existing methods:
     func followUser(_ targetUserId: String) async throws {
         guard let currentUserId = currentUser?.id else { return }
         
-        try await db.collection("users").document(currentUserId).updateData([
-            "following": FieldValue.arrayUnion([targetUserId])
-        ])
+        try await UserRepository.shared.followUser(targetUserId)
         
-        try await db.collection("users").document(targetUserId).updateData([
-            "followers": FieldValue.arrayUnion([currentUserId])
-        ])
-        
+        // Reload current user and statuses
         await loadUser(userId: currentUserId)
-        await loadStatusesFromFollowing()
+        
+        // Use StatusRepository for loading statuses
+        if let user = currentUser {
+            var userIds = user.following
+            userIds.append(currentUserId)
+            statuses = try await StatusRepository.shared.fetchStatusesFromFollowing(userIds: userIds)
+        }
     }
 
     func unfollowUser(_ targetUserId: String) async throws {
         guard let currentUserId = currentUser?.id else { return }
         
-        try await db.collection("users").document(currentUserId).updateData([
-            "following": FieldValue.arrayRemove([targetUserId])
-        ])
+        try await UserRepository.shared.unfollowUser(targetUserId)
         
-        try await db.collection("users").document(targetUserId).updateData([
-            "followers": FieldValue.arrayRemove([currentUserId])
-        ])
-        
+        // Reload current user and statuses
         await loadUser(userId: currentUserId)
-        await loadStatusesFromFollowing()
+        
+        // Use StatusRepository for loading statuses
+        if let user = currentUser {
+            var userIds = user.following
+            userIds.append(currentUserId)
+            statuses = try await StatusRepository.shared.fetchStatusesFromFollowing(userIds: userIds)
+        }
     }
     
-    func loadStatusesFromFollowing() async {
-        guard let currentUser = currentUser else {
-            print("No current user, can't load statuses")
-            statuses = []
-            return
-        }
-        
-        do {
-            var userIds = currentUser.following
-            if let myId = currentUser.id {
-                userIds.append(myId)
-            }
-            
-            if userIds.isEmpty {
-                print("Not following anyone, no statuses to show")
-                statuses = []
-                return
-            }
-            
-            print("Loading statuses from users: \(userIds)")
-            
-            let snapshot = try await db.collection("statuses")
-                .whereField("userId", in: userIds)
-                .whereField("isActive", isEqualTo: true)
-                .getDocuments()
-            
-            statuses = snapshot.documents.compactMap { doc in
-                if var status = try? doc.data(as: Status.self),
-                   status.expiresAt > Date() {
-                    // IMPORTANT: Set the document ID
-                    status.id = doc.documentID
-                    print("Loaded status with ID: \(status.id ?? "nil")")
-                    return status
-                }
-                return nil
-            }
-            
-            print("Loaded \(statuses.count) statuses from following")
-        } catch {
-            print("Error loading statuses from following: \(error)")
-            statuses = []
-        }
-    }
     
     // MARK: - Cache Management
 
@@ -1125,31 +1085,6 @@ extension FirebaseService {
 
 // MARK: - Edit/Delete Operations Extension
 extension FirebaseService {
-    
-   
-    // MARK: - Status
-    
-    /// Delete a status
-    func deleteStatus(_ statusId: String) async throws {
-        guard let currentUserId = currentUser?.id else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        // Verify ownership
-        let status = try await db.collection("statuses").document(statusId).getDocument()
-        guard let data = status.data(),
-              data["userId"] as? String == currentUserId else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to delete this status"])
-        }
-        
-        // Delete the status
-        try await db.collection("statuses").document(statusId).delete()
-        
-        // Refresh statuses
-        await loadStatusesFromFollowing()
-        
-        print("Deleted status with ID: \(statusId)")
-    }
     
     // MARK: - Batch Operations
     

@@ -1297,7 +1297,11 @@ struct StatusViewerView: View {
               let userId = firebase.currentUser?.id,
               !status.viewedBy.contains(userId) else { return }
         
-        try? await firebase.markStatusAsViewed(statusId)
+        do {
+            try await StatusRepository.shared.markAsViewed(statusId, by: userId)
+        } catch {
+            print("Error marking status as viewed: \(error)")
+        }
     }
     
     private func deleteStatus() async {
@@ -1306,7 +1310,7 @@ struct StatusViewerView: View {
         isDeleting = true
         
         do {
-            try await firebase.deleteStatus(statusId)
+            try await StatusRepository.shared.delete(statusId)
             dismiss()
         } catch {
             print("Error deleting status: \(error)")

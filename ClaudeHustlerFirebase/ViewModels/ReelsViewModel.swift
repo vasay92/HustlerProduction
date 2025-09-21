@@ -252,17 +252,14 @@ final class ReelsViewModel: ObservableObject {
     }
     
     func createStatus(_ status: Status) async throws {
-        // This would be moved to StatusRepository
-        _ = try await firebase.createStatus(
-            image: UIImage(), // You'd pass the actual image
-            caption: status.caption
-        )
-        
+        // Use StatusRepository directly
+        let statusId = try await statusRepository.create(status)
         await loadStatuses()
+        print("Created status with ID: \(statusId)")
     }
     
     func deleteStatus(_ statusId: String) async throws {
-        try await firebase.deleteStatus(statusId)
+        try await statusRepository.delete(statusId)
         
         // Remove from local array
         statuses.removeAll { $0.id == statusId }
@@ -272,8 +269,15 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
+    // Replace entire method with:
     func viewStatus(_ statusId: String) async {
-        await firebase.viewStatus(statusId)
+        guard let userId = currentUserId else { return }
+        
+        do {
+            try await statusRepository.markAsViewed(statusId, by: userId)
+        } catch {
+            print("Error viewing status: \(error)")
+        }
     }
     
     // MARK: - Reel Interactions
