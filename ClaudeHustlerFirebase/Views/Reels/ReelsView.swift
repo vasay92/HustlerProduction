@@ -620,16 +620,22 @@ struct FullScreenReelView: View {
     private func setupReelListener() {
         guard let reelId = reel.id else { return }
         
-        // Fixed: Removed [weak self] as structs can't be weak referenced
-        reelListener = firebase.listenToReel(reelId) { updatedReel in
-            guard let updatedReel = updatedReel else { return }
-            
-            Task { @MainActor in
-                self.currentReel = updatedReel
-                self.likesCount = updatedReel.likes.count
-                self.commentsCount = updatedReel.comments
+        // Real-time listeners have been moved to repositories
+        // For now, just fetch the reel data once
+        Task { @MainActor in
+            do {
+                if let updatedReel = try await ReelRepository.shared.fetchById(reelId) {
+                    self.currentReel = updatedReel
+                    self.likesCount = updatedReel.likes.count
+                    self.commentsCount = updatedReel.comments
+                }
+            } catch {
+                print("Error loading reel: \(error)")
             }
         }
+        
+        // Note: Real-time updates temporarily disabled during migration
+        // To re-enable, implement listener in ReelRepository
     }
     
     private func loadReelData() async {
@@ -743,7 +749,8 @@ struct FullScreenReelView: View {
         reelListener = nil
         
         if let reelId = reel.id {
-            firebase.stopListeningToReel(reelId)
+            reelListener?.remove()
+            reelListener = nil
         }
         
         if showingComments {

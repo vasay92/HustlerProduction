@@ -7,7 +7,6 @@ struct LikesListView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var likes: [ReelLike] = []
-    @State private var likesListener: ListenerRegistration?
     
     var body: some View {
         NavigationView {
@@ -75,19 +74,28 @@ struct LikesListView: View {
             }
         }
         .onAppear {
-            startListeningToLikes()
+            Task {
+                await loadLikes()  // ADD THIS LINE
+            }
         }
-        .onDisappear {
-            likesListener?.remove()
-            firebase.stopListeningToLikes(reelId)
-        }
+        
     }
     
-    private func startListeningToLikes() {
-        likesListener = firebase.listenToReelLikes(reelId) { updatedLikes in
-            withAnimation {
-                self.likes = updatedLikes
+    
+    private func loadLikes() async {
+        do {
+            // Fetch likes for this reel from Firestore
+            let snapshot = try await Firestore.firestore()
+                .collection("reelLikes")
+                .whereField("reelId", isEqualTo: reelId)
+                .order(by: "likedAt", descending: true)
+                .getDocuments()
+            
+            likes = snapshot.documents.compactMap { doc in
+                try? doc.data(as: ReelLike.self)
             }
+        } catch {
+            print("Error loading likes: \(error)")
         }
     }
 }

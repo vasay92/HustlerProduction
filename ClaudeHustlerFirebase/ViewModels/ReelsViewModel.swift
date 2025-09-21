@@ -384,47 +384,29 @@ final class ReelsViewModel: ObservableObject {
     
     // MARK: - Real-time Listeners
     
-    func startListeningToReel(_ reelId: String) {
-        // Remove existing listener if any
-        stopListeningToReel(reelId)
-        
-        let listener = firebase.listenToReel(reelId) { [weak self] updatedReel in
-            guard let self = self, let updatedReel = updatedReel else { return }
-            
-            // Update in all arrays
-            if let index = self.reels.firstIndex(where: { $0.id == reelId }) {
-                self.reels[index] = updatedReel
-            }
-            
-            if let index = self.trendingReels.firstIndex(where: { $0.id == reelId }) {
-                self.trendingReels[index] = updatedReel
-            }
-            
-            if let index = self.userReels.firstIndex(where: { $0.id == reelId }) {
-                self.userReels[index] = updatedReel
+    func startListeningToReel(_ reelId: String) -> ListenerRegistration? {
+        // Real-time listeners have been moved to repository
+        // For now, just load the reel once
+        Task { @MainActor in
+            do {
+                if let reel = try await reelRepository.fetchById(reelId) {
+                    // Update the reel in the array
+                    if let index = self.reels.firstIndex(where: { $0.id == reelId }) {
+                        self.reels[index] = reel
+                    }
+                }
+            } catch {
+                print("Error loading reel: \(error)")
             }
         }
-        
-        reelListeners[reelId] = listener
+        return nil // No listener to return anymore
     }
     
     func stopListeningToReel(_ reelId: String) {
-        reelListeners[reelId]?.remove()
-        reelListeners.removeValue(forKey: reelId)
-        firebase.stopListeningToReel(reelId)
+        // No longer using listeners - nothing to stop
+        // This function is kept for compatibility but does nothing
     }
     
-    // MARK: - Cleanup
-    
-//    nonisolated private func cleanupAllListeners() {
-//        // Remove all reel listeners
-//        reelListeners.values.forEach { $0.remove() }
-//        reelListeners.removeAll()
-//        
-//        // Remove status listener if exists
-//        statusListener?.remove()
-//        statusListener = nil
-//    }
     
     // MARK: - Helper Methods
     

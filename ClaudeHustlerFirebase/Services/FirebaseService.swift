@@ -147,21 +147,11 @@ class FirebaseService: ObservableObject {
     
     func loadReels() async {
         do {
-            let snapshot = try await db.collection("reels")
-                .order(by: "createdAt", descending: true)
-                .limit(to: 50)
-                .getDocuments()
-            
-            reels = snapshot.documents.compactMap { doc in
-                if var reel = try? doc.data(as: Reel.self) {
-                    reel.id = doc.documentID
-                    print("Loaded reel with ID: \(reel.id ?? "nil")")
-                    return reel
-                }
-                return nil
-            }
+            let (reels, _) = try await ReelRepository.shared.fetch(limit: 50)
+            self.reels = reels
         } catch {
             print("Error loading reels: \(error)")
+            self.reels = []
         }
     }
     
@@ -173,7 +163,8 @@ class FirebaseService: ObservableObject {
         category: ServiceCategory?,
         hashtags: [String] = []
     ) async throws -> String {
-        guard let userId = currentUser?.id else {
+        guard let userId = currentUser?.id,
+              let userName = currentUser?.name else {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
@@ -182,27 +173,24 @@ class FirebaseService: ObservableObject {
             thumbnailURL = try await uploadImage(thumbnail, path: "reels/\(userId)/thumbnails/\(UUID().uuidString).jpg")
         }
         
-        let reelData: [String: Any] = [
-            "userId": userId,
-            "userName": currentUser?.name ?? "Unknown",
-            "userProfileImage": currentUser?.profileImageURL ?? "",
-            "videoURL": videoURL,
-            "thumbnailURL": thumbnailURL,
-            "title": title,
-            "description": description,
-            "category": category?.rawValue ?? "",
-            "hashtags": hashtags,
-            "createdAt": Date(),
-            "likes": [],
-            "comments": 0,
-            "shares": 0,
-            "views": 0,
-            "isPromoted": false
-        ]
+        let reel = Reel(
+            userId: userId,
+            userName: userName,
+            userProfileImage: currentUser?.profileImageURL,
+            videoURL: videoURL,
+            thumbnailURL: thumbnailURL.isEmpty ? nil : thumbnailURL,
+            title: title,
+            description: description,
+            category: category,
+            hashtags: hashtags
+        )
         
-        let docRef = try await db.collection("reels").addDocument(data: reelData)
-        await loadReels()
-        return docRef.documentID
+        let reelId = try await ReelRepository.shared.create(reel)
+        
+        // Refresh reels in view model if needed
+        await ReelsViewModel.shared?.loadInitialReels()
+        
+        return reelId
     }
     
     func createImageReel(
@@ -217,33 +205,14 @@ class FirebaseService: ObservableObject {
         
         let imageURL = try await uploadImage(image, path: "reels/\(userId)/\(UUID().uuidString).jpg")
         
-        var reelData: [String: Any] = [
-            "userId": userId,
-            "userName": currentUser?.name ?? "Unknown",
-            "userProfileImage": currentUser?.profileImageURL ?? "",
-            "videoURL": imageURL,
-            "thumbnailURL": imageURL,
-            "title": title,
-            "description": description,
-            "hashtags": [],
-            "createdAt": Date(),
-            "likes": [],
-            "comments": 0,
-            "shares": 0,
-            "views": 0,
-            "isPromoted": false
-        ]
-        
-        if let category = category {
-            reelData["category"] = category.rawValue
-        }
-        
-        let docRef = try await db.collection("reels").addDocument(data: reelData)
-        await loadReels()
-        print("Created reel with ID: \(docRef.documentID)")
-        return docRef.documentID
+        return try await createReel(
+            videoURL: imageURL,
+            thumbnailImage: image,
+            title: title,
+            description: description,
+            category: category
+        )
     }
-    
 
     
     // MARK: - Status Interactions
@@ -479,65 +448,11 @@ extension FirebaseService {
     
     // MARK: - Real-time Reel Listening
     
-    func listenToReel(_ reelId: String, completion: @escaping (Reel?) -> Void) -> ListenerRegistration {
-        // Remove existing listener
-        Self.reelListeners[reelId]?.remove()
-        
-        let listener = db.collection("reels").document(reelId)
-            .addSnapshotListener { snapshot, error in
-                if let error = error {
-                    print("Error listening to reel: \(error)")
-                    completion(nil)
-                    return
-                }
-                
-                guard let document = snapshot, document.exists else {
-                    completion(nil)
-                    return
-                }
-                
-                var reel = try? document.data(as: Reel.self)
-                reel?.id = document.documentID
-                completion(reel)
-            }
-        
-        Self.reelListeners[reelId] = listener
-        return listener
-    }
     
-    func stopListeningToReel(_ reelId: String) {
-        Self.reelListeners[reelId]?.remove()
-        Self.reelListeners.removeValue(forKey: reelId)
-    }
-
+    
+    
     // MARK: - Enhanced Likes Management
     
-    func listenToReelLikes(_ reelId: String, completion: @escaping ([ReelLike]) -> Void) -> ListenerRegistration {
-        Self.likesListeners[reelId]?.remove()
-        
-        let listener = db.collection("reelLikes")
-            .whereField("reelId", isEqualTo: reelId)
-            .order(by: "likedAt", descending: true)
-            .addSnapshotListener { snapshot, error in
-                if let error = error {
-                    print("Error listening to likes: \(error)")
-                    completion([])
-                    return
-                }
-                
-                // Fix: Properly type the likes array
-                let likes: [ReelLike] = snapshot?.documents.compactMap { doc in
-                    var like = try? doc.data(as: ReelLike.self)
-                    like?.id = doc.documentID
-                    return like
-                } ?? []
-                
-                completion(likes)
-            }
-        
-        Self.likesListeners[reelId] = listener
-        return listener
-    }
     
     
     // MARK: - Update Reel Caption (remove placeholders)
@@ -547,19 +462,21 @@ extension FirebaseService {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
+        // Get the reel to update
+        guard var reel = try await ReelRepository.shared.fetchById(reelId) else {
+            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Reel not found"])
+        }
+        
         // Verify ownership
-        let reel = try await db.collection("reels").document(reelId).getDocument()
-        guard let data = reel.data(),
-              data["userId"] as? String == currentUserId else {
+        guard reel.userId == currentUserId else {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to edit this reel"])
         }
         
-        // Update the reel - allow empty strings (no placeholders)
-        try await db.collection("reels").document(reelId).updateData([
-            "title": title,
-            "description": description,
-            "updatedAt": Date()
-        ])
+        // Update the reel
+        reel.title = title
+        reel.description = description
+        
+        try await ReelRepository.shared.update(reel)
     }
     
     // MARK: - Cleanup
