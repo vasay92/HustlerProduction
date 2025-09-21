@@ -550,7 +550,65 @@ extension FirebaseService {
     }
     
     func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
-        return MessageRepository.shared.listenToConversation(conversationId, completion: completion)
+        messagesListener?.remove()
+        
+        messagesListener = db.collection("messages")
+            .whereField("conversationId", isEqualTo: conversationId)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "timestamp", descending: false)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Error listening to messages: \(error)")
+                    return
+                }
+                
+                print("DEBUG - Listener received \(snapshot?.documents.count ?? 0) documents")
+                
+                let messages: [Message] = snapshot?.documents.compactMap { doc in
+                    var data = doc.data()
+                    print("DEBUG - Document data: \(data)")
+                    
+                    // Clean up empty strings before decoding
+                    if let contextType = data["contextType"] as? String, contextType.isEmpty {
+                        data.removeValue(forKey: "contextType")
+                    }
+                    if let contextId = data["contextId"] as? String, contextId.isEmpty {
+                        data.removeValue(forKey: "contextId")
+                    }
+                    
+                    do {
+                        var message = try Firestore.Decoder().decode(Message.self, from: data)
+                        message.id = doc.documentID
+                        return message
+                    } catch {
+                        print("Failed to decode message: \(error)")
+                        // Try manual creation as fallback
+                        if let senderId = data["senderId"] as? String,
+                           let text = data["text"] as? String,
+                           let conversationId = data["conversationId"] as? String {
+                            var message = Message(
+                                senderId: senderId,
+                                senderName: data["senderName"] as? String ?? "Unknown",
+                                senderProfileImage: data["senderProfileImage"] as? String,
+                                conversationId: conversationId,
+                                text: text
+                            )
+                            message.id = doc.documentID
+                            return message
+                        }
+                        return nil
+                    }
+                } ?? []
+                
+                print("DEBUG - Listener triggered with \(messages.count) messages")
+                for msg in messages {
+                    print("  - Message: \(msg.text) from \(msg.senderId)")
+                }
+                
+                completion(messages)
+            }
+        
+        return messagesListener!
     }
     
     func blockUser(_ userId: String, in conversationId: String) async throws {

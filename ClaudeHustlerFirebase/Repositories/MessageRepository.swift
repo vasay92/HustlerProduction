@@ -1,5 +1,3 @@
-
-
 // MessageRepository.swift
 // Path: ClaudeHustlerFirebase/Repositories/MessageRepository.swift
 
@@ -28,7 +26,7 @@ final class MessageRepository: RepositoryProtocol {
     // MARK: - Fetch Messages with Pagination
     func fetch(limit: Int = 50, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [Message], lastDoc: DocumentSnapshot?) {
         // This fetches all messages for current user (not typically used)
-        guard let userId = Auth.auth().currentUser?.uid else {
+        guard let userId = FirebaseService.shared.currentUser?.id else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
@@ -92,20 +90,18 @@ final class MessageRepository: RepositoryProtocol {
     
     // MARK: - Protocol Conformance Create (required by RepositoryProtocol)
     func create(_ item: Message) async throws -> String {
-        // Use the conversationId from the message itself
+        // Message already has everything we need
         let conversationId = item.conversationId
-        
-        // Call the existing create method
         return try await create(item, in: conversationId)
     }
-    
 
+    // MARK: - Create Message with ConversationId
     func create(_ message: Message, in conversationId: String) async throws -> String {
-        // Don't check auth - Message already has senderId from MessagesViewModel
+        // NO AUTH CHECK - message already has senderId from MessagesViewModel
         
         let messageData: [String: Any] = [
-            "senderId": message.senderId,  // Already provided
-            "senderName": message.senderName,  // Already provided
+            "senderId": message.senderId,  // ALREADY PROVIDED
+            "senderName": message.senderName,  // ALREADY PROVIDED
             "senderProfileImage": message.senderProfileImage ?? "",
             "conversationId": conversationId,
             "text": message.text,
@@ -117,16 +113,28 @@ final class MessageRepository: RepositoryProtocol {
             "contextId": message.contextId ?? ""
         ]
         
+        print("DEBUG - Creating message with senderId: \(message.senderId)")
+        
         // Use TOP-LEVEL messages collection
         let docRef = try await db.collection("messages")
             .addDocument(data: messageData)
         
         // Update conversation's last message
-        try await updateConversationLastMessage(conversationId, message: message.text)
+        try await updateConversationLastMessage(conversationId, message: message.text, senderId: message.senderId)
         
         cache.remove(for: "messages_\(conversationId)")
         
         return docRef.documentID
+    }
+
+    // Helper method for updating conversation
+    private func updateConversationLastMessage(_ conversationId: String, message: String, senderId: String) async throws {
+        try await db.collection("conversations").document(conversationId).updateData([
+            "lastMessage": message,
+            "lastMessageTimestamp": Date(),
+            "lastMessageSenderId": senderId,
+            "updatedAt": Date()
+        ])
     }
     
     // MARK: - Update Message (Edit)
@@ -135,17 +143,15 @@ final class MessageRepository: RepositoryProtocol {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Message ID is required"])
         }
         
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
         // Find the conversation that contains this message
         let conversationId = message.conversationId
         
-        // Verify ownership
-        let document = try await db.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
+        // Verify ownership - using top-level messages collection
+        let document = try await db.collection("messages")
             .document(messageId)
             .getDocument()
         
@@ -154,10 +160,8 @@ final class MessageRepository: RepositoryProtocol {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to edit this message"])
         }
         
-        // Update message
-        try await db.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
+        // Update message in top-level collection
+        try await db.collection("messages")
             .document(messageId)
             .updateData([
                 "text": message.text,
@@ -171,48 +175,38 @@ final class MessageRepository: RepositoryProtocol {
     
     // MARK: - Delete Message
     func delete(_ id: String) async throws {
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Find which conversation contains this message
-        // This is a simplified approach - in production, you might want to store conversationId with the message
-        let conversationsSnapshot = try await db.collection("conversations")
-            .whereField("participantIds", arrayContains: currentUserId)
-            .getDocuments()
+        // Get the message from top-level collection
+        let messageDoc = try await db.collection("messages").document(id).getDocument()
         
-        for conversationDoc in conversationsSnapshot.documents {
-            let messageDoc = try await conversationDoc.reference
-                .collection("messages")
-                .document(id)
-                .getDocument()
-            
-            if messageDoc.exists,
-               let data = messageDoc.data(),
-               data["senderId"] as? String == currentUserId {
-                // Soft delete (mark as deleted but keep record)
-                try await conversationDoc.reference
-                    .collection("messages")
-                    .document(id)
-                    .updateData([
-                        "isDeleted": true,
-                        "text": "This message was deleted",
-                        "deletedAt": Date()
-                    ])
-                
-                // Clear cache
-                cache.remove(for: "messages_\(conversationDoc.documentID)")
-                return
-            }
+        guard messageDoc.exists,
+              let data = messageDoc.data(),
+              data["senderId"] as? String == currentUserId else {
+            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Message not found or unauthorized"])
         }
         
-        throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Message not found or unauthorized"])
+        // Soft delete (mark as deleted but keep record)
+        try await db.collection("messages")
+            .document(id)
+            .updateData([
+                "isDeleted": true,
+                "text": "This message was deleted",
+                "deletedAt": Date()
+            ])
+        
+        // Clear cache
+        if let conversationId = data["conversationId"] as? String {
+            cache.remove(for: "messages_\(conversationId)")
+        }
     }
     
     // MARK: - Conversation Management
     
     func fetchConversations(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [Conversation], lastDoc: DocumentSnapshot?) {
-        guard let userId = Auth.auth().currentUser?.uid else {
+        guard let userId = FirebaseService.shared.currentUser?.id else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
@@ -242,7 +236,7 @@ final class MessageRepository: RepositoryProtocol {
     }
     
     func findOrCreateConversation(with recipientId: String) async throws -> String {
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
@@ -282,7 +276,7 @@ final class MessageRepository: RepositoryProtocol {
     }
     
     func markMessagesAsRead(conversationId: String) async throws {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
+        guard let userId = FirebaseService.shared.currentUser?.id else { return }
         
         let batch = db.batch()
         
@@ -310,16 +304,6 @@ final class MessageRepository: RepositoryProtocol {
     }
     
     // MARK: - Private Helper Methods
-    
-    private func updateConversationLastMessage(_ conversationId: String, message: String) async throws {
-        // Don't check auth - just update the conversation
-        try await db.collection("conversations").document(conversationId).updateData([
-            "lastMessage": message,
-            "lastMessageTimestamp": Date(),
-            "lastMessageSenderId": "", // We could pass this in if needed
-            "updatedAt": Date()
-        ])
-    }
     
     private func updateConversationParticipantInfo(conversationId: String) async {
         do {
@@ -412,8 +396,8 @@ final class MessageRepository: RepositoryProtocol {
         contextType: Message.MessageContextType? = nil,
         contextId: String? = nil
     ) async throws {
-        guard let userId = Auth.auth().currentUser?.uid,
-              let userName = Auth.auth().currentUser?.displayName else {
+        guard let userId = FirebaseService.shared.currentUser?.id,
+              let userName = FirebaseService.shared.currentUser?.name else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
@@ -424,7 +408,7 @@ final class MessageRepository: RepositoryProtocol {
         let message = Message(
             senderId: userId,
             senderName: userName,
-            senderProfileImage: nil, // Will be fetched if needed
+            senderProfileImage: FirebaseService.shared.currentUser?.profileImageURL,
             conversationId: conversationId,
             text: text,
             contextType: contextType,
@@ -435,7 +419,7 @@ final class MessageRepository: RepositoryProtocol {
     }
 
     func blockUser(_ userId: String, in conversationId: String) async throws {
-        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else { return }
         
         try await db.collection("conversations").document(conversationId).updateData([
             "blockedUsers": FieldValue.arrayUnion([currentUserId])
@@ -445,7 +429,7 @@ final class MessageRepository: RepositoryProtocol {
     }
 
     func unblockUser(_ userId: String, in conversationId: String) async throws {
-        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else { return }
         
         try await db.collection("conversations").document(conversationId).updateData([
             "blockedUsers": FieldValue.arrayRemove([currentUserId])
@@ -455,7 +439,7 @@ final class MessageRepository: RepositoryProtocol {
     }
 
     func deleteConversation(_ conversationId: String) async throws {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
+        guard let userId = FirebaseService.shared.currentUser?.id else { return }
         
         // Verify user is participant
         let conversation = try await db.collection("conversations").document(conversationId).getDocument()
@@ -465,10 +449,9 @@ final class MessageRepository: RepositoryProtocol {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
         }
         
-        // Delete all messages
-        let messages = try await db.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
+        // Delete all messages in top-level collection
+        let messages = try await db.collection("messages")
+            .whereField("conversationId", isEqualTo: conversationId)
             .getDocuments()
         
         let batch = db.batch()

@@ -52,17 +52,8 @@ final class MessagesViewModel: ObservableObject {
     }
     
     func sendMessage(text: String, conversationId: String) async {
-        // Add debugging
-        print("DEBUG - currentUserId: \(currentUserId ?? "nil")")
-        print("DEBUG - firebase.currentUser?.id: \(firebase.currentUser?.id ?? "nil")")
-        print("DEBUG - firebase.currentUser?.name: \(firebase.currentUser?.name ?? "nil")")
-        print("DEBUG - Auth.auth().currentUser?.uid: \(Auth.auth().currentUser?.uid ?? "nil")")
-        
         guard let userId = currentUserId,
-              let userName = firebase.currentUser?.name else {
-            print("DEBUG - Guard failed: userId or userName is nil")
-            return
-        }
+              let userName = firebase.currentUser?.name else { return }
         
         let message = Message(
             senderId: userId,
@@ -73,8 +64,14 @@ final class MessagesViewModel: ObservableObject {
         )
         
         do {
-            _ = try await repository.create(message)
-            // Message will appear via listener
+            let messageId = try await repository.create(message)
+            
+            // Add the message locally for immediate UI update
+            var newMessage = message
+            newMessage.id = messageId
+            await MainActor.run {
+                self.messages.append(newMessage)
+            }
         } catch {
             self.error = error
             print("Error sending message: \(error)")

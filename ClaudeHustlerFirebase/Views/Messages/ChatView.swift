@@ -342,7 +342,13 @@ struct ChatView: View {
                 try await firebase.markMessagesAsRead(in: conversationId)
                 
                 // Start listening for new messages
+                // Start listening for new messages
                 messagesListener = firebase.listenToMessages(in: conversationId) { newMessages in
+                    print("DEBUG - Listener triggered with \(newMessages.count) messages")
+                    for msg in newMessages {
+                        print("  - Message: \(msg.text) from \(msg.senderId)")
+                    }
+                    
                     withAnimation {
                         self.messages = newMessages
                     }
