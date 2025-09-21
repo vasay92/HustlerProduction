@@ -25,6 +25,10 @@ final class MessagesViewModel: ObservableObject {
     }
     
     func loadConversations() async {
+        // Clean up any existing listener before starting
+        conversationListener?.remove()
+        conversationListener = nil
+        
         isLoading = true
         do {
             let result = try await repository.fetchConversations(limit: 20)
@@ -35,7 +39,6 @@ final class MessagesViewModel: ObservableObject {
         }
         isLoading = false
     }
-    
     func loadMessages(for conversationId: String) async {
         isLoading = true
         do {
@@ -93,8 +96,10 @@ final class MessagesViewModel: ObservableObject {
     }
     
     deinit {
-        Task { @MainActor in
-                repository.removeAllListeners()
-            }
+        // Synchronously clean up listeners
+        conversationListener?.remove()
+        conversationListener = nil
+        // Don't use Task in deinit - it may not complete
+        print("DEBUG - MessagesViewModel deinit called")
     }
 }

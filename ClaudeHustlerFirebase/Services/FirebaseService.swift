@@ -307,6 +307,8 @@ class FirebaseService: ObservableObject {
             print("Image cache cleared")
         }
     }
+    
+    
 }
 
 // MARK: - Profile Updates Extension
@@ -589,8 +591,68 @@ extension FirebaseService {
         return await MessageRepository.shared.loadMessages(for: conversationId, limit: limit)
     }
     
+    // Replace your existing markMessagesAsRead function with this updated version
     func markMessagesAsRead(in conversationId: String) async throws {
-        try await MessageRepository.shared.markMessagesAsRead(conversationId: conversationId)
+        guard let currentUserId = currentUser?.id else { return }
+        
+        // Get all unread messages in this conversation for current user
+        let unreadMessages = try await db.collection("messages")
+            .whereField("conversationId", isEqualTo: conversationId)
+            .whereField("senderId", isNotEqualTo: currentUserId)
+            .whereField("isRead", isEqualTo: false)
+            .getDocuments()
+        
+        // Batch update all unread messages
+        let batch = db.batch()
+        
+        for document in unreadMessages.documents {
+            batch.updateData([
+                "isRead": true,
+                "readAt": Date()
+            ], forDocument: document.reference)
+        }
+        
+        // Also mark messages sent by current user as delivered if not already
+        let sentMessages = try await db.collection("messages")
+            .whereField("conversationId", isEqualTo: conversationId)
+            .whereField("senderId", isEqualTo: currentUserId)
+            .whereField("isDelivered", isEqualTo: false)
+            .getDocuments()
+        
+        for document in sentMessages.documents {
+            batch.updateData([
+                "isDelivered": true,
+                "deliveredAt": Date()
+            ], forDocument: document.reference)
+        }
+        
+        // Commit all updates
+        if !unreadMessages.documents.isEmpty || !sentMessages.documents.isEmpty {
+            try await batch.commit()
+        }
+        
+        // Update conversation unread count (optional, can fail)
+        do {
+            try await db.collection("conversations")
+                .document(conversationId)
+                .updateData([
+                    "unreadCounts.\(currentUserId)": 0,
+                    "lastReadTimestamps.\(currentUserId)": Date()
+                ])
+        } catch {
+            // Non-critical - conversation update can fail
+            print("Could not update conversation: \(error)")
+        }
+    }
+    
+    // Mark message as delivered
+    func markMessageAsDelivered(_ messageId: String) async throws {
+        try await db.collection("messages")
+            .document(messageId)
+            .updateData([
+                "isDelivered": true,
+                "deliveredAt": Date()
+            ])
     }
     
     func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
@@ -856,6 +918,8 @@ extension FirebaseService {
         return count
     }
 }
+
+
 
 #if DEBUG
 var listenerDebugTimer: Timer?

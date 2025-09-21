@@ -28,6 +28,7 @@ struct ChatView: View {
     @State private var currentConversationId: String?
     @State private var isFromContentView = false
     
+    
     // Navigation context for returning from content
     @State private var navigatingToContent = false
     @State private var selectedContentMessage: Message?
@@ -83,11 +84,6 @@ struct ChatView: View {
                     // Custom Navigation Bar
                     customNavigationBar
                     
-                    // DEBUG: Show message count in UI
-                    Text("Messages count: \(messages.count)")
-                        .foregroundColor(.red)
-                        .padding()
-                    
                     // Messages List
                     ScrollViewReader { scrollProxy in
                         ScrollView {
@@ -99,17 +95,11 @@ struct ChatView: View {
                                         .padding()
                                 } else {
                                     ForEach(messages) { message in
-                                        // DEBUG: Try simple Text first
-                                        Text("\(message.text) - ID: \(message.id ?? "nil")")
-                                            .foregroundColor(.blue)
-                                            .padding()
-                                        
-                                         
-                                         MessageBubbleView(
-                                             message: message,
-                                             isFromCurrentUser: message.senderId == firebase.currentUser?.id
-                                         )
-                                         .id(message.id)
+                                        MessageBubbleView(
+                                            message: message,
+                                            isFromCurrentUser: message.senderId == firebase.currentUser?.id
+                                        )
+                                        .id(message.id)
                                     }
                                 }
                                 
@@ -121,7 +111,16 @@ struct ChatView: View {
                         }
                         .onChange(of: messages.count) { oldCount, newCount in
                             print("DEBUG - messages.count changed from \(oldCount) to \(newCount)")
-                            withAnimation {
+                            // Add delay to ensure views have rendered
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation {
+                                    scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
+                                }
+                            }
+                        }
+                        .onAppear {
+                            // Initial scroll to bottom when view appears
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                 scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
                             }
                         }
@@ -137,6 +136,7 @@ struct ChatView: View {
             }
             .onDisappear {
                 messagesListener?.remove()
+                messagesListener = nil  // IMPORTANT: Set to nil to release the reference
             }
         }
     }
@@ -336,6 +336,13 @@ struct ChatView: View {
             if let conversationId = currentConversationId {
                 messages = await firebase.loadMessages(for: conversationId)
                 
+                // Trigger scroll to bottom after messages load
+                if !messages.isEmpty {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self.scrollToBottom = true
+                    }
+                }
+                
                 // Try to mark messages as read, but don't fail if permissions denied
                 do {
                     try await firebase.markMessagesAsRead(in: conversationId)
@@ -355,6 +362,13 @@ struct ChatView: View {
             // Still try to load messages even if setup partially fails
             if let conversationId = currentConversationId {
                 messages = await firebase.loadMessages(for: conversationId)
+                
+                // Trigger scroll even in error case
+                if !messages.isEmpty {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self.scrollToBottom = true
+                    }
+                }
                 
                 // Start listening anyway
                 messagesListener = firebase.listenToMessages(in: conversationId) { newMessages in
@@ -456,10 +470,37 @@ struct MessageBubbleView: View {
                     .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
                     .cornerRadius(18)
                 
-                // Timestamp
-                Text(message.timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                // Timestamp and read receipt
+                HStack(spacing: 4) {
+                    Text(message.timestamp, style: .time)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    // Only show read receipts for messages from current user
+                    if isFromCurrentUser {
+                        if message.isRead {
+                            // Double checkmark for read
+                            HStack(spacing: -3) {
+                                Image(systemName: "checkmark")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                                Image(systemName: "checkmark")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                        } else if message.isDelivered {
+                            // Single checkmark for delivered
+                            Image(systemName: "checkmark")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        } else {
+                            // Clock for sending
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: isFromCurrentUser ? .trailing : .leading)
             
@@ -468,7 +509,6 @@ struct MessageBubbleView: View {
         .padding(.horizontal)
     }
 }
-
 // MARK: - Report Message View
 
 struct ReportMessageView: View {
