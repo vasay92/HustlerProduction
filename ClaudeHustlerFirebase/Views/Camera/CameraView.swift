@@ -552,10 +552,15 @@ struct ImagePicker: UIViewControllerRepresentable {
     @Binding var singleImage: UIImage?
     @Environment(\.dismiss) var dismiss
     
+    var isMultipleSelection: Bool {
+        // If we're binding to images array, allow multiple selection
+        return singleImage == nil
+    }
+    
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.filter = .images
-        config.selectionLimit = 1
+        config.selectionLimit = isMultipleSelection ? 0 : 1  // 0 means unlimited
         
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
@@ -578,14 +583,38 @@ struct ImagePicker: UIViewControllerRepresentable {
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             parent.dismiss()
             
-            guard let result = results.first else { return }
-            
-            result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
-                if let image = image as? UIImage {
-                    DispatchQueue.main.async {
-                        self.parent.singleImage = image
-                        print("✅ Image set: \(image.size)")
+            // Handle single image selection
+            if !parent.isMultipleSelection {
+                guard let result = results.first else { return }
+                
+                result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                    if let image = image as? UIImage {
+                        DispatchQueue.main.async {
+                            self.parent.singleImage = image
+                            print("✅ Single image set: \(image.size)")
+                        }
                     }
+                }
+            } else {
+                // Handle multiple image selection
+                parent.images = []  // Clear previous selections
+                
+                let group = DispatchGroup()
+                var loadedImages: [UIImage] = []
+                
+                for result in results {
+                    group.enter()
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                        if let image = image as? UIImage {
+                            loadedImages.append(image)
+                        }
+                        group.leave()
+                    }
+                }
+                
+                group.notify(queue: .main) {
+                    self.parent.images = loadedImages
+                    print("✅ Loaded \(loadedImages.count) images")
                 }
             }
         }

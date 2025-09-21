@@ -392,47 +392,46 @@ extension FirebaseService {
     // Fixed createPortfolioCard method for FirebaseService.swift
     // Replace the existing method around line 577 with this version
 
-    func createPortfolioCard(title: String, coverImage: UIImage?, mediaImages: [UIImage], description: String?) async throws {
+    func createPortfolioCard(
+        title: String,
+        coverImage: UIImage?,
+        mediaImages: [UIImage],
+        description: String?
+    ) async throws {
         guard let userId = currentUser?.id else {
             throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        print("Creating portfolio for user: \(userId)")
+        // Upload images
+        var imageURLs: [String] = []
+        
+        // Upload cover image if provided
+        if let coverImage = coverImage {
+            let coverURL = try await uploadImage(coverImage, path: "portfolio/\(userId)/\(UUID().uuidString).jpg")
+            imageURLs.append(coverURL)
+        }
         
         // Upload media images
-        var mediaURLs: [String] = []
-        for (index, image) in mediaImages.enumerated() {
-            let path = "portfolio/\(userId)/\(UUID().uuidString)_\(index).jpg"
-            let url = try await uploadImage(image, path: path)
-            mediaURLs.append(url)
-            print("Uploaded image \(index + 1)/\(mediaImages.count)")
+        for image in mediaImages {
+            let imageURL = try await uploadImage(image, path: "portfolio/\(userId)/\(UUID().uuidString).jpg")
+            imageURLs.append(imageURL)
         }
         
-        // Upload cover image
-        var coverURL: String?
-        if let cover = coverImage {
-            let path = "portfolio/\(userId)/covers/\(UUID().uuidString).jpg"
-            coverURL = try await uploadImage(cover, path: path)
-            print("Uploaded cover image")
-        } else if !mediaURLs.isEmpty {
-            coverURL = mediaURLs.first
-        }
-        
-        // Get existing cards count for display order using PortfolioRepository
+        // Get existing cards count for display order
         let existingCards = try await PortfolioRepository.shared.fetchPortfolioCards(for: userId)
         
-        // Create the portfolio card using PortfolioRepository
-        let newCard = PortfolioCard(
+        // Create portfolio card with CORRECT parameter order from the actual implementation
+        let card = PortfolioCard(
             userId: userId,
             title: title,
-            coverImageURL: coverURL ?? "",
-            mediaURLs: mediaURLs,
-            description: description ?? "",
-            displayOrder: existingCards.count
+            coverImageURL: imageURLs.first,      // coverImageURL comes BEFORE mediaURLs
+            mediaURLs: imageURLs,                 // mediaURLs comes AFTER coverImageURL
+            description: description ?? "",       // description comes AFTER mediaURLs
+            displayOrder: existingCards.count     // displayOrder is last
         )
         
-        let cardId = try await PortfolioRepository.shared.createPortfolioCard(newCard)
-        print("Portfolio saved with ID: \(cardId)")
+        // Use the actual method name from PortfolioRepository
+        _ = try await PortfolioRepository.shared.createPortfolioCard(card)
     }
 }
 
