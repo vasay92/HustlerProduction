@@ -64,15 +64,14 @@ final class MessageRepository: RepositoryProtocol {
         return message
     }
     
-    // MARK: - Fetch Messages for Conversation
     func fetchConversationMessages(
         conversationId: String,
         limit: Int = 50,
         lastDocument: DocumentSnapshot? = nil
     ) async throws -> (items: [Message], lastDoc: DocumentSnapshot?) {
-        var query = db.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
+        // Use top-level messages collection, not subcollection
+        var query = db.collection("messages")  // NOT conversations/id/messages
+            .whereField("conversationId", isEqualTo: conversationId)
             .order(by: "timestamp", descending: true)
             .limit(to: limit)
         
@@ -86,7 +85,7 @@ final class MessageRepository: RepositoryProtocol {
             var message = try? doc.data(as: Message.self)
             message?.id = doc.documentID
             return message
-        }.reversed() // Reverse to show oldest first
+        }.reversed()
         
         return (Array(messages), snapshot.documents.last)
     }
@@ -100,8 +99,13 @@ final class MessageRepository: RepositoryProtocol {
         return try await create(item, in: conversationId)
     }
     
+
     // MARK: - Create Message with ConversationId
     func create(_ message: Message, in conversationId: String) async throws -> String {
+        
+        // Debug logging
+            print("Auth.auth().currentUser?.uid: \(Auth.auth().currentUser?.uid ?? "nil")")
+            print("FirebaseService.shared.currentUser?.id: \(FirebaseService.shared.currentUser?.id ?? "nil")")
         guard let userId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
@@ -109,17 +113,20 @@ final class MessageRepository: RepositoryProtocol {
         // Create message data dictionary
         let messageData: [String: Any] = [
             "senderId": userId,
-            "conversationId": conversationId,
+            "senderName": message.senderName ?? "Unknown",
+            "senderProfileImage": message.senderProfileImage ?? "",
+            "conversationId": conversationId,  // This links it to the conversation
             "text": message.text,
             "timestamp": Date(),
             "isRead": false,
+            "isDeleted": false,
+            "isDelivered": false,
             "contextType": message.contextType?.rawValue ?? "",
             "contextId": message.contextId ?? ""
         ]
         
-        let docRef = try await db.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
+        // Use TOP-LEVEL messages collection, NOT subcollection
+        let docRef = try await db.collection("messages")  // FIXED: Not conversations/id/messages
             .addDocument(data: messageData)
         
         // Update conversation's last message
@@ -356,12 +363,11 @@ final class MessageRepository: RepositoryProtocol {
     // MARK: - Real-time Listening
     
     func listenToConversation(_ conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
-        // Remove existing listener
         messageListeners[conversationId]?.remove()
         
-        let listener = db.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
+        // Listen to top-level messages collection
+        let listener = db.collection("messages")  // NOT conversations/id/messages
+            .whereField("conversationId", isEqualTo: conversationId)
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
@@ -393,5 +399,99 @@ final class MessageRepository: RepositoryProtocol {
         conversationListeners.removeAll()
         messageListeners.values.forEach { $0.remove() }
         messageListeners.removeAll()
+    }
+    
+    // MARK: - Additional Methods for Complete Migration
+
+    func loadMessages(for conversationId: String, limit: Int = 50) async -> [Message] {
+        do {
+            let result = try await fetchConversationMessages(
+                conversationId: conversationId,
+                limit: limit
+            )
+            return result.items
+        } catch {
+            print("Error loading messages: \(error)")
+            return []
+        }
+    }
+
+    func sendMessage(
+        to recipientId: String,
+        text: String,
+        contextType: Message.MessageContextType? = nil,
+        contextId: String? = nil
+    ) async throws {
+        guard let userId = Auth.auth().currentUser?.uid,
+              let userName = Auth.auth().currentUser?.displayName else {
+            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        
+        // Find or create conversation
+        let conversationId = try await findOrCreateConversation(with: recipientId)
+        
+        // Create message
+        let message = Message(
+            senderId: userId,
+            senderName: userName,
+            senderProfileImage: nil, // Will be fetched if needed
+            conversationId: conversationId,
+            text: text,
+            contextType: contextType,
+            contextId: contextId
+        )
+        
+        _ = try await create(message, in: conversationId)
+    }
+
+    func blockUser(_ userId: String, in conversationId: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+        
+        try await db.collection("conversations").document(conversationId).updateData([
+            "blockedUsers": FieldValue.arrayUnion([currentUserId])
+        ])
+        
+        cache.remove(for: "conversations_page_1")
+    }
+
+    func unblockUser(_ userId: String, in conversationId: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+        
+        try await db.collection("conversations").document(conversationId).updateData([
+            "blockedUsers": FieldValue.arrayRemove([currentUserId])
+        ])
+        
+        cache.remove(for: "conversations_page_1")
+    }
+
+    func deleteConversation(_ conversationId: String) async throws {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        
+        // Verify user is participant
+        let conversation = try await db.collection("conversations").document(conversationId).getDocument()
+        guard let data = conversation.data(),
+              let participantIds = data["participantIds"] as? [String],
+              participantIds.contains(userId) else {
+            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
+        }
+        
+        // Delete all messages
+        let messages = try await db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .getDocuments()
+        
+        let batch = db.batch()
+        
+        for doc in messages.documents {
+            batch.deleteDocument(doc.reference)
+        }
+        
+        // Delete conversation
+        batch.deleteDocument(conversation.reference)
+        
+        try await batch.commit()
+        
+        cache.remove(for: "conversations_page_1")
     }
 }

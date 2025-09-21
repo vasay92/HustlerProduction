@@ -211,7 +211,7 @@ struct HomeView: View {
                 startListeningToUnreadCount()
             }
             .onDisappear {
-                conversationsListener?.remove()
+//                conversationsListener?.remove()
             }
         }
     }
@@ -225,16 +225,33 @@ struct HomeView: View {
     
     private func startListeningToUnreadCount() {
         conversationsListener?.remove()
+        conversationsListener = nil  // Clear the old listener
         
-        conversationsListener = firebase.listenToConversations { conversations in
-            Task { @MainActor in
-                var total = 0
-                if let userId = firebase.currentUser?.id {
-                    for conversation in conversations {
-                        total += conversation.unreadCounts[userId] ?? 0
-                    }
+        // Load conversations and count unread messages
+        Task { @MainActor in
+            let conversations = await firebase.loadConversations()
+            
+            var total = 0
+            if let userId = firebase.currentUser?.id {
+                for conversation in conversations {
+                    total += conversation.unreadCounts[userId] ?? 0
                 }
-                self.unreadMessageCount = total
+            }
+            self.unreadMessageCount = total
+            
+            // Optional: Set up periodic refresh (every 30 seconds)
+            // This replaces real-time listening temporarily
+            Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
+                Task { @MainActor in
+                    let updatedConversations = await firebase.loadConversations()
+                    var newTotal = 0
+                    if let userId = firebase.currentUser?.id {
+                        for conversation in updatedConversations {
+                            newTotal += conversation.unreadCounts[userId] ?? 0
+                        }
+                    }
+                    self.unreadMessageCount = newTotal
+                }
             }
         }
     }

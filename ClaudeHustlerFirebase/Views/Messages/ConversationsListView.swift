@@ -155,10 +155,9 @@ struct ConversationsListView: View {
     private func startListeningToConversations() {
         guard let userId = FirebaseService.shared.currentUser?.id else { return }
         
-        conversationsListener = FirebaseService.shared.listenToConversations { [weak viewModel] conversations in
-            Task { @MainActor in
-                viewModel?.conversations = conversations
-            }
+        Task { @MainActor in
+            let conversations = await FirebaseService.shared.loadConversations()
+            viewModel.conversations = conversations
         }
     }
     
