@@ -16,6 +16,7 @@ final class MessagesViewModel: ObservableObject {
     private let repository = MessageRepository.shared
     private let firebase = FirebaseService.shared
     private var conversationListener: ListenerRegistration?
+    private var messagesListener: ListenerRegistration?
     private var currentUserId: String?
     
     init() {
@@ -24,82 +25,143 @@ final class MessagesViewModel: ObservableObject {
         print("DEBUG - MessagesViewModel init - currentUserId: \(self.currentUserId ?? "nil")")
     }
     
-    func loadConversations() async {
-        // Clean up any existing listener before starting
-        conversationListener?.remove()
-        conversationListener = nil
-        
-        isLoading = true
-        do {
-            let result = try await repository.fetchConversations(limit: 20)
-            conversations = result.items
-        } catch {
-            self.error = error
-            print("Error loading conversations: \(error)")
-        }
-        isLoading = false
-    }
-    func loadMessages(for conversationId: String) async {
-        isLoading = true
-        do {
-            let result = try await repository.fetchConversationMessages(
-                conversationId: conversationId,
-                limit: 50
-            )
-            messages = result.items.reversed() // Show in chronological order
-        } catch {
-            self.error = error
-            print("Error loading messages: \(error)")
-        }
-        isLoading = false
+    deinit {
+        cleanupListeners()
     }
     
-    func sendMessage(text: String, conversationId: String) async {
-        guard let userId = currentUserId,
-              let userName = firebase.currentUser?.name else { return }
-        
-        let message = Message(
-            senderId: userId,
-            senderName: userName,
-            senderProfileImage: firebase.currentUser?.profileImageURL,
-            conversationId: conversationId,
-            text: text
-        )
+    // MARK: - Conversation Management
+    
+    func loadConversations() async {
+        isLoading = true
+        error = nil
         
         do {
-            let messageId = try await repository.create(message)
+            let (fetchedConversations, _) = try await repository.fetch(limit: 50, lastDocument: nil)
             
-            // Add the message locally for immediate UI update
-            var newMessage = message
-            newMessage.id = messageId
             await MainActor.run {
-                self.messages.append(newMessage)
+                self.conversations = fetchedConversations
+                self.isLoading = false
             }
         } catch {
-            self.error = error
-            print("Error sending message: \(error)")
+            await MainActor.run {
+                self.error = error
+                self.isLoading = false
+            }
+            print("Error loading conversations: \(error)")
         }
     }
     
-    func markMessagesAsRead(conversationId: String) async {
-        do {
-            try await repository.markMessagesAsRead(conversationId: conversationId)
-        } catch {
-            print("Error marking messages as read: \(error)")
-        }
+    func findOrCreateConversation(with recipientId: String) async throws -> String {
+        return try await repository.findOrCreateConversation(with: recipientId)
     }
     
-    func deleteMessage(_ messageId: String) async {
+    func deleteConversation(_ conversationId: String) async throws {
+        try await repository.delete(conversationId)
+        conversations.removeAll { $0.id == conversationId }
+    }
+    
+    // MARK: - Message Management
+    
+    func sendMessage(
+        to recipientId: String,
+        text: String,
+        contextType: Message.MessageContextType? = nil,
+        contextId: String? = nil,
+        contextData: (title: String, image: String?, userId: String)? = nil
+    ) async throws {
+        let conversationId = try await repository.findOrCreateConversation(with: recipientId)
         
-            print("Error deleting message: \(error)")
-
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "MessagesViewModel", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        
+        // Get current user info
+        let currentUser = firebase.currentUser
+        
+        // Create the message
+        let message = Message(
+            senderId: currentUserId,
+            senderName: currentUser?.name ?? "Unknown",
+            senderProfileImage: currentUser?.profileImageURL,
+            conversationId: conversationId,
+            text: text,
+            contextType: contextType,
+            contextId: contextId,
+            contextTitle: contextData?.title,
+            contextImage: contextData?.image,
+            contextUserId: contextData?.userId
+        )
+        
+        // Send through repository
+        try await repository.sendMessage(message)
     }
     
-    deinit {
-        // Synchronously clean up listeners
+    func loadMessages(for conversationId: String) async {
+        do {
+            let fetchedMessages = try await repository.fetchMessages(for: conversationId, limit: 100)
+            
+            await MainActor.run {
+                self.messages = fetchedMessages
+            }
+        } catch {
+            print("Error loading messages: \(error)")
+            self.messages = []
+        }
+    }
+    
+    func markMessagesAsRead(in conversationId: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+        try await repository.markMessagesAsRead(conversationId: conversationId, userId: currentUserId)
+    }
+    
+    func deleteMessage(_ messageId: String) async throws {
+        guard let message = messages.first(where: { $0.id == messageId }) else { return }
+        try await repository.deleteMessage(messageId, in: message.conversationId)
+        messages.removeAll { $0.id == messageId }
+    }
+    
+    // MARK: - Real-time Listeners
+    
+    func listenToConversations() {
+        guard let userId = currentUserId else { return }
+        
+        conversationListener = repository.listenToConversations(userId: userId) { [weak self] conversations in
+            DispatchQueue.main.async {
+                self?.conversations = conversations
+            }
+        }
+    }
+    
+    func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) {
+        messagesListener?.remove() // Remove any existing listener
+        
+        messagesListener = repository.listenToMessages(conversationId: conversationId) { [weak self] messages in
+            DispatchQueue.main.async {
+                self?.messages = messages
+                completion(messages)
+            }
+        }
+    }
+    
+    func stopListeningToMessages() {
+        messagesListener?.remove()
+        messagesListener = nil
+    }
+    
+    // MARK: - Cleanup
+    
+    private func cleanupListeners() {
         conversationListener?.remove()
+        messagesListener?.remove()
         conversationListener = nil
-        // Don't use Task in deinit - it may not complete
-        print("DEBUG - MessagesViewModel deinit called")
+        messagesListener = nil
+    }
+    
+    // MARK: - Refresh
+    
+    func refresh() async {
+        conversations = []
+        messages = []
+        await loadConversations()
     }
 }

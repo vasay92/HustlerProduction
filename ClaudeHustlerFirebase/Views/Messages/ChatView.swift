@@ -11,6 +11,7 @@ struct ChatView: View {
     let contextId: String?
     let contextData: (title: String, image: String?, userId: String)?
     
+    @StateObject private var viewModel = MessagesViewModel()
     @StateObject private var firebase = FirebaseService.shared
     @Environment(\.dismiss) var dismiss
     
@@ -21,13 +22,11 @@ struct ChatView: View {
     @State private var showingClearConfirmation = false
     @State private var showingReportSheet = false
     @State private var reportMessageId: String?
-    @State private var messagesListener: ListenerRegistration?
     @State private var scrollToBottom = false
     @State private var keyboardHeight: CGFloat = 0
     @State private var otherUser: User?
     @State private var currentConversationId: String?
     @State private var isFromContentView = false
-    
     
     // Navigation context for returning from content
     @State private var navigatingToContent = false
@@ -74,69 +73,61 @@ struct ChatView: View {
     }
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Custom Navigation Bar
+                customNavigationBar
                 
-                VStack(spacing: 0) {
-                    // Custom Navigation Bar
-                    customNavigationBar
-                    
-                    // Messages List
-                    ScrollViewReader { scrollProxy in
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                // DEBUG: Simple test to see if ForEach works
-                                if messages.isEmpty {
-                                    Text("No messages to display")
-                                        .foregroundColor(.gray)
-                                        .padding()
-                                } else {
-                                    ForEach(messages) { message in
-                                        MessageBubbleView(
-                                            message: message,
-                                            isFromCurrentUser: message.senderId == firebase.currentUser?.id
-                                        )
-                                        .id(message.id)
+                // Messages List
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            ForEach(messages) { message in
+                                MessageBubble(
+                                    message: message,
+                                    isCurrentUser: message.senderId == firebase.currentUser?.id,
+                                    showContext: message.contextType != nil
+                                ) {
+                                    // Context tap action
+                                    if let contextType = message.contextType,
+                                       let contextId = message.contextId {
+                                        navigateToContent(type: contextType, id: contextId)
                                     }
                                 }
-                                
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id(bottomAnchor)
+                                .id(message.id)
                             }
-                            .padding()
+                            
+                            Color.clear
+                                .frame(height: 1)
+                                .id(bottomAnchor)
                         }
-                        .onChange(of: messages.count) { oldCount, newCount in
-                            print("DEBUG - messages.count changed from \(oldCount) to \(newCount)")
-                            // Add delay to ensure views have rendered
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                withAnimation {
-                                    scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
-                                }
-                            }
-                        }
-                        .onAppear {
-                            // Initial scroll to bottom when view appears
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
-                            }
+                        .padding()
+                    }
+                    .background(Color(.systemGray6))
+                    .onChange(of: messages.count) { _ in
+                        withAnimation {
+                            scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
                         }
                     }
-                    
-                    // Message Composer
-                    messageComposer
+                    .onChange(of: scrollToBottom) { shouldScroll in
+                        if shouldScroll {
+                            withAnimation {
+                                scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
+                            }
+                            scrollToBottom = false
+                        }
+                    }
                 }
+                
+                // Message Composer
+                messageComposer
             }
             .navigationBarHidden(true)
             .task {
                 await setupChat()
             }
             .onDisappear {
-                messagesListener?.remove()
-                messagesListener = nil  // IMPORTANT: Set to nil to release the reference
+                viewModel.stopListeningToMessages()
             }
         }
     }
@@ -147,9 +138,7 @@ struct ChatView: View {
     private var customNavigationBar: some View {
         HStack(spacing: 12) {
             // Back button
-            Button(action: {
-                dismiss()
-            }) {
+            Button(action: { dismiss() }) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                         .font(.title3)
@@ -314,11 +303,9 @@ struct ChatView: View {
             if let conversation = conversation {
                 currentConversationId = conversation.id
                 print("DEBUG - Using existing conversation: \(conversation.id ?? "nil")")
-                print("DEBUG - Participants: \(conversation.participantIds)")
             } else if let recipientId = recipientId {
                 print("DEBUG - Creating/finding conversation with recipient: \(recipientId)")
-                print("DEBUG - Current user: \(firebase.currentUser?.id ?? "nil")")
-                currentConversationId = try await firebase.findOrCreateConversation(with: recipientId)
+                currentConversationId = try await viewModel.findOrCreateConversation(with: recipientId)
                 print("DEBUG - Got conversation ID: \(currentConversationId ?? "nil")")
             }
             
@@ -332,9 +319,10 @@ struct ChatView: View {
                 otherUser?.id = otherUserId
             }
             
-            // Load messages - this should work even if marking as read fails
+            // Load messages through viewModel
             if let conversationId = currentConversationId {
-                messages = await firebase.loadMessages(for: conversationId)
+                await viewModel.loadMessages(for: conversationId)
+                messages = viewModel.messages
                 
                 // Trigger scroll to bottom after messages load
                 if !messages.isEmpty {
@@ -343,15 +331,11 @@ struct ChatView: View {
                     }
                 }
                 
-                // Try to mark messages as read, but don't fail if permissions denied
-                do {
-                    try await firebase.markMessagesAsRead(in: conversationId)
-                } catch {
-                    print("Could not mark messages as read (non-critical): \(error)")
-                }
+                // Mark messages as read
+                try await viewModel.markMessagesAsRead(in: conversationId)
                 
                 // Start listening for new messages
-                messagesListener = firebase.listenToMessages(in: conversationId) { newMessages in
+                viewModel.listenToMessages(in: conversationId) { newMessages in
                     DispatchQueue.main.async {
                         self.messages = newMessages
                     }
@@ -359,24 +343,6 @@ struct ChatView: View {
             }
         } catch {
             print("Error setting up chat: \(error)")
-            // Still try to load messages even if setup partially fails
-            if let conversationId = currentConversationId {
-                messages = await firebase.loadMessages(for: conversationId)
-                
-                // Trigger scroll even in error case
-                if !messages.isEmpty {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.scrollToBottom = true
-                    }
-                }
-                
-                // Start listening anyway
-                messagesListener = firebase.listenToMessages(in: conversationId) { newMessages in
-                    DispatchQueue.main.async {
-                        self.messages = newMessages
-                    }
-                }
-            }
         }
         
         isLoadingMessages = false
@@ -384,16 +350,14 @@ struct ChatView: View {
     
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        guard !text.isEmpty else { return }
-        guard let recipientId = otherUserId else { return }
+        guard !text.isEmpty, let recipientId = otherUserId else { return }
         
         Task {
             do {
                 // Include context only if coming from content view
                 let shouldIncludeContext = isFromContentView && contextType != nil
                 
-                try await firebase.sendMessage(
+                try await viewModel.sendMessage(
                     to: recipientId,
                     text: text,
                     contextType: shouldIncludeContext ? contextType : nil,
@@ -403,185 +367,31 @@ struct ChatView: View {
                 
                 messageText = ""
                 
-                // Clear context after first message if from content view
-                if isFromContentView {
-                    isFromContentView = false
+                // Reload messages
+                if let conversationId = currentConversationId {
+                    await viewModel.loadMessages(for: conversationId)
+                    messages = viewModel.messages
                 }
+                
+                // Scroll to bottom
+                scrollToBottom = true
             } catch {
                 print("Error sending message: \(error)")
             }
         }
     }
     
-    private func blockUser() async {
-        guard let conversationId = currentConversationId,
-              let userId = otherUserId else { return }
-        
-        do {
-            try await firebase.blockUser(userId, in: conversationId)
-            dismiss()
-        } catch {
-            print("Error blocking user: \(error)")
-        }
-    }
-    
-    private func clearChat() async {
-        guard let conversationId = currentConversationId else { return }
-        
-        do {
-            try await firebase.clearConversation(conversationId)
-            messages = []
-        } catch {
-            print("Error clearing chat: \(error)")
-        }
-    }
-    
     private func contextTypeString(_ type: Message.MessageContextType) -> String {
         switch type {
-        case .post: return "Post"
-        case .reel: return "Reel"
-        case .status: return "Status"
-        }
-    }
-}
-
-// MARK: - Message Bubble View
-
-struct MessageBubbleView: View {
-    let message: Message
-    let isFromCurrentUser: Bool
-    
-    var body: some View {
-        HStack {
-            if isFromCurrentUser { Spacer() }
-            
-            VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
-                // Content preview if exists
-                if message.contextType != nil {
-                    ContentPreviewCard(message: message)
-                }
-                
-                // Message bubble
-                Text(message.text)
-                    .font(.body)
-                    .foregroundColor(isFromCurrentUser ? .white : .black)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
-                    .cornerRadius(18)
-                
-                // Timestamp and read receipt
-                HStack(spacing: 4) {
-                    Text(message.timestamp, style: .time)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    
-                    // Only show read receipts for messages from current user
-                    if isFromCurrentUser {
-                        if message.isRead {
-                            // Double checkmark for read
-                            HStack(spacing: -3) {
-                                Image(systemName: "checkmark")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                                Image(systemName: "checkmark")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                            }
-                        } else if message.isDelivered {
-                            // Single checkmark for delivered
-                            Image(systemName: "checkmark")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        } else {
-                            // Clock for sending
-                            Image(systemName: "clock")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-            }
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: isFromCurrentUser ? .trailing : .leading)
-            
-            if !isFromCurrentUser { Spacer() }
-        }
-        .padding(.horizontal)
-    }
-}
-// MARK: - Report Message View
-
-struct ReportMessageView: View {
-    let messageId: String?
-    let conversationId: String
-    let reportedUserId: String
-    
-    @Environment(\.dismiss) var dismiss
-    @StateObject private var firebase = FirebaseService.shared
-    @State private var selectedReason: MessageReport.ReportReason = .spam
-    @State private var additionalDetails = ""
-    @State private var isSubmitting = false
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Reason for Report") {
-                    Picker("Reason", selection: $selectedReason) {
-                        ForEach(MessageReport.ReportReason.allCases, id: \.self) { reason in
-                            Text(reason.displayName).tag(reason)
-                        }
-                    }
-                    .pickerStyle(DefaultPickerStyle())
-                }
-                
-                Section("Additional Details (Optional)") {
-                    TextEditor(text: $additionalDetails)
-                        .frame(minHeight: 100)
-                }
-                
-                Section {
-                    Button(action: submitReport) {
-                        if isSubmitting {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Submit Report")
-                                .frame(maxWidth: .infinity)
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .listRowBackground(Color.red)
-                    .disabled(isSubmitting)
-                }
-            }
-            .navigationTitle("Report Message")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
+        case .post: return "post"
+        case .reel: return "reel"
+        case .status: return "status"
         }
     }
     
-    private func submitReport() {
-        isSubmitting = true
-        
-        Task {
-            do {
-                // Temporarily disabled during migration
-                // TODO: Implement in MessageRepository
-                print("Report submission temporarily disabled")
-                print("Would report: messageId: \(messageId ?? "none"), reason: \(selectedReason)")
-                
-                // Simulate successful submission
-                try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-                
-                dismiss()
-            } catch {
-                print("Error submitting report: \(error)")
-                isSubmitting = false
-            }
-        }
+    private func navigateToContent(type: Message.MessageContextType, id: String) {
+        // Handle navigation to content based on type
+        selectedContentMessage = messages.first { $0.contextId == id }
+        navigatingToContent = true
     }
 }
