@@ -1,5 +1,3 @@
-
-
 // CameraView.swift
 // Path: ClaudeHustlerFirebase/Views/Camera/CameraView.swift
 
@@ -9,6 +7,79 @@ import AVKit
 import FirebaseStorage
 import FirebaseFirestore
 
+// MARK: - ImagePicker
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var images: [UIImage]
+    @Binding var singleImage: UIImage?
+    @Environment(\.dismiss) var dismiss
+    
+    var isMultipleSelection: Bool {
+        return singleImage == nil
+    }
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = isMultipleSelection ? 0 : 1
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: ImagePicker
+        
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            parent.dismiss()
+            
+            if !parent.isMultipleSelection {
+                guard let result = results.first else { return }
+                
+                result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                    if let image = image as? UIImage {
+                        DispatchQueue.main.async {
+                            self.parent.singleImage = image
+                            print("✅ Single image set: \(image.size)")
+                        }
+                    }
+                }
+            } else {
+                parent.images = []
+                
+                let group = DispatchGroup()
+                var loadedImages: [UIImage] = []
+                
+                for result in results {
+                    group.enter()
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                        if let image = image as? UIImage {
+                            loadedImages.append(image)
+                        }
+                        group.leave()
+                    }
+                }
+                
+                group.notify(queue: .main) {
+                    self.parent.images = loadedImages
+                    print("✅ Loaded \(loadedImages.count) images")
+                }
+            }
+        }
+    }
+}
+
+// MARK: - CameraView
 struct CameraView: View {
     let mode: CameraMode
     @Environment(\.dismiss) var dismiss
@@ -58,7 +129,6 @@ struct CameraView: View {
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(images: .constant([]), singleImage: $capturedImage)
         }
-        
         .sheet(isPresented: $showingVideoPicker) {
             VideoPicker(videoURL: $capturedVideoURL)
         }
@@ -131,63 +201,55 @@ struct CameraView: View {
                 if isPosting {
                     // Upload progress
                     VStack(spacing: 8) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        
-                        Text("Uploading... \(Int(uploadProgress * 100))%")
-                            .font(.caption)
-                            .foregroundColor(.white)
-                        
                         ProgressView(value: uploadProgress)
                             .progressViewStyle(LinearProgressViewStyle(tint: .white))
                             .padding(.horizontal)
+                        
+                        Text("Uploading... \(Int(uploadProgress * 100))%")
+                            .foregroundColor(.white)
+                            .font(.caption)
                     }
                     .padding()
                 } else {
+                    // Action buttons
                     HStack(spacing: 16) {
                         // Retake button
                         Button(action: retakeContent) {
-                            HStack {
-                                Image(systemName: "arrow.counterclockwise")
-                                Text("Retake")
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 12)
-                            .background(Color.gray.opacity(0.6))
-                            .cornerRadius(25)
+                            Text("Retake")
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.gray.opacity(0.6))
+                                .cornerRadius(12)
                         }
                         
                         // Post button
-                        Button(action: { Task { await postContent() } }) {
-                            HStack {
-                                Image(systemName: mode == .status ? "circle.dashed" : "play.rectangle.fill")
-                                Text(mode == .status ? "Share Story" : "Post Reel")
+                        Button(action: {
+                            Task {
+                                await postContent()
                             }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 12)
-                            .background(
-                                LinearGradient(
-                                    colors: mode == .status ? [Color.orange, Color.red] : [Color.purple, Color.blue],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(25)
+                        }) {
+                            Text(mode == .status ? "Share Story" : "Post Reel")
+                                .foregroundColor(.white)
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .cornerRadius(12)
                         }
-                        .disabled(false)
                     }
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.bottom, 20)
                 }
             }
-            .background(Color.black.opacity(0.8))
         }
     }
     
     @ViewBuilder
     private var cameraSelectionView: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 40) {
+            Spacer()
+            
             // Icon
             Image(systemName: mode == .status ? "circle.dashed" : "play.rectangle")
                 .font(.system(size: 80))
@@ -226,19 +288,6 @@ struct CameraView: View {
                     }
                 }
                 
-                // Photo option
-                Button(action: { imagePickerSourceType = .camera; showingImagePicker = true }) {
-                    HStack {
-                        Image(systemName: "camera.fill")
-                        Text(mode == .status ? "Take Photo" : "Use Photo")
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(mode == .status ? Color.orange : Color.blue)
-                    .cornerRadius(12)
-                }
-                
                 // Gallery option
                 Button(action: openGallery) {
                     HStack {
@@ -253,6 +302,8 @@ struct CameraView: View {
                 }
             }
             .padding(.horizontal, 40)
+            
+            Spacer()
         }
     }
     
@@ -280,9 +331,12 @@ struct CameraView: View {
     
     private func handleClose() {
         if capturedImage != nil || capturedVideoURL != nil {
-            // Show confirmation if content is captured
+            // Reset and go back to selection
             capturedImage = nil
             capturedVideoURL = nil
+            caption = ""
+            title = ""
+            description = ""
         } else {
             dismiss()
         }
@@ -296,16 +350,14 @@ struct CameraView: View {
         description = ""
     }
     
-    private func openGallery() { imagePickerSourceType = .photoLibrary;
+    private func openGallery() {
+        imagePickerSourceType = .photoLibrary
         showingImagePicker = true
     }
     
     private func postContent() async {
         isPosting = true
         uploadProgress = 0
-        
-        print("🎬 Starting post for mode: \(mode)")
-        print("📝 Title: \(title), Description: \(description)")
         
         do {
             if mode == .status {
@@ -319,7 +371,6 @@ struct CameraView: View {
                 dismiss()
             }
         } catch {
-            print("❌ Post error: \(error)")
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 showingError = true
@@ -330,131 +381,114 @@ struct CameraView: View {
     
     private func postStatus() async throws {
         guard let image = capturedImage else {
-            print("No captured image")
-            return
+            throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No image selected"])
         }
         
-        do {
-            uploadProgress = 0.3
-            
-            // Use StatusRepository instead of direct Firestore
-            let statusId = try await StatusRepository.shared.createStatus(
-                image: image,
-                caption: caption.isEmpty ? nil : caption
-            )
-            
-            uploadProgress = 1.0
-            
-            print("✅ Created status with ID: \(statusId)")
-            
-            // Refresh statuses in ReelsViewModel
-            if let reelsVM = ReelsViewModel.shared {
-                await reelsVM.loadStatuses()
-            }
-        } catch {
-            print("Error creating status: \(error)")
-            throw error
-        }
-    }
-    
-    private func postReel() async throws {
-        do {
-            var mediaURL = ""
-            var thumbnailURL = ""
-            
-            uploadProgress = 0.2
-            
-            // Get userId first
-            guard let userId = firebase.currentUser?.id else {
-                throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
-            }
-            
-            if let image = capturedImage {
-                // Upload image as both media and thumbnail
-                let imagePath = "reels/\(userId)/\(UUID().uuidString).jpg"
-                mediaURL = try await firebase.uploadImage(image, path: imagePath)
-                thumbnailURL = mediaURL
-            } else if let videoURL = capturedVideoURL {
-                // Upload video and generate thumbnail
-                let videoPath = "reels/\(userId)/\(UUID().uuidString).mp4"
-                mediaURL = try await uploadVideo(videoURL, path: videoPath)
-                if let thumbnail = generateVideoThumbnail(from: videoURL) {
-                    let thumbPath = "reels/\(userId)/thumbnails/\(UUID().uuidString).jpg"
-                    thumbnailURL = try await firebase.uploadImage(thumbnail, path: thumbPath)
-                }
-            }
-            
-            uploadProgress = 0.6
-            
-            // Ensure title has a value
-            let reelTitle = title.isEmpty ? "Untitled Reel" : title
-            let reelDescription = description.isEmpty ? "" : description
-            
-            print("📝 Creating reel with title: \(reelTitle)")
-            print("📸 Media URL: \(mediaURL)")
-            print("🖼 Thumbnail URL: \(thumbnailURL)")
-            
-            // Create reel data with proper Timestamp
-            let reelData: [String: Any] = [
-                "userId": userId,
-                "userName": firebase.currentUser?.name ?? "User",
-                "userProfileImage": firebase.currentUser?.profileImageURL ?? "",
-                "videoURL": mediaURL.isEmpty ? thumbnailURL : mediaURL,  // Ensure videoURL is never empty
-                "thumbnailURL": thumbnailURL.isEmpty ? mediaURL : thumbnailURL,  // Ensure thumbnailURL is never empty
-                "title": reelTitle,
-                "description": reelDescription,
-                "category": selectedCategory.rawValue,
-                "hashtags": extractHashtags(from: reelDescription),
-                "createdAt": Timestamp(date: Date()),  // ✅ Use Firestore Timestamp
-                "likes": [],
-                "comments": 0,
-                "shares": 0,
-                "views": 0,
-                "isPromoted": false
-            ]
-            
-            uploadProgress = 0.8
-            
-            print("📤 Sending to Firestore: \(reelData)")
-            
-            let ref = try await Firestore.firestore()
-                .collection("reels")
-                .addDocument(data: reelData)
-            
-            uploadProgress = 1.0
-            
-            print("✅ Created reel with ID: \(ref.documentID)")
-            
-            // Refresh reels
-            await firebase.loadReels()
-        } catch {
-            print("❌ Error in postReel: \(error)")
-            throw error
-        }
-    }
-    
-    private func uploadImage(_ image: UIImage) async throws -> String {
+        uploadProgress = 0.3
+        
+        // Upload the image first
         guard let userId = firebase.currentUser?.id else {
             throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
         }
         
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-            throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to process image"])
+        let imagePath = "statuses/\(userId)/\(UUID().uuidString).jpg"
+        let imageURL = try await firebase.uploadImage(image, path: imagePath)
+        
+        uploadProgress = 0.6
+        
+        // Create the status object
+        let status = Status(
+            userId: userId,
+            userName: firebase.currentUser?.name ?? "Unknown",
+            userProfileImage: firebase.currentUser?.profileImageURL ?? "",
+            mediaURL: imageURL,
+            caption: caption.isEmpty ? nil : caption,
+            mediaType: .image,
+            expiresAt: Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date(),
+            viewedBy: [],
+            isActive: true
+        )
+        
+        uploadProgress = 0.8
+        
+        // Create status using repository
+        let statusId = try await StatusRepository.shared.create(status)
+        
+        uploadProgress = 1.0
+        
+        print("✅ Created status with ID: \(statusId)")
+        
+        // Refresh statuses in ReelsViewModel
+        if let reelsVM = ReelsViewModel.shared {
+            await reelsVM.loadStatuses()
+        }
+    }
+    
+    private func postReel() async throws {
+        var mediaURL = ""
+        var thumbnailURL = ""
+        
+        uploadProgress = 0.2
+        
+        // Get userId first
+        guard let userId = firebase.currentUser?.id else {
+            throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
         }
         
-        let fileName = "\(UUID().uuidString).jpg"
-        let path = mode == .status ?
-            "statuses/\(userId)/\(fileName)" :
-            "reels/\(userId)/thumbnails/\(fileName)"
+        if let image = capturedImage {
+            // Upload image as both media and thumbnail
+            let imagePath = "reels/\(userId)/\(UUID().uuidString).jpg"
+            mediaURL = try await firebase.uploadImage(image, path: imagePath)
+            thumbnailURL = mediaURL
+        } else if let videoURL = capturedVideoURL {
+            // Upload video and generate thumbnail
+            let videoPath = "reels/\(userId)/\(UUID().uuidString).mp4"
+            mediaURL = try await uploadVideo(videoURL, path: videoPath)
+            if let thumbnail = generateVideoThumbnail(from: videoURL) {
+                let thumbPath = "reels/\(userId)/thumbnails/\(UUID().uuidString).jpg"
+                thumbnailURL = try await firebase.uploadImage(thumbnail, path: thumbPath)
+            }
+        } else {
+            throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No media selected"])
+        }
         
-        print("📸 Uploading image to: \(path)")
+        uploadProgress = 0.6
         
-        let storageRef = Storage.storage().reference().child(path)
+        // Ensure title has a value
+        let reelTitle = title.isEmpty ? "Untitled Reel" : title
+        let reelDescription = description.isEmpty ? "" : description
         
-        let _ = try await storageRef.putDataAsync(imageData)
-        let downloadURL = try await storageRef.downloadURL()
+        uploadProgress = 0.8
         
-        return downloadURL.absoluteString
+        // Create Reel object
+        let reel = Reel(
+            userId: userId,
+            userName: firebase.currentUser?.name ?? "Unknown",
+            userProfileImage: firebase.currentUser?.profileImageURL ?? "",
+            videoURL: mediaURL,
+            thumbnailURL: thumbnailURL.isEmpty ? mediaURL : thumbnailURL,
+            title: reelTitle,
+            description: reelDescription,
+            category: selectedCategory,
+            hashtags: extractHashtags(from: reelDescription),
+            likes: [],
+            comments: 0,
+            shares: 0,
+            views: 0,
+            isPromoted: false
+        )
+        
+        // Use ReelRepository to create the reel
+        let reelId = try await ReelRepository.shared.create(reel)
+        
+        uploadProgress = 1.0
+        
+        print("✅ Created reel with ID: \(reelId)")
+        
+        // Refresh reels in view model
+        if let reelsVM = ReelsViewModel.shared {
+            await reelsVM.loadInitialReels()
+        }
     }
     
     private func uploadVideo(_ url: URL, path: String? = nil) async throws -> String {
@@ -465,7 +499,6 @@ struct CameraView: View {
         let videoData = try Data(contentsOf: url)
         
         let finalPath = path ?? "reels/\(userId)/\(UUID().uuidString).mp4"
-        print("🎥 Uploading video to: \(finalPath)")
         
         let storageRef = Storage.storage().reference().child(finalPath)
         
@@ -540,83 +573,6 @@ struct VideoPicker: UIViewControllerRepresentable {
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
-        }
-    }
-}
-
-// Note: ImagePicker should already exist in your project
-// If not, here's a basic implementation:
-
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var images: [UIImage]
-    @Binding var singleImage: UIImage?
-    @Environment(\.dismiss) var dismiss
-    
-    var isMultipleSelection: Bool {
-        // If we're binding to images array, allow multiple selection
-        return singleImage == nil
-    }
-    
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var config = PHPickerConfiguration()
-        config.filter = .images
-        config.selectionLimit = isMultipleSelection ? 0 : 1  // 0 means unlimited
-        
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = context.coordinator
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let parent: ImagePicker
-        
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-        
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            parent.dismiss()
-            
-            // Handle single image selection
-            if !parent.isMultipleSelection {
-                guard let result = results.first else { return }
-                
-                result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
-                    if let image = image as? UIImage {
-                        DispatchQueue.main.async {
-                            self.parent.singleImage = image
-                            print("✅ Single image set: \(image.size)")
-                        }
-                    }
-                }
-            } else {
-                // Handle multiple image selection
-                parent.images = []  // Clear previous selections
-                
-                let group = DispatchGroup()
-                var loadedImages: [UIImage] = []
-                
-                for result in results {
-                    group.enter()
-                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
-                        if let image = image as? UIImage {
-                            loadedImages.append(image)
-                        }
-                        group.leave()
-                    }
-                }
-                
-                group.notify(queue: .main) {
-                    self.parent.images = loadedImages
-                    print("✅ Loaded \(loadedImages.count) images")
-                }
-            }
         }
     }
 }

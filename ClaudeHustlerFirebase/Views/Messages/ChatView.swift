@@ -83,10 +83,9 @@ struct ChatView: View {
                     ScrollView {
                         VStack(spacing: 12) {
                             ForEach(messages) { message in
-                                MessageBubble(
+                                MessageRow(
                                     message: message,
-                                    isCurrentUser: message.senderId == firebase.currentUser?.id,
-                                    showContext: message.contextType != nil
+                                    isCurrentUser: message.senderId == firebase.currentUser?.id
                                 ) {
                                     // Context tap action
                                     if let contextType = message.contextType,
@@ -393,5 +392,77 @@ struct ChatView: View {
         // Handle navigation to content based on type
         selectedContentMessage = messages.first { $0.contextId == id }
         navigatingToContent = true
+    }
+}
+
+// MARK: - Message Row Component
+struct MessageRow: View {
+    let message: Message
+    let isCurrentUser: Bool
+    var onContextTap: (() -> Void)? = nil
+    
+    var body: some View {
+        HStack {
+            if isCurrentUser {
+                Spacer()
+            }
+            
+            VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: 4) {
+                // Context card if present
+                if message.contextType != nil {
+                    Button(action: {
+                        onContextTap?()
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: contextIcon)
+                                .font(.caption)
+                            
+                            if let title = message.contextTitle {
+                                Text(title)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(8)
+                        .background(Color(.systemGray5))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                // Message bubble
+                Text(message.text)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(isCurrentUser ? Color.blue : Color(.systemGray5))
+                    .foregroundColor(isCurrentUser ? .white : .primary)
+                    .cornerRadius(16)
+                
+                // Timestamp
+                Text(timeString)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: isCurrentUser ? .trailing : .leading)
+            
+            if !isCurrentUser {
+                Spacer()
+            }
+        }
+    }
+    
+    private var contextIcon: String {
+        switch message.contextType {
+        case .post: return "doc.text"
+        case .reel: return "play.rectangle"
+        case .status: return "circle.dotted"
+        case .none: return ""
+        }
+    }
+    
+    private var timeString: String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: message.timestamp)
     }
 }

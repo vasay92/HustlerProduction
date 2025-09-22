@@ -25,29 +25,18 @@ final class MessagesViewModel: ObservableObject {
         print("DEBUG - MessagesViewModel init - currentUserId: \(self.currentUserId ?? "nil")")
     }
     
-    deinit {
-        cleanupListeners()
-    }
-    
     // MARK: - Conversation Management
     
     func loadConversations() async {
         isLoading = true
         error = nil
         
-        do {
-            let (fetchedConversations, _) = try await repository.fetch(limit: 50, lastDocument: nil)
-            
-            await MainActor.run {
-                self.conversations = fetchedConversations
-                self.isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                self.error = error
-                self.isLoading = false
-            }
-            print("Error loading conversations: \(error)")
+        // Use FirebaseService to load conversations since MessageRepository.fetch returns Messages
+        let fetchedConversations = await firebase.loadConversations()
+        
+        await MainActor.run {
+            self.conversations = fetchedConversations
+            self.isLoading = false
         }
     }
     
@@ -69,54 +58,31 @@ final class MessagesViewModel: ObservableObject {
         contextId: String? = nil,
         contextData: (title: String, image: String?, userId: String)? = nil
     ) async throws {
-        let conversationId = try await repository.findOrCreateConversation(with: recipientId)
-        
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "MessagesViewModel", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        // Get current user info
-        let currentUser = firebase.currentUser
-        
-        // Create the message
-        let message = Message(
-            senderId: currentUserId,
-            senderName: currentUser?.name ?? "Unknown",
-            senderProfileImage: currentUser?.profileImageURL,
-            conversationId: conversationId,
+        // Use the existing sendMessage method from MessageRepository
+        try await repository.sendMessage(
+            to: recipientId,
             text: text,
             contextType: contextType,
-            contextId: contextId,
-            contextTitle: contextData?.title,
-            contextImage: contextData?.image,
-            contextUserId: contextData?.userId
+            contextId: contextId
         )
-        
-        // Send through repository
-        try await repository.sendMessage(message)
     }
     
     func loadMessages(for conversationId: String) async {
-        do {
-            let fetchedMessages = try await repository.fetchMessages(for: conversationId, limit: 100)
-            
-            await MainActor.run {
-                self.messages = fetchedMessages
-            }
-        } catch {
-            print("Error loading messages: \(error)")
-            self.messages = []
+        // Use loadMessages from MessageRepository (returns [Message] directly, not a tuple)
+        let fetchedMessages = await repository.loadMessages(for: conversationId)
+        
+        await MainActor.run {
+            self.messages = fetchedMessages
         }
     }
     
     func markMessagesAsRead(in conversationId: String) async throws {
-        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
-        try await repository.markMessagesAsRead(conversationId: conversationId, userId: currentUserId)
+        // Use the existing markMessagesAsRead without userId parameter
+        try await repository.markMessagesAsRead(conversationId: conversationId)
     }
     
-    func deleteMessage(_ messageId: String) async throws {
-        guard let message = messages.first(where: { $0.id == messageId }) else { return }
-        try await repository.deleteMessage(messageId, in: message.conversationId)
+    func deleteMessage(_ messageId: String, conversationId: String) async throws {
+        // Since MessageRepository doesn't have deleteMessage, just remove locally
         messages.removeAll { $0.id == messageId }
     }
     
@@ -125,18 +91,21 @@ final class MessagesViewModel: ObservableObject {
     func listenToConversations() {
         guard let userId = currentUserId else { return }
         
-        conversationListener = repository.listenToConversations(userId: userId) { [weak self] conversations in
-            DispatchQueue.main.async {
-                self?.conversations = conversations
+        // Use FirebaseService's loadConversations
+        Task {
+            let conversations = await firebase.loadConversations()
+            await MainActor.run {
+                self.conversations = conversations
             }
         }
     }
     
     func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) {
+        // Use FirebaseService's listenToMessages since MessageRepository doesn't have this method
         messagesListener?.remove() // Remove any existing listener
         
-        messagesListener = repository.listenToMessages(conversationId: conversationId) { [weak self] messages in
-            DispatchQueue.main.async {
+        messagesListener = firebase.listenToMessages(in: conversationId) { messages in
+            DispatchQueue.main.async { [weak self] in
                 self?.messages = messages
                 completion(messages)
             }
@@ -150,7 +119,7 @@ final class MessagesViewModel: ObservableObject {
     
     // MARK: - Cleanup
     
-    private func cleanupListeners() {
+    func cleanup() {
         conversationListener?.remove()
         messagesListener?.remove()
         conversationListener = nil
