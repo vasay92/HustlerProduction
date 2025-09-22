@@ -32,8 +32,9 @@ final class SavedItemsRepository {
         let docId = "\(userId)_\(itemId)"
         try await db.collection("savedItems").document(docId).setData(from: savedItem)
         
-        // Clear cache
-        cache.remove(for: "saved_\(type.rawValue)_\(userId)")
+        // Clear cache - Fixed: use consistent cache keys
+        cache.remove(for: "saved_posts_\(userId)")
+        cache.remove(for: "saved_reels_\(userId)")
     }
     
     func unsaveItem(itemId: String, type: SavedItem.SavedItemType) async throws {
@@ -42,8 +43,9 @@ final class SavedItemsRepository {
         let docId = "\(userId)_\(itemId)"
         try await db.collection("savedItems").document(docId).delete()
         
-        // Clear cache
-        cache.remove(for: "saved_\(type.rawValue)_\(userId)")
+        // Clear cache - Fixed: use consistent cache keys
+        cache.remove(for: "saved_posts_\(userId)")
+        cache.remove(for: "saved_reels_\(userId)")
     }
     
     func isItemSaved(itemId: String, type: SavedItem.SavedItemType) async -> Bool {
@@ -77,7 +79,11 @@ final class SavedItemsRepository {
     func fetchSavedReels() async throws -> [Reel] {
         guard let userId = Auth.auth().currentUser?.uid else { return [] }
         
-        // Check cache first...
+        // Check cache first
+        if let cached: [Reel] = cache.retrieve([Reel].self, for: "saved_reels_\(userId)"),
+           !cache.isExpired(for: "saved_reels_\(userId)", maxAge: 600) {
+            return cached
+        }
         
         let savedItems = try await db.collection("savedItems")
             .whereField("userId", isEqualTo: userId)
@@ -111,11 +117,14 @@ final class SavedItemsRepository {
     func fetchSavedPosts() async throws -> [ServicePost] {
         guard let userId = Auth.auth().currentUser?.uid else { return [] }
         
-        // Check cache
+        // IMPORTANT FIX: Skip cache temporarily to ensure fresh data
+        // Comment out cache check to force fetching from Firestore
+        /*
         if let cached: [ServicePost] = cache.retrieve([ServicePost].self, for: "saved_posts_\(userId)"),
            !cache.isExpired(for: "saved_posts_\(userId)", maxAge: 600) {
             return cached
         }
+        */
         
         let savedItems = try await db.collection("savedItems")
             .whereField("userId", isEqualTo: userId)
@@ -136,9 +145,16 @@ final class SavedItemsRepository {
             }
         }
         
-        // Cache results
+        // Cache results with correct key
         cache.store(posts, for: "saved_posts_\(userId)")
         
         return posts
+    }
+    
+    // MARK: - Clear All Saved Items Cache
+    func clearSavedItemsCache() async {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        cache.remove(for: "saved_posts_\(userId)")
+        cache.remove(for: "saved_reels_\(userId)")
     }
 }
