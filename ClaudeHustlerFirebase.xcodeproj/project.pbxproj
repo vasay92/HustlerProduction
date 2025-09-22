@@ -40,6 +40,7 @@
 		EBD039122E7E3A0B004E0CBD /* CommentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD039112E7E3A0A004E0CBD /* CommentRepository.swift */; };
 		EBD039142E7E3A1E004E0CBD /* SavedItemsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD039132E7E3A1E004E0CBD /* SavedItemsRepository.swift */; };
 		EBD039162E7E3A32004E0CBD /* PortfolioRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD039152E7E3A31004E0CBD /* PortfolioRepository.swift */; };
+		EBD039682E81CE95004E0CBD /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD039672E81CE93004E0CBD /* ProfileViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -91,6 +92,7 @@
 		EBD039112E7E3A0A004E0CBD /* CommentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentRepository.swift; sourceTree = "<group>"; };
 		EBD039132E7E3A1E004E0CBD /* SavedItemsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedItemsRepository.swift; sourceTree = "<group>"; };
 		EBD039152E7E3A31004E0CBD /* PortfolioRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioRepository.swift; sourceTree = "<group>"; };
+		EBD039672E81CE93004E0CBD /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -296,6 +298,7 @@
 		EB6E08A32E7C9641004B253C /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				EBD039672E81CE93004E0CBD /* ProfileViewModel.swift */,
 				EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */,
 				EBD038E12E7D06C4004E0CBD /* ReelsViewModel.swift */,
 				EB6E08A12E7C9641004B253C /* HomeViewModel.swift */,
@@ -491,6 +494,7 @@
 				EB6E08A42E7C9641004B253C /* PostRepository.swift in Sources */,
 				EB6E08A52E7C9641004B253C /* ServicesViewModel.swift in Sources */,
 				EB6E08A62E7C9641004B253C /* RepositoryProtocol.swift in Sources */,
+				EBD039682E81CE95004E0CBD /* ProfileViewModel.swift in Sources */,
 				EB6E08A72E7C9641004B253C /* HomeViewModel.swift in Sources */,
 				EBD038D22E7CF44A004E0CBD /* ValidationHelper.swift in Sources */,
 				EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */,
