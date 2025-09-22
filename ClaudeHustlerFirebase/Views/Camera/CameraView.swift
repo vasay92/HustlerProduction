@@ -7,20 +7,17 @@ import AVKit
 import FirebaseStorage
 import FirebaseFirestore
 
-// MARK: - ImagePicker
+// MARK: - ImagePicker (Works with both single and multiple selection)
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var images: [UIImage]
     @Binding var singleImage: UIImage?
     @Environment(\.dismiss) var dismiss
     
-    var isMultipleSelection: Bool {
-        return singleImage == nil
-    }
-    
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.filter = .images
-        config.selectionLimit = isMultipleSelection ? 0 : 1
+        // If singleImage is being used, limit to 1, otherwise unlimited
+        config.selectionLimit = singleImage != nil ? 1 : 0
         
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
@@ -41,22 +38,31 @@ struct ImagePicker: UIViewControllerRepresentable {
         }
         
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            parent.dismiss()
+            // Handle empty selection
+            guard !results.isEmpty else {
+                parent.dismiss()
+                return
+            }
             
-            if !parent.isMultipleSelection {
-                guard let result = results.first else { return }
-                
+            // Check if we're doing single or multiple selection based on bindings
+            let isSingleSelection = (parent.singleImage != nil || parent.images.isEmpty)
+            
+            if isSingleSelection && results.count == 1 {
+                // Single image selection
+                let result = results[0]
                 result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
-                    if let image = image as? UIImage {
-                        DispatchQueue.main.async {
+                    DispatchQueue.main.async {
+                        if let image = image as? UIImage {
+                            // Set the single image binding if available
                             self.parent.singleImage = image
-                            print("✅ Single image set: \(image.size)")
+                            print("✅ Single image loaded and set")
                         }
+                        // Dismiss after setting the image
+                        self.parent.dismiss()
                     }
                 }
             } else {
-                parent.images = []
-                
+                // Multiple image selection
                 let group = DispatchGroup()
                 var loadedImages: [UIImage] = []
                 
@@ -73,6 +79,7 @@ struct ImagePicker: UIViewControllerRepresentable {
                 group.notify(queue: .main) {
                     self.parent.images = loadedImages
                     print("✅ Loaded \(loadedImages.count) images")
+                    self.parent.dismiss()
                 }
             }
         }
@@ -90,8 +97,6 @@ struct CameraView: View {
     @State private var capturedVideoURL: URL?
     @State private var showingImagePicker = false
     @State private var showingVideoPicker = false
-    @State private var imagePickerSourceType: UIImagePickerController.SourceType = .camera
-    @State private var capturedImages: [UIImage] = []
     
     // Content creation states
     @State private var caption = ""
@@ -120,11 +125,6 @@ struct CameraView: View {
                 closeButtonOverlay
             }
             .navigationBarHidden(true)
-        }
-        .onAppear {
-            if mode == .status {
-                showingImagePicker = true
-            }
         }
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(images: .constant([]), singleImage: $capturedImage)
@@ -351,7 +351,6 @@ struct CameraView: View {
     }
     
     private func openGallery() {
-        imagePickerSourceType = .photoLibrary
         showingImagePicker = true
     }
     
@@ -384,35 +383,13 @@ struct CameraView: View {
             throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No image selected"])
         }
         
-        uploadProgress = 0.3
+        uploadProgress = 0.5
         
-        // Upload the image first
-        guard let userId = firebase.currentUser?.id else {
-            throw NSError(domain: "CameraView", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
-        }
-        
-        let imagePath = "statuses/\(userId)/\(UUID().uuidString).jpg"
-        let imageURL = try await firebase.uploadImage(image, path: imagePath)
-        
-        uploadProgress = 0.6
-        
-        // Create the status object
-        let status = Status(
-            userId: userId,
-            userName: firebase.currentUser?.name ?? "Unknown",
-            userProfileImage: firebase.currentUser?.profileImageURL ?? "",
-            mediaURL: imageURL,
-            caption: caption.isEmpty ? nil : caption,
-            mediaType: .image,
-            expiresAt: Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date(),
-            viewedBy: [],
-            isActive: true
+        // Use StatusRepository's createStatus method directly
+        let statusId = try await StatusRepository.shared.createStatus(
+            image: image,
+            caption: caption.isEmpty ? nil : caption
         )
-        
-        uploadProgress = 0.8
-        
-        // Create status using repository
-        let statusId = try await StatusRepository.shared.create(status)
         
         uploadProgress = 1.0
         
