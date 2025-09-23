@@ -1,7 +1,6 @@
-
-
 // ReelsViewModel.swift
 // Path: ClaudeHustlerFirebase/ViewModels/ReelsViewModel.swift
+// UPDATED VERSION - Phase 2.1 MVVM Migration
 
 import SwiftUI
 import FirebaseFirestore
@@ -27,6 +26,8 @@ final class ReelsViewModel: ObservableObject {
     // MARK: - Private Properties
     private let reelRepository = ReelRepository.shared
     private let statusRepository = StatusRepository.shared
+    private let savedItemsRepository = SavedItemsRepository.shared
+    private let userRepository = UserRepository.shared
     private let firebase = FirebaseService.shared
     private var reelsLastDocument: DocumentSnapshot?
     private var userReelsLastDocument: DocumentSnapshot?
@@ -37,13 +38,13 @@ final class ReelsViewModel: ObservableObject {
     private var reelListeners: [String: ListenerRegistration] = [:]
     
     // Current user
-    private var currentUserId: String?
-
+    private var currentUserId: String? {
+        Auth.auth().currentUser?.uid
+    }
     
     // MARK: - Initialization
     init() {
         Self.shared = self
-        // Initialize current user ID
         self.currentUserId = Auth.auth().currentUser?.uid
         
         Task {
@@ -52,13 +53,13 @@ final class ReelsViewModel: ObservableObject {
     }
     
     deinit {
-        reelListeners.values.forEach { $0.remove() }
-            reelListeners.removeAll()
-            statusListener?.remove()
-            statusListener = nil
+        statusListener?.remove()
+        for (_, listener) in reelListeners {
+            listener?.remove()
+        }
     }
     
-    // MARK: - Public Methods - Data Loading
+    // MARK: - Initial Data Loading
     
     func loadInitialData() async {
         await withTaskGroup(of: Void.self) { group in
@@ -68,194 +69,76 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
-    func loadInitialReels() async {
-        guard !isLoadingReels else { return }
-        
-        isLoadingReels = true
-        reelsLastDocument = nil
-        hasMoreReels = true
-        
-        do {
-            let result = try await reelRepository.fetch(limit: pageSize)
-            
-            await MainActor.run {
-                self.reels = result.items
-                self.reelsLastDocument = result.lastDoc
-                self.hasMoreReels = result.items.count == pageSize
-                self.isLoadingReels = false
-            }
-        } catch {
-            await MainActor.run {
-                self.error = error
-                self.isLoadingReels = false
-            }
-            print("Error loading reels: \(error)")
-        }
-    }
-    
-    func loadMoreReels() async {
-        guard !isLoadingReels,
-              hasMoreReels,
-              let lastDoc = reelsLastDocument else { return }
-        
-        isLoadingReels = true
-        
-        do {
-            let result = try await reelRepository.fetch(
-                limit: pageSize,
-                lastDocument: lastDoc
-            )
-            
-            await MainActor.run {
-                self.reels.append(contentsOf: result.items)
-                self.reelsLastDocument = result.lastDoc
-                self.hasMoreReels = result.items.count == pageSize
-                self.isLoadingReels = false
-            }
-        } catch {
-            await MainActor.run {
-                self.error = error
-                self.isLoadingReels = false
-            }
-        }
-    }
-    
-    func loadTrendingReels() async {
-        do {
-            let trending = try await reelRepository.fetchTrending(limit: 10)
-            
-            await MainActor.run {
-                self.trendingReels = trending
-            }
-        } catch {
-            print("Error loading trending reels: \(error)")
-        }
-    }
-    
-    func loadUserReels(userId: String) async {
-        do {
-            let result = try await reelRepository.fetchUserReels(
-                userId,
-                limit: pageSize
-            )
-            
-            await MainActor.run {
-                self.userReels = result.items
-                self.userReelsLastDocument = result.lastDoc
-            }
-        } catch {
-            print("Error loading user reels: \(error)")
-        }
-    }
-    
-    func loadReelsByCategory(_ category: ServiceCategory) async {
-        isLoadingReels = true
-        
-        do {
-            let result = try await reelRepository.fetchByCategory(
-                category,
-                limit: pageSize
-            )
-            
-            await MainActor.run {
-                self.reels = result.items
-                self.reelsLastDocument = result.lastDoc
-                self.hasMoreReels = result.items.count == pageSize
-                self.isLoadingReels = false
-            }
-        } catch {
-            await MainActor.run {
-                self.error = error
-                self.isLoadingReels = false
-            }
-        }
-    }
-    
-    func searchReels(query: String) async {
-        guard !query.isEmpty else {
-            await loadInitialReels()
-            return
-        }
-        
-        isLoadingReels = true
-        
-        do {
-            let results = try await reelRepository.search(
-                query: query,
-                limit: pageSize
-            )
-            
-            await MainActor.run {
-                self.reels = results
-                self.hasMoreReels = false
-                self.isLoadingReels = false
-            }
-        } catch {
-            await MainActor.run {
-                self.error = error
-                self.isLoadingReels = false
-            }
-        }
-    }
-    
     func refresh() async {
-        reels = []
-        statuses = []
         reelsLastDocument = nil
-        hasMoreReels = true
-        
+        userReelsLastDocument = nil
         await loadInitialData()
     }
     
-    // MARK: - Status Operations (until StatusRepository exists)
+    // MARK: - Status Methods
     
     func loadStatuses() async {
         isLoadingStatuses = true
         
-        guard let currentUser = firebase.currentUser else {
-            statuses = []
-            isLoadingStatuses = false
-            return
-        }
-        
-        // Get user IDs to load statuses from
-        var userIds = currentUser.following
-        if let myId = currentUser.id {
-            userIds.append(myId)
-        }
-        
         do {
+            guard let userId = currentUserId else {
+                isLoadingStatuses = false
+                return
+            }
+            
+            // Get current user's following list
+            let currentUser = try await userRepository.fetchById(userId)
+            var userIds = currentUser?.following ?? []
+            userIds.append(userId) // Include own statuses
+            
+            // Fetch statuses from following users
             statuses = try await statusRepository.fetchStatusesFromFollowing(userIds: userIds)
             
             // Check if current user has a status
-            if let userId = currentUserId {
-                currentUserStatus = statuses.first { $0.userId == userId }
-            }
+            currentUserStatus = statuses.first { $0.userId == userId }
+            
         } catch {
-            print("Error loading statuses: \(error)")
-            statuses = []
+            self.error = error
         }
         
         isLoadingStatuses = false
     }
     
-    func cleanupExpiredStatuses() async {
-        // Remove expired statuses from local array
-        statuses.removeAll { $0.isExpired }
-        
-        // Clean up in Firebase
-        do {
-            try await statusRepository.cleanupExpiredStatuses()
-        } catch {
-            print("Error cleaning up statuses: \(error)")
+    func createStatus(
+        image: UIImage? = nil,
+        videoURL: URL? = nil,
+        caption: String? = nil
+    ) async throws {
+        guard let userId = currentUserId else {
+            throw NSError(domain: "ReelsViewModel", code: 0,
+                         userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
-    }
-    
-    func createStatus(_ status: Status) async throws {
-        // Use StatusRepository directly
-        let statusId = try await statusRepository.create(status)
+        
+        var mediaURL = ""
+        
+        // Upload media if provided
+        if let image = image {
+            let path = "statuses/\(userId)/\(UUID().uuidString).jpg"
+            mediaURL = try await firebase.uploadImage(image, path: path)
+        } else if let videoURL = videoURL {
+            // Handle video upload if needed
+            mediaURL = videoURL.absoluteString
+        }
+        
+        let status = Status(
+            userId: userId,
+            userName: firebase.currentUser?.name,
+            userProfileImage: firebase.currentUser?.profileImageURL,
+            mediaURL: mediaURL,
+            caption: caption,
+            mediaType: image != nil ? .image : .video,
+            expiresAt: Date().addingTimeInterval(24 * 60 * 60) // 24 hours
+        )
+        
+        _ = try await statusRepository.create(status)
+        
+        // Reload statuses
         await loadStatuses()
-        print("Created status with ID: \(statusId)")
     }
     
     func deleteStatus(_ statusId: String) async throws {
@@ -269,7 +152,6 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
-    // Replace entire method with:
     func viewStatus(_ statusId: String) async {
         guard let userId = currentUserId else { return }
         
@@ -280,7 +162,78 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Reel Interactions
+    func cleanupExpiredStatuses() async {
+        do {
+            try await statusRepository.cleanupExpiredStatuses()
+            // Remove expired statuses from local array
+            statuses.removeAll { $0.isExpired }
+        } catch {
+            print("Error cleaning up expired statuses: \(error)")
+        }
+    }
+    
+    // MARK: - Reels Loading
+    
+    func loadInitialReels() async {
+        guard !isLoadingReels else { return }
+        
+        isLoadingReels = true
+        
+        do {
+            let (fetchedReels, lastDoc) = try await reelRepository.fetch(limit: pageSize)
+            
+            reels = fetchedReels
+            reelsLastDocument = lastDoc
+            hasMoreReels = fetchedReels.count == pageSize
+            
+        } catch {
+            self.error = error
+        }
+        
+        isLoadingReels = false
+    }
+    
+    func loadMoreReels() async {
+        guard !isLoadingReels,
+              hasMoreReels,
+              let lastDoc = reelsLastDocument else { return }
+        
+        isLoadingReels = true
+        
+        do {
+            let (fetchedReels, newLastDoc) = try await reelRepository.fetch(
+                limit: pageSize,
+                lastDocument: lastDoc
+            )
+            
+            reels.append(contentsOf: fetchedReels)
+            reelsLastDocument = newLastDoc
+            hasMoreReels = fetchedReels.count == pageSize
+            
+        } catch {
+            self.error = error
+        }
+        
+        isLoadingReels = false
+    }
+    
+    func loadTrendingReels() async {
+        do {
+            trendingReels = try await reelRepository.fetchTrending(limit: 10)
+        } catch {
+            print("Error loading trending reels: \(error)")
+        }
+    }
+    
+    func loadUserReels(userId: String) async {
+        do {
+            userReels = try await reelRepository.fetchUserReels(userId: userId, limit: 20)
+        } catch {
+            print("Error loading user reels: \(error)")
+        }
+    }
+    
+    // MARK: - Reel Interactions (UPDATED FOR MVVM)
     
     func likeReel(_ reelId: String) async {
         do {
@@ -310,6 +263,17 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
+    func toggleLikeReel(_ reelId: String) async throws {
+        guard let userId = currentUserId,
+              let reel = reels.first(where: { $0.id == reelId }) else { return }
+        
+        if reel.likes.contains(userId) {
+            await unlikeReel(reelId)
+        } else {
+            await likeReel(reelId)
+        }
+    }
+    
     func shareReel(_ reelId: String) async {
         do {
             try await reelRepository.incrementShareCount(for: reelId)
@@ -322,6 +286,70 @@ final class ReelsViewModel: ObservableObject {
             print("Error sharing reel: \(error)")
         }
     }
+    
+    func deleteReel(_ reelId: String) async throws {
+        try await reelRepository.delete(reelId)
+        
+        // Remove from local arrays
+        reels.removeAll { $0.id == reelId }
+        trendingReels.removeAll { $0.id == reelId }
+        userReels.removeAll { $0.id == reelId }
+    }
+    
+    // MARK: - Save/Unsave Methods (NEW)
+    
+    func saveReel(_ reelId: String) async throws -> Bool {
+        return try await savedItemsRepository.toggleSave(
+            itemId: reelId,
+            type: .reel
+        )
+    }
+    
+    func toggleSaveReel(_ reelId: String) async throws -> Bool {
+        return try await savedItemsRepository.toggleSave(
+            itemId: reelId,
+            type: .reel
+        )
+    }
+    
+    func isReelSaved(_ reelId: String) async -> Bool {
+        return await savedItemsRepository.isItemSaved(
+            itemId: reelId,
+            type: .reel
+        )
+    }
+    
+    // MARK: - Follow/Unfollow Methods (NEW)
+    
+    func followReelCreator(_ userId: String) async throws {
+        try await userRepository.followUser(userId)
+        
+        // Update local current user state if needed
+        firebase.currentUser?.following.append(userId)
+    }
+    
+    func unfollowReelCreator(_ userId: String) async throws {
+        try await userRepository.unfollowUser(userId)
+        
+        // Update local current user state if needed
+        firebase.currentUser?.following.removeAll { $0 == userId }
+    }
+    
+    func toggleFollowReelCreator(_ userId: String) async throws {
+        guard let currentUser = firebase.currentUser else { return }
+        
+        if currentUser.following.contains(userId) {
+            try await unfollowReelCreator(userId)
+        } else {
+            try await followReelCreator(userId)
+        }
+    }
+    
+    func isFollowingCreator(_ userId: String) -> Bool {
+        return firebase.currentUser?.following.contains(userId) ?? false
+    }
+    
+    // MARK: - Create/Update Reel
     
     func createReel(
         title: String,
@@ -366,22 +394,6 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
-    func deleteReel(_ reelId: String) async throws {
-        try await reelRepository.delete(reelId)
-        
-        // Remove from local arrays
-        reels.removeAll { $0.id == reelId }
-        trendingReels.removeAll { $0.id == reelId }
-        userReels.removeAll { $0.id == reelId }
-    }
-    
-    func saveReel(_ reelId: String) async throws -> Bool {
-        return try await SavedItemsRepository.shared.toggleSave(
-            itemId: reelId,
-            type: .reel
-        )
-    }
-    
     // MARK: - Real-time Listeners
     
     func startListeningToReel(_ reelId: String) -> ListenerRegistration? {
@@ -399,14 +411,13 @@ final class ReelsViewModel: ObservableObject {
                 print("Error loading reel: \(error)")
             }
         }
-        return nil // No listener to return anymore
+        return nil
     }
     
     func stopListeningToReel(_ reelId: String) {
         // No longer using listeners - nothing to stop
         // This function is kept for compatibility but does nothing
     }
-    
     
     // MARK: - Helper Methods
     
