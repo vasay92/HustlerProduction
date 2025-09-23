@@ -583,7 +583,8 @@ extension FirebaseService {
             to: recipientId,
             text: text,
             contextType: contextType,
-            contextId: contextId
+            contextId: contextId,
+            contextData: contextData  // ADD THIS - pass it through
         )
     }
     

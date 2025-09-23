@@ -96,12 +96,12 @@ final class MessageRepository: RepositoryProtocol {
     }
 
     // MARK: - Create Message with ConversationId
+    // In MessageRepository.swift, update the create method's messageData:
+
     func create(_ message: Message, in conversationId: String) async throws -> String {
-        // NO AUTH CHECK - message already has senderId from MessagesViewModel
-        
         let messageData: [String: Any] = [
-            "senderId": message.senderId,  // ALREADY PROVIDED
-            "senderName": message.senderName,  // ALREADY PROVIDED
+            "senderId": message.senderId,
+            "senderName": message.senderName,
             "senderProfileImage": message.senderProfileImage ?? "",
             "conversationId": conversationId,
             "text": message.text,
@@ -110,18 +110,19 @@ final class MessageRepository: RepositoryProtocol {
             "isDeleted": false,
             "isDelivered": false,
             "contextType": message.contextType?.rawValue ?? "",
-            "contextId": message.contextId ?? ""
+            "contextId": message.contextId ?? "",
+            "contextTitle": message.contextTitle ?? "",     // ADD THIS
+            "contextImage": message.contextImage ?? "",     // ADD THIS
+            "contextUserId": message.contextUserId ?? ""    // ADD THIS
         ]
         
-        print("DEBUG - Creating message with senderId: \(message.senderId)")
+        print("DEBUG - Creating message with context: \(message.contextTitle ?? "no title")")
         
-        // Use TOP-LEVEL messages collection
+        // Rest of the method stays the same...
         let docRef = try await db.collection("messages")
             .addDocument(data: messageData)
         
-        // Update conversation's last message
         try await updateConversationLastMessage(conversationId, message: message.text, senderId: message.senderId)
-        
         cache.remove(for: "messages_\(conversationId)")
         
         return docRef.documentID
@@ -394,62 +395,67 @@ final class MessageRepository: RepositoryProtocol {
         to recipientId: String,
         text: String,
         contextType: Message.MessageContextType? = nil,
-        contextId: String? = nil
+        contextId: String? = nil,
+        contextData: (title: String, image: String?, userId: String)? = nil  // ADD THIS PARAMETER
     ) async throws {
-        guard let userId = FirebaseService.shared.currentUser?.id,
-              let userName = FirebaseService.shared.currentUser?.name else {
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
         // Find or create conversation
         let conversationId = try await findOrCreateConversation(with: recipientId)
         
+        // Get current user info
+        let userDoc = try await db.collection("users").document(currentUserId).getDocument()
+        let userData = try? userDoc.data(as: User.self)
+        
         // Create message
         let message = Message(
-            senderId: userId,
-            senderName: userName,
-            senderProfileImage: FirebaseService.shared.currentUser?.profileImageURL,
+            senderId: currentUserId,
+            senderName: userData?.name ?? "Unknown",
+            senderProfileImage: userData?.profileImageURL,
             conversationId: conversationId,
             text: text,
             contextType: contextType,
-            contextId: contextId
+            contextId: contextId,
+            contextTitle: contextData?.title,  // ADD THIS
+            contextImage: contextData?.image,  // ADD THIS
+            contextUserId: contextData?.userId  // ADD THIS
         )
         
         _ = try await create(message, in: conversationId)
     }
+    
+    // Add these methods to MessageRepository.swift:
 
+    // MARK: - Block/Unblock Users
     func blockUser(_ userId: String, in conversationId: String) async throws {
-        guard let currentUserId = FirebaseService.shared.currentUser?.id else { return }
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
+            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
         
         try await db.collection("conversations").document(conversationId).updateData([
-            "blockedUsers": FieldValue.arrayUnion([currentUserId])
+            "blockedUsers": FieldValue.arrayUnion([userId])
         ])
         
-        cache.remove(for: "conversations_page_1")
+        cache.remove(for: "conversation_\(conversationId)")
     }
 
     func unblockUser(_ userId: String, in conversationId: String) async throws {
-        guard let currentUserId = FirebaseService.shared.currentUser?.id else { return }
-        
-        try await db.collection("conversations").document(conversationId).updateData([
-            "blockedUsers": FieldValue.arrayRemove([currentUserId])
-        ])
-        
-        cache.remove(for: "conversations_page_1")
-    }
-
-    func deleteConversation(_ conversationId: String) async throws {
-        guard let userId = FirebaseService.shared.currentUser?.id else { return }
-        
-        // Verify user is participant
-        let conversation = try await db.collection("conversations").document(conversationId).getDocument()
-        guard let data = conversation.data(),
-              let participantIds = data["participantIds"] as? [String],
-              participantIds.contains(userId) else {
-            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
+            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Delete all messages in top-level collection
+        try await db.collection("conversations").document(conversationId).updateData([
+            "blockedUsers": FieldValue.arrayRemove([userId])
+        ])
+        
+        cache.remove(for: "conversation_\(conversationId)")
+    }
+
+    // MARK: - Delete Conversation
+    func deleteConversation(_ conversationId: String) async throws {
+        // Delete all messages in the conversation
         let messages = try await db.collection("messages")
             .whereField("conversationId", isEqualTo: conversationId)
             .getDocuments()
@@ -460,11 +466,13 @@ final class MessageRepository: RepositoryProtocol {
             batch.deleteDocument(doc.reference)
         }
         
-        // Delete conversation
-        batch.deleteDocument(conversation.reference)
+        // Delete the conversation document
+        batch.deleteDocument(db.collection("conversations").document(conversationId))
         
         try await batch.commit()
         
-        cache.remove(for: "conversations_page_1")
+        // Clear cache
+        cache.remove(for: "conversation_\(conversationId)")
+        cache.remove(for: "messages_\(conversationId)")
     }
 }

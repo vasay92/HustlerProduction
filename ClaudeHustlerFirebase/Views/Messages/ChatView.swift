@@ -28,11 +28,10 @@ struct ChatView: View {
     @State private var currentConversationId: String?
     @State private var isFromContentView = false
     
-    // Navigation states
-    @State private var showingPost = false
-    @State private var showingReel = false
+    // Navigation states - Updated with all three types
     @State private var postToShow: ServicePost? = nil
     @State private var reelToShow: Reel? = nil
+    @State private var statusToShow: Status? = nil
    
     // Real-time listener
     @State private var messageListener: ListenerRegistration?
@@ -83,7 +82,7 @@ struct ChatView: View {
                 // Custom Navigation Bar
                 customNavigationBar
                 
-                // Messages List
+                // Messages List with improved scroll behavior
                 ScrollViewReader { scrollProxy in
                     ScrollView {
                         VStack(spacing: 12) {
@@ -92,7 +91,6 @@ struct ChatView: View {
                                     message: message,
                                     isCurrentUser: message.senderId == firebase.currentUser?.id,
                                     onContextTap: {
-                                        // This should handle BOTH posts and reels
                                         if let contextType = message.contextType,
                                            let contextId = message.contextId {
                                             navigateToContent(type: contextType, id: contextId)
@@ -109,19 +107,13 @@ struct ChatView: View {
                         .padding()
                     }
                     .background(Color(.systemGray6))
-                    .onAppear {
-                        // Initial scroll to bottom
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
-                            }
-                        }
-                    }
                     .onChange(of: messages.count) { oldCount, newCount in
-                        // Scroll to bottom when new messages arrive
+                        // Scroll to bottom when messages count changes
                         if newCount > oldCount {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    scrollProxy.scrollTo(bottomAnchor, anchor: .bottom)
+                                }
                             }
                         }
                     }
@@ -140,11 +132,20 @@ struct ChatView: View {
             .onDisappear {
                 stopListeningForMessages()
             }
+            .confirmationDialog("Clear Chat?", isPresented: $showingClearConfirmation) {
+                Button("Clear All Messages", role: .destructive) {
+                    Task {
+                        await clearChat()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will delete all messages in this conversation. This action cannot be undone.")
+            }
         }
         .fullScreenCover(item: $postToShow) { post in
-            PostDetailView(post: post)  // Use the real PostDetailView
+            PostDetailView(post: post)
         }
-
         .fullScreenCover(item: $reelToShow) { reel in
             ZStack(alignment: .topLeading) {
                 // The full reel view
@@ -184,6 +185,9 @@ struct ChatView: View {
                     Spacer()
                 }
             }
+        }
+        .fullScreenCover(item: $statusToShow) { status in
+            StatusViewerView(status: status)
         }
     }
     
@@ -378,6 +382,42 @@ struct ChatView: View {
         }
     }
     
+    private func clearChat() async {
+        guard let conversationId = currentConversationId else { return }
+        
+        do {
+            // Clear messages from Firebase
+            let messagesQuery = try await Firestore.firestore()
+                .collection("messages")
+                .whereField("conversationId", isEqualTo: conversationId)
+                .getDocuments()
+            
+            let batch = Firestore.firestore().batch()
+            
+            for doc in messagesQuery.documents {
+                batch.deleteDocument(doc.reference)
+            }
+            
+            try await batch.commit()
+            
+            // Clear local messages
+            messages = []
+            
+            // Update conversation's last message
+            try await Firestore.firestore()
+                .collection("conversations")
+                .document(conversationId)
+                .updateData([
+                    "lastMessage": "",
+                    "lastMessageTimestamp": Date(),
+                    "lastMessageSenderId": ""
+                ])
+            
+        } catch {
+            print("Error clearing chat: \(error)")
+        }
+    }
+    
     private func contextTypeString(_ type: Message.MessageContextType) -> String {
         switch type {
         case .post: return "post"
@@ -386,8 +426,6 @@ struct ChatView: View {
         }
     }
     
-    // In ChatView.swift, update the navigateToContent function:
-
     private func navigateToContent(type: Message.MessageContextType, id: String) {
         Task {
             do {
@@ -397,6 +435,10 @@ struct ChatView: View {
                     
                     guard let fetchedPost = try await PostRepository.shared.fetchById(id) else {
                         print("ERROR: Post not found with ID: \(id)")
+                        
+                        await MainActor.run {
+                            showContentUnavailableAlert(type: "Post")
+                        }
                         return
                     }
                     
@@ -412,6 +454,10 @@ struct ChatView: View {
                     
                     guard let fetchedReel = try await ReelRepository.shared.fetchById(id) else {
                         print("ERROR: Reel not found with ID: \(id)")
+                        
+                        await MainActor.run {
+                            showContentUnavailableAlert(type: "Reel")
+                        }
                         return
                     }
                     
@@ -423,12 +469,61 @@ struct ChatView: View {
                     }
                     
                 case .status:
-                    print("DEBUG: Status navigation not implemented")
-                    break
+                    print("DEBUG: Attempting to fetch status with ID: \(id)")
+                    
+                    guard let fetchedStatus = try await StatusRepository.shared.fetchById(id) else {
+                        print("ERROR: Status not found with ID: \(id)")
+                        
+                        await MainActor.run {
+                            showContentUnavailableAlert(type: "Status")
+                        }
+                        return
+                    }
+                    
+                    print("DEBUG: Successfully fetched status from user: \(fetchedStatus.userName ?? "Unknown")")
+                    
+                    await MainActor.run {
+                        self.statusToShow = fetchedStatus
+                        print("DEBUG: statusToShow set, modal should open")
+                    }
                 }
             } catch {
                 print("ERROR: Failed to load content - \(error)")
+                
+                await MainActor.run {
+                    showContentErrorAlert()
+                }
             }
+        }
+    }
+    
+    private func showContentUnavailableAlert(type: String) {
+        let alert = UIAlertController(
+            title: "\(type) Unavailable",
+            message: "This \(type.lowercased()) has been deleted or is no longer available.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootViewController = windowScene.windows.first?.rootViewController {
+            rootViewController.present(alert, animated: true)
+        }
+    }
+    
+    private func showContentErrorAlert() {
+        let alert = UIAlertController(
+            title: "Error",
+            message: "Unable to load content. Please try again later.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootViewController = windowScene.windows.first?.rootViewController {
+            rootViewController.present(alert, animated: true)
         }
     }
 }
@@ -448,7 +543,7 @@ struct MessageRow: View {
             VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: 4) {
                 // Context card if present
                 if message.contextType != nil {
-                    ContextPreviewCard(
+                    ContentPreviewCard(
                         message: message,
                         isCurrentUser: isCurrentUser,
                         onTap: onContextTap
@@ -506,143 +601,5 @@ struct MessageRow: View {
         } else {
             return .secondary
         }
-    }
-}
-
-// MARK: - Context Preview Card
-struct ContextPreviewCard: View {
-    let message: Message
-    let isCurrentUser: Bool
-    var onTap: (() -> Void)?
-    
-    var body: some View {
-        Button(action: { onTap?() }) {
-            HStack(spacing: 8) {
-                // Thumbnail image if available
-                if let imageURL = message.contextImage {
-                    AsyncImage(url: URL(string: imageURL)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 50, height: 50)
-                            .clipped()
-                            .cornerRadius(8)
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray5))
-                            .frame(width: 50, height: 50)
-                            .overlay(
-                                Image(systemName: contextIcon)
-                                    .foregroundColor(.gray)
-                            )
-                    }
-                } else {
-                    // Icon placeholder
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(.systemGray5))
-                        .frame(width: 50, height: 50)
-                        .overlay(
-                            Image(systemName: contextIcon)
-                                .foregroundColor(.gray)
-                        )
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(contextTypeLabel)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    
-                    Text(message.contextTitle ?? "")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .lineLimit(2)
-                        .foregroundColor(isCurrentUser ? .white : .primary)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(8)
-            .background(isCurrentUser ? Color.blue.opacity(0.8) : Color(.systemGray6))
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private var contextIcon: String {
-        switch message.contextType {
-        case .post: return "doc.text"
-        case .reel: return "play.rectangle"
-        case .status: return "circle.dotted"
-        case .none: return "link"
-        }
-    }
-    
-    private var contextTypeLabel: String {
-        switch message.contextType {
-        case .post: return "Post"
-        case .reel: return "Reel"
-        case .status: return "Story"
-        case .none: return ""
-        }
-    }
-}
-
-// MARK: - Reel Detail View (Simplified)
-struct ReelDetailView: View {
-    let reel: Reel
-    
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Reel content
-                AsyncImage(url: URL(string: reel.thumbnailURL ?? reel.videoURL)) { image in
-                    image
-                        .resizable()
-                        .scaledToFit()
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray5))
-                        .frame(height: 400)
-                        .overlay(
-                            ProgressView()
-                        )
-                }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(reel.title)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    Text(reel.description)
-                        .font(.body)
-                    
-                    if !reel.hashtags.isEmpty {
-                        Text(reel.hashtags.map { "#\($0)" }.joined(separator: " "))
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                    
-                    HStack {
-                        Label("\(reel.likes.count)", systemImage: "heart.fill")
-                            .foregroundColor(.red)
-                        
-                        Label("\(reel.comments)", systemImage: "bubble.left.fill")
-                            .foregroundColor(.blue)
-                        
-                        Label("\(reel.views)", systemImage: "eye.fill")
-                            .foregroundColor(.gray)
-                    }
-                    .font(.caption)
-                    .padding(.top)
-                }
-                .padding(.horizontal)
-            }
-        }
-        .navigationTitle("Reel")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

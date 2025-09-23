@@ -58,12 +58,12 @@ final class MessagesViewModel: ObservableObject {
         contextId: String? = nil,
         contextData: (title: String, image: String?, userId: String)? = nil
     ) async throws {
-        // Use the existing sendMessage method from MessageRepository
         try await repository.sendMessage(
             to: recipientId,
             text: text,
             contextType: contextType,
-            contextId: contextId
+            contextId: contextId,
+            contextData: contextData  // ADD THIS - pass it through
         )
     }
     

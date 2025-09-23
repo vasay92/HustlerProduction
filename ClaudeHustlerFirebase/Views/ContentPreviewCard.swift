@@ -21,12 +21,17 @@ struct PostDetailViewWithClose: View {
 // MARK: - Main ContentPreviewCard
 struct ContentPreviewCard: View {
     let message: Message
+    let isCurrentUser: Bool
+    var onTap: (() -> Void)?
+    
     @State private var contentPost: ServicePost?
     @State private var contentReel: Reel?
     @State private var contentStatus: Status?
     @State private var isLoading = true
     @State private var showingContent = false
     @State private var loadError = false
+    @State private var contentExists = true
+    @State private var isChecking = false
     @StateObject private var firebase = FirebaseService.shared
     
     private var contentTitle: String {
@@ -37,7 +42,7 @@ struct ContentPreviewCard: View {
         message.contextImage
     }
     
-    private var contentTypeIcon: String {
+    private var contextIcon: String {
         switch message.contextType {
         case .post:
             return "briefcase.fill"
@@ -63,7 +68,7 @@ struct ContentPreviewCard: View {
         }
     }
     
-    private var contentTypeLabel: String {
+    private var contextTypeLabel: String {
         switch message.contextType {
         case .post:
             return "Service Post"
@@ -78,13 +83,46 @@ struct ContentPreviewCard: View {
     
     var body: some View {
         Button(action: {
-            if !isLoading && !loadError {
-                showingContent = true
+            if contentExists && !isLoading && !loadError {
+                onTap?()
             }
         }) {
-            HStack(spacing: 12) {
-                // Thumbnail
-                ZStack {
+            HStack(spacing: 8) {
+                // Check if content doesn't exist
+                if !contentExists {
+                    // Content deleted/unavailable UI
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.title3)
+                        .foregroundColor(.orange)
+                        .frame(width: 50, height: 50)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(contextTypeLabel) Unavailable")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.orange)
+                        
+                        Text("This content is no longer available")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    }
+                    
+                    Spacer()
+                } else if isChecking || isLoading {
+                    // Loading state
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 50, height: 50)
+                    
+                    Text("Loading...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                } else {
+                    // Normal preview with content available
+                    // Thumbnail
                     if let imageURL = contentImage {
                         AsyncImage(url: URL(string: imageURL)) { phase in
                             switch phase {
@@ -92,14 +130,14 @@ struct ContentPreviewCard: View {
                                 image
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: 60, height: 60)
+                                    .frame(width: 50, height: 50)
                                     .clipped()
+                                    .cornerRadius(8)
                             case .failure(_):
                                 placeholderImage
                             case .empty:
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.1))
-                                    .overlay(ProgressView())
+                                placeholderImage
+                                    .overlay(ProgressView().scaleEffect(0.5))
                             @unknown default:
                                 placeholderImage
                             }
@@ -108,72 +146,38 @@ struct ContentPreviewCard: View {
                         placeholderImage
                     }
                     
-                    // Type icon overlay
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            Image(systemName: contentTypeIcon)
-                                .font(.caption)
-                                .foregroundColor(.white)
-                                .padding(4)
-                                .background(contentTypeColor)
-                                .clipShape(Circle())
-                                .offset(x: 4, y: 4)
-                        }
-                    }
-                }
-                .frame(width: 60, height: 60)
-                .cornerRadius(8)
-                
-                // Content info
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(contentTitle)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: contentTypeIcon)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(contextTypeLabel)
                             .font(.caption2)
-                            .foregroundColor(contentTypeColor)
-                        
-                        Text(contentTypeLabel)
-                            .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        if isLoading {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                        } else if loadError {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption2)
-                                .foregroundColor(.orange)
-                        }
+                        Text(contentTitle)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .lineLimit(2)
+                            .foregroundColor(isCurrentUser ? .white : .primary)
                     }
-                }
-                
-                Spacer()
-                
-                // Chevron
-                if !isLoading && !loadError {
+                    
+                    Spacer()
+                    
                     Image(systemName: "chevron.right")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
             .padding(8)
-            .background(Color(.systemGray6))
+            .background(
+                !contentExists ?
+                Color.orange.opacity(0.1) :
+                (isCurrentUser ? Color.blue.opacity(0.8) : Color(.systemGray6))
+            )
             .cornerRadius(12)
-            .opacity(loadError ? 0.6 : 1.0)
+            .opacity(isLoading ? 0.6 : 1.0)
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(isLoading || loadError)
-        .onAppear {
-            Task {
-                await loadContent()
-            }
+        .disabled(!contentExists || isLoading || loadError)
+        .task {
+            await checkContentAvailability()
         }
         .fullScreenCover(isPresented: $showingContent) {
             contentDetailView
@@ -190,8 +194,10 @@ struct ContentPreviewCard: View {
                     endPoint: .bottomTrailing
                 )
             )
+            .frame(width: 50, height: 50)
+            .cornerRadius(8)
             .overlay(
-                Image(systemName: contentTypeIcon)
+                Image(systemName: contextIcon)
                     .font(.title3)
                     .foregroundColor(.white)
             )
@@ -210,7 +216,61 @@ struct ContentPreviewCard: View {
                 }
             case .reel:
                 if let reel = contentReel {
-                    ReelViewerView(reel: reel)
+                    // ReelViewerView is already defined in ReelsView.swift
+                    NavigationView {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                // Reel thumbnail or video
+                                AsyncImage(url: URL(string: reel.thumbnailURL ?? reel.videoURL)) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(height: 400)
+                                        .overlay(ProgressView())
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(reel.title)
+                                        .font(.title2)
+                                        .fontWeight(.bold)
+                                    
+                                    Text(reel.description)
+                                        .font(.body)
+                                    
+                                    if !reel.hashtags.isEmpty {
+                                        Text(reel.hashtags.map { "#\($0)" }.joined(separator: " "))
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                    
+                                    HStack {
+                                        Label("\(reel.likes.count)", systemImage: "heart.fill")
+                                            .foregroundColor(.red)
+                                        
+                                        Label("\(reel.comments)", systemImage: "bubble.left.fill")
+                                            .foregroundColor(.blue)
+                                        
+                                        Label("\(reel.views)", systemImage: "eye.fill")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .font(.caption)
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+                        .navigationTitle("Reel")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Close") {
+                                    showingContent = false
+                                }
+                            }
+                        }
+                    }
                 } else {
                     ContentNotFoundView()
                 }
@@ -227,111 +287,48 @@ struct ContentPreviewCard: View {
     }
     
     @MainActor
-    private func loadContent() async {
-        // Reset states
-        loadError = false
-        isLoading = true
-        
+    private func checkContentAvailability() async {
         guard let contextId = message.contextId,
               let contextType = message.contextType else {
-            print("⌠Missing context")
+            contentExists = false
             isLoading = false
-            loadError = true
             return
         }
         
-        print("🔥 Loading content from Firestore")
-        print("  - Collection: \(contextType.rawValue)s")
-        print("  - Document ID: \(contextId)")
+        isChecking = true
+        isLoading = true
+        loadError = false
         
         do {
-            let db = firebase.db
-            
             switch contextType {
             case .post:
-                let document = try await db.collection("posts")
-                    .document(contextId)
-                    .getDocument()
-                
-                if document.exists {
-                    var post = try? document.data(as: ServicePost.self)
-                    post?.id = document.documentID
-                    
-                    // Update on main thread
-                    await MainActor.run {
-                        self.contentPost = post
-                        self.isLoading = false
-                        self.loadError = (post == nil)
-                    }
-                    
-                    print("✅ Successfully loaded post: \(post?.title ?? "nil")")
-                } else {
-                    await MainActor.run {
-                        self.isLoading = false
-                        self.loadError = true
-                    }
-                    print("⚠️ Post document doesn't exist")
-                }
-                
+                let post = try await PostRepository.shared.fetchById(contextId)
+                contentExists = (post != nil)
+                contentPost = post
             case .reel:
-                let document = try await db.collection("reels")
-                    .document(contextId)
-                    .getDocument()
-                
-                if document.exists {
-                    var reel = try? document.data(as: Reel.self)
-                    reel?.id = document.documentID
-                    
-                    // Update on main thread
-                    await MainActor.run {
-                        self.contentReel = reel
-                        self.isLoading = false
-                        self.loadError = (reel == nil)
-                    }
-                    
-                    print("✅ Successfully loaded reel: \(reel?.title ?? "nil")")
-                } else {
-                    await MainActor.run {
-                        self.isLoading = false
-                        self.loadError = true
-                    }
-                    print("⚠️ Reel document doesn't exist")
-                }
-                
+                let reel = try await ReelRepository.shared.fetchById(contextId)
+                contentExists = (reel != nil)
+                contentReel = reel
             case .status:
-                let document = try await db.collection("statuses")
-                    .document(contextId)
-                    .getDocument()
-                
-                if document.exists {
-                    var status = try? document.data(as: Status.self)
-                    status?.id = document.documentID
-                    
-                    // Update on main thread
-                    await MainActor.run {
-                        self.contentStatus = status
-                        self.isLoading = false
-                        self.loadError = (status == nil)
-                    }
-                    
-                    print("✅ Successfully loaded status")
-                } else {
-                    await MainActor.run {
-                        self.isLoading = false
-                        self.loadError = true
-                    }
-                    print("⚠️ Status document doesn't exist")
-                }
+                let status = try await StatusRepository.shared.fetchById(contextId)
+                contentExists = (status != nil)
+                contentStatus = status
             }
         } catch {
-            print("⌠Error loading content: \(error)")
-            await MainActor.run {
-                self.isLoading = false
-                self.loadError = true
-            }
+            print("Error checking content availability: \(error)")
+            contentExists = false
+            loadError = true
         }
         
-        print("🔥 ContentPreviewCard: Loading complete, isLoading = \(isLoading), loadError = \(loadError)")
+        isChecking = false
+        isLoading = false
+    }
+    
+    @MainActor
+    private func loadContent() async {
+        // This function is kept for backward compatibility but now
+        // checkContentAvailability handles the loading
+        await checkContentAvailability()
     }
 }
 
