@@ -13,7 +13,7 @@ struct ChatView: View {
     let contextData: (title: String, image: String?, userId: String)?
     
     @StateObject private var viewModel = MessagesViewModel()
-    @StateObject private var firebase = FirebaseService.shared
+    @StateObject private var firebase = FirebaseService.shared  // Keep only for currentUser info
     @Environment(\.dismiss) var dismiss
     
     @State private var messages: [Message] = []
@@ -28,13 +28,10 @@ struct ChatView: View {
     @State private var currentConversationId: String?
     @State private var isFromContentView = false
     
-    // Navigation states - Updated with all three types
+    // Navigation states
     @State private var postToShow: ServicePost? = nil
     @State private var reelToShow: Reel? = nil
     @State private var statusToShow: Status? = nil
-   
-    // Real-time listener
-    @State private var messageListener: ListenerRegistration?
     
     // For scroll view
     @Namespace private var bottomAnchor
@@ -82,7 +79,7 @@ struct ChatView: View {
                 // Custom Navigation Bar
                 customNavigationBar
                 
-                // Messages List with improved scroll behavior
+                // Messages List
                 ScrollViewReader { scrollProxy in
                     ScrollView {
                         VStack(spacing: 12) {
@@ -108,7 +105,6 @@ struct ChatView: View {
                     }
                     .background(Color(.systemGray6))
                     .onChange(of: messages.count) { oldCount, newCount in
-                        // Scroll to bottom when messages count changes
                         if newCount > oldCount {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 withAnimation(.easeOut(duration: 0.3)) {
@@ -148,7 +144,6 @@ struct ChatView: View {
         }
         .fullScreenCover(item: $reelToShow) { reel in
             ZStack(alignment: .topLeading) {
-                // The full reel view
                 FullScreenReelView(
                     reel: reel,
                     isCurrentReel: true,
@@ -157,7 +152,6 @@ struct ChatView: View {
                     }
                 )
                 
-                // Add a back button overlay
                 VStack {
                     HStack {
                         Button(action: {
@@ -202,9 +196,7 @@ struct ChatView: View {
                     .foregroundColor(.primary)
             }
             
-            // User info
             HStack(spacing: 10) {
-                // Use ProfileImageView from CachedAsyncImage.swift
                 ProfileImageView(imageURL: otherUser?.profileImageURL, size: 36)
                 
                 Text(chatTitle)
@@ -232,12 +224,9 @@ struct ChatView: View {
         .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
     }
     
-    // MARK: - Message Composer
-    
     @ViewBuilder
     private var messageComposer: some View {
         VStack(spacing: 0) {
-            // Context indicator if replying to content
             if let contextType = contextType,
                let contextData = contextData,
                isFromContentView {
@@ -262,9 +251,7 @@ struct ChatView: View {
                 .background(Color(.systemGray6))
             }
             
-            // Input field
             HStack(spacing: 12) {
-                // Text field
                 HStack {
                     TextField("Message...", text: $messageText, axis: .vertical)
                         .textFieldStyle(PlainTextFieldStyle())
@@ -275,7 +262,6 @@ struct ChatView: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(20)
                 
-                // Send button
                 Button(action: sendMessage) {
                     Image(systemName: "paperplane.fill")
                         .font(.title3)
@@ -298,7 +284,6 @@ struct ChatView: View {
         isLoadingMessages = true
         
         do {
-            // Get or create conversation
             if let conversation = conversation {
                 currentConversationId = conversation.id
             } else if let recipientId = recipientId {
@@ -315,12 +300,9 @@ struct ChatView: View {
                 otherUser?.id = otherUserId
             }
             
-            // Initial load of messages
             if let conversationId = currentConversationId {
                 await viewModel.loadMessages(for: conversationId)
                 messages = viewModel.messages
-                
-                // Mark messages as read
                 try await viewModel.markMessagesAsRead(in: conversationId)
             }
         } catch {
@@ -333,12 +315,10 @@ struct ChatView: View {
     private func startListeningForMessages() {
         guard let conversationId = currentConversationId else { return }
         
-        // Set up real-time listener
-        messageListener = firebase.listenToMessages(in: conversationId) { newMessages in
+        viewModel.listenToMessages(in: conversationId) { newMessages in
             DispatchQueue.main.async {
                 self.messages = newMessages
                 
-                // Mark new messages as read
                 Task {
                     try? await self.viewModel.markMessagesAsRead(in: conversationId)
                 }
@@ -347,8 +327,7 @@ struct ChatView: View {
     }
     
     private func stopListeningForMessages() {
-        messageListener?.remove()
-        messageListener = nil
+        viewModel.stopListeningToMessages()
     }
     
     private func sendMessage() {
@@ -359,11 +338,9 @@ struct ChatView: View {
         
         Task {
             do {
-                // Include context only if coming from content view
                 let shouldIncludeContext = isFromContentView && contextType != nil
                 
-                // Send message with context if needed
-                try await firebase.sendMessage(
+                try await viewModel.sendMessage(
                     to: recipientId,
                     text: text,
                     contextType: shouldIncludeContext ? contextType : nil,
@@ -371,7 +348,6 @@ struct ChatView: View {
                     contextData: shouldIncludeContext ? contextData : nil
                 )
                 
-                // Clear context after first message
                 if isFromContentView {
                     isFromContentView = false
                 }
@@ -386,7 +362,6 @@ struct ChatView: View {
         guard let conversationId = currentConversationId else { return }
         
         do {
-            // Clear messages from Firebase
             let messagesQuery = try await Firestore.firestore()
                 .collection("messages")
                 .whereField("conversationId", isEqualTo: conversationId)
@@ -400,10 +375,8 @@ struct ChatView: View {
             
             try await batch.commit()
             
-            // Clear local messages
             messages = []
             
-            // Update conversation's last message
             try await Firestore.firestore()
                 .collection("conversations")
                 .document(conversationId)
