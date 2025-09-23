@@ -23,6 +23,14 @@ struct PostDetailView: View {
             ZStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        VStack {
+                                            Text("DEBUG: Post loaded - \(post.title)")
+                                                .foregroundColor(.red)
+                                                .padding()
+                                        }
+                                        .onAppear {
+                                            print("DEBUG: PostDetailView body rendered with post: \(post.title)")
+                                        }
                         // Photo Gallery
                         photoGallerySection
                         

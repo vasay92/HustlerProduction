@@ -31,9 +31,9 @@ struct ChatView: View {
     // Navigation states
     @State private var showingPost = false
     @State private var showingReel = false
-    @State private var selectedPost: ServicePost?
-    @State private var selectedReel: Reel?
-    
+    @State private var postToShow: ServicePost? = nil
+    @State private var reelToShow: Reel? = nil
+   
     // Real-time listener
     @State private var messageListener: ListenerRegistration?
     
@@ -92,6 +92,7 @@ struct ChatView: View {
                                     message: message,
                                     isCurrentUser: message.senderId == firebase.currentUser?.id,
                                     onContextTap: {
+                                        // This should handle BOTH posts and reels
                                         if let contextType = message.contextType,
                                            let contextId = message.contextId {
                                             navigateToContent(type: contextType, id: contextId)
@@ -140,13 +141,12 @@ struct ChatView: View {
                 stopListeningForMessages()
             }
         }
-        .fullScreenCover(isPresented: $showingPost) {
-            if let post = selectedPost {
-                PostDetailView(post: post)  // Remove NavigationView wrapper
-            }
+        .fullScreenCover(item: $postToShow) { post in
+            PostDetailModalView(post: post)  // Use the actual view now
         }
+
         .fullScreenCover(isPresented: $showingReel) {
-            if let reel = selectedReel {
+            if let reel = reelToShow {
                 NavigationView {  // Keep this one since ReelDetailView doesn't have its own NavigationView
                     ReelDetailView(reel: reel)
                         .toolbar {
@@ -360,34 +360,48 @@ struct ChatView: View {
         }
     }
     
+    // In ChatView.swift, update the navigateToContent function:
+
     private func navigateToContent(type: Message.MessageContextType, id: String) {
         Task {
             do {
                 switch type {
                 case .post:
-                    // Fetch the complete post
-                    if let post = try await PostRepository.shared.fetchById(id) {
-                        selectedPost = post
-                        showingPost = true
-                    } else {
-                        print("Post not found: \(id)")
+                    print("DEBUG: Attempting to fetch post with ID: \(id)")
+                    
+                    guard let fetchedPost = try await PostRepository.shared.fetchById(id) else {
+                        print("ERROR: Post not found with ID: \(id)")
+                        return
+                    }
+                    
+                    print("DEBUG: Successfully fetched post: \(fetchedPost.title)")
+                    
+                    await MainActor.run {
+                        self.postToShow = fetchedPost
+                        print("DEBUG: postToShow set, modal should open")
                     }
                     
                 case .reel:
-                    // Fetch the complete reel
-                    if let reel = try await ReelRepository.shared.fetchById(id) {
-                        selectedReel = reel
-                        showingReel = true
-                    } else {
-                        print("Reel not found: \(id)")
+                    print("DEBUG: Attempting to fetch reel with ID: \(id)")
+                    
+                    guard let fetchedReel = try await ReelRepository.shared.fetchById(id) else {
+                        print("ERROR: Reel not found with ID: \(id)")
+                        return
+                    }
+                    
+                    print("DEBUG: Successfully fetched reel: \(fetchedReel.title)")
+                    
+                    await MainActor.run {
+                        self.reelToShow = fetchedReel
+                        print("DEBUG: reelToShow set, modal should open")
                     }
                     
                 case .status:
-                    // Status navigation could be implemented similarly
+                    print("DEBUG: Status navigation not implemented")
                     break
                 }
             } catch {
-                print("Error loading content: \(error)")
+                print("ERROR: Failed to load content - \(error)")
             }
         }
     }
