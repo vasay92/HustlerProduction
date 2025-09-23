@@ -142,20 +142,46 @@ struct ChatView: View {
             }
         }
         .fullScreenCover(item: $postToShow) { post in
-            PostDetailModalView(post: post)  // Use the actual view now
+            PostDetailView(post: post)  // Use the real PostDetailView
         }
 
-        .fullScreenCover(isPresented: $showingReel) {
-            if let reel = reelToShow {
-                NavigationView {  // Keep this one since ReelDetailView doesn't have its own NavigationView
-                    ReelDetailView(reel: reel)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Close") {
-                                    showingReel = false
-                                }
+        .fullScreenCover(item: $reelToShow) { reel in
+            ZStack(alignment: .topLeading) {
+                // The full reel view
+                FullScreenReelView(
+                    reel: reel,
+                    isCurrentReel: true,
+                    onDismiss: {
+                        reelToShow = nil
+                    }
+                )
+                
+                // Add a back button overlay
+                VStack {
+                    HStack {
+                        Button(action: {
+                            reelToShow = nil
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.title2)
+                                    .fontWeight(.medium)
+                                Text("Back")
+                                    .font(.body)
+                                    .fontWeight(.medium)
                             }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(20)
                         }
+                        .padding()
+                        
+                        Spacer()
+                    }
+                    
+                    Spacer()
                 }
             }
         }
