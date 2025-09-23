@@ -359,6 +359,22 @@ struct ReviewCard: View {
         }
     }
     
+    // Add this to ProfileSupportingViews.swift
+
+    struct StarRatingView: View {
+        let rating: Double
+        
+        var body: some View {
+            HStack(spacing: 2) {
+                ForEach(1...5, id: \.self) { index in
+                    Image(systemName: index <= Int(rating.rounded()) ? "star.fill" : "star")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+        }
+    }
+    
     // MARK: - Subviews
     
     @ViewBuilder
