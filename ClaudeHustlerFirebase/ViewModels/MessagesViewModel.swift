@@ -32,7 +32,7 @@ final class MessagesViewModel: ObservableObject {
         error = nil
         
         // Use FirebaseService to load conversations since MessageRepository.fetch returns Messages
-        let fetchedConversations = await firebase.loadConversations()
+        let fetchedConversations = await repository.loadConversations()
         
         await MainActor.run {
             self.conversations = fetchedConversations
@@ -77,7 +77,7 @@ final class MessagesViewModel: ObservableObject {
     }
     
     func markMessagesAsRead(in conversationId: String) async throws {
-        // Use the existing markMessagesAsRead without userId parameter
+        // Just pass the conversationId value, no label
         try await repository.markMessagesAsRead(conversationId: conversationId)
     }
     
@@ -91,9 +91,10 @@ final class MessagesViewModel: ObservableObject {
     func listenToConversations() {
         guard let userId = currentUserId else { return }
         
-        // Use FirebaseService's loadConversations
         Task {
-            let conversations = await firebase.loadConversations()
+            // CHANGE FROM: let conversations = await firebase.loadConversations()
+            // TO:
+            let conversations = await repository.loadConversations()
             await MainActor.run {
                 self.conversations = conversations
             }
@@ -104,12 +105,12 @@ final class MessagesViewModel: ObservableObject {
         // Use FirebaseService's listenToMessages since MessageRepository doesn't have this method
         messagesListener?.remove() // Remove any existing listener
         
-        messagesListener = firebase.listenToMessages(in: conversationId) { messages in
-            DispatchQueue.main.async { [weak self] in
-                self?.messages = messages
-                completion(messages)
+        messagesListener = repository.listenToMessages(in: conversationId) { messages in
+                DispatchQueue.main.async { [weak self] in
+                    self?.messages = messages
+                    completion(messages)
+                }
             }
-        }
     }
     
     func stopListeningToMessages() {

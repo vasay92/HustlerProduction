@@ -156,8 +156,10 @@ struct ConversationsListView: View {
         guard let userId = FirebaseService.shared.currentUser?.id else { return }
         
         Task { @MainActor in
-            let conversations = await FirebaseService.shared.loadConversations()
-            viewModel.conversations = conversations
+            // CHANGE FROM: let conversations = await FirebaseService.shared.loadConversations()
+            // TO:
+            await viewModel.loadConversations()
+            let conversations = viewModel.conversations
         }
     }
     

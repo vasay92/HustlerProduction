@@ -514,138 +514,138 @@ extension FirebaseService {
 // MARK: - Messaging Extension (Delegating to MessageRepository)
 extension FirebaseService {
     
-    func findOrCreateConversation(with recipientId: String) async throws -> String {
-        guard let currentUserId = currentUser?.id else {
-            throw NSError(domain: "MessagingError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        // Try to find existing conversation where BOTH users are participants
-        let conversations1 = try await db.collection("conversations")
-            .whereField("participantIds", arrayContains: currentUserId)
-            .getDocuments()
-        
-        for doc in conversations1.documents {
-            if let participantIds = doc.data()["participantIds"] as? [String],
-               participantIds.contains(recipientId) && participantIds.count == 2 {
-                return doc.documentID
-            }
-        }
-        
-        // Also check if the OTHER user created a conversation with us
-        let conversations2 = try await db.collection("conversations")
-            .whereField("participantIds", arrayContains: recipientId)
-            .getDocuments()
-        
-        for doc in conversations2.documents {
-            if let participantIds = doc.data()["participantIds"] as? [String],
-               participantIds.contains(currentUserId) && participantIds.count == 2 {
-                return doc.documentID
-            }
-        }
-        
-        // Create new conversation if none exists
-        let conversationData: [String: Any] = [
-            "participantIds": [currentUserId, recipientId],
-            "participantNames": [:],
-            "participantImages": [:],
-            "lastMessage": "",
-            "lastMessageTimestamp": Date(),
-            "lastMessageSenderId": "",
-            "unreadCounts": [currentUserId: 0, recipientId: 0],
-            "lastReadTimestamps": [:],
-            "createdAt": Date(),
-            "updatedAt": Date(),
-            "blockedUsers": []
-        ]
-        
-        let docRef = try await db.collection("conversations").addDocument(data: conversationData)
-        return docRef.documentID
-    }
+//    func findOrCreateConversation(with recipientId: String) async throws -> String {
+//        guard let currentUserId = currentUser?.id else {
+//            throw NSError(domain: "MessagingError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+//        }
+//        
+//        // Try to find existing conversation where BOTH users are participants
+//        let conversations1 = try await db.collection("conversations")
+//            .whereField("participantIds", arrayContains: currentUserId)
+//            .getDocuments()
+//        
+//        for doc in conversations1.documents {
+//            if let participantIds = doc.data()["participantIds"] as? [String],
+//               participantIds.contains(recipientId) && participantIds.count == 2 {
+//                return doc.documentID
+//            }
+//        }
+//        
+//        // Also check if the OTHER user created a conversation with us
+//        let conversations2 = try await db.collection("conversations")
+//            .whereField("participantIds", arrayContains: recipientId)
+//            .getDocuments()
+//        
+//        for doc in conversations2.documents {
+//            if let participantIds = doc.data()["participantIds"] as? [String],
+//               participantIds.contains(currentUserId) && participantIds.count == 2 {
+//                return doc.documentID
+//            }
+//        }
+//        
+//        // Create new conversation if none exists
+//        let conversationData: [String: Any] = [
+//            "participantIds": [currentUserId, recipientId],
+//            "participantNames": [:],
+//            "participantImages": [:],
+//            "lastMessage": "",
+//            "lastMessageTimestamp": Date(),
+//            "lastMessageSenderId": "",
+//            "unreadCounts": [currentUserId: 0, recipientId: 0],
+//            "lastReadTimestamps": [:],
+//            "createdAt": Date(),
+//            "updatedAt": Date(),
+//            "blockedUsers": []
+//        ]
+//        
+//        let docRef = try await db.collection("conversations").addDocument(data: conversationData)
+//        return docRef.documentID
+//    }
     
-    func loadConversations() async -> [Conversation] {
-        do {
-            let result = try await MessageRepository.shared.fetchConversations(limit: 50)
-            return result.items
-        } catch {
-            print("Error loading conversations: \(error)")
-            return []
-        }
-    }
+//    func loadConversations() async -> [Conversation] {
+//        do {
+//            let result = try await MessageRepository.shared.fetchConversations(limit: 50)
+//            return result.items
+//        } catch {
+//            print("Error loading conversations: \(error)")
+//            return []
+//        }
+//    }
     
-    func sendMessage(
-        to recipientId: String,
-        text: String,
-        contextType: Message.MessageContextType? = nil,
-        contextId: String? = nil,
-        contextData: (title: String, image: String?, userId: String)? = nil
-    ) async throws {
-        try await MessageRepository.shared.sendMessage(
-            to: recipientId,
-            text: text,
-            contextType: contextType,
-            contextId: contextId,
-            contextData: contextData  // ADD THIS - pass it through
-        )
-    }
+//    func sendMessage(
+//        to recipientId: String,
+//        text: String,
+//        contextType: Message.MessageContextType? = nil,
+//        contextId: String? = nil,
+//        contextData: (title: String, image: String?, userId: String)? = nil
+//    ) async throws {
+//        try await MessageRepository.shared.sendMessage(
+//            to: recipientId,
+//            text: text,
+//            contextType: contextType,
+//            contextId: contextId,
+//            contextData: contextData  // ADD THIS - pass it through
+//        )
+//    }
     
-    func loadMessages(for conversationId: String, limit: Int = 50) async -> [Message] {
-        return await MessageRepository.shared.loadMessages(for: conversationId, limit: limit)
-    }
-    
-    // Replace your existing markMessagesAsRead function with this updated version
-    func markMessagesAsRead(in conversationId: String) async throws {
-        guard let currentUserId = currentUser?.id else { return }
-        
-        // Get all unread messages in this conversation for current user
-        let unreadMessages = try await db.collection("messages")
-            .whereField("conversationId", isEqualTo: conversationId)
-            .whereField("senderId", isNotEqualTo: currentUserId)
-            .whereField("isRead", isEqualTo: false)
-            .getDocuments()
-        
-        // Batch update all unread messages
-        let batch = db.batch()
-        
-        for document in unreadMessages.documents {
-            batch.updateData([
-                "isRead": true,
-                "readAt": Date()
-            ], forDocument: document.reference)
-        }
-        
-        // Also mark messages sent by current user as delivered if not already
-        let sentMessages = try await db.collection("messages")
-            .whereField("conversationId", isEqualTo: conversationId)
-            .whereField("senderId", isEqualTo: currentUserId)
-            .whereField("isDelivered", isEqualTo: false)
-            .getDocuments()
-        
-        for document in sentMessages.documents {
-            batch.updateData([
-                "isDelivered": true,
-                "deliveredAt": Date()
-            ], forDocument: document.reference)
-        }
-        
-        // Commit all updates
-        if !unreadMessages.documents.isEmpty || !sentMessages.documents.isEmpty {
-            try await batch.commit()
-        }
-        
-        // Update conversation unread count (optional, can fail)
-        do {
-            try await db.collection("conversations")
-                .document(conversationId)
-                .updateData([
-                    "unreadCounts.\(currentUserId)": 0,
-                    "lastReadTimestamps.\(currentUserId)": Date()
-                ])
-        } catch {
-            // Non-critical - conversation update can fail
-            print("Could not update conversation: \(error)")
-        }
-    }
-    
+//    func loadMessages(for conversationId: String, limit: Int = 50) async -> [Message] {
+//        return await MessageRepository.shared.loadMessages(for: conversationId, limit: limit)
+//    }
+//    
+//    // Replace your existing markMessagesAsRead function with this updated version
+//    func markMessagesAsRead(in conversationId: String) async throws {
+//        guard let currentUserId = currentUser?.id else { return }
+//        
+//        // Get all unread messages in this conversation for current user
+//        let unreadMessages = try await db.collection("messages")
+//            .whereField("conversationId", isEqualTo: conversationId)
+//            .whereField("senderId", isNotEqualTo: currentUserId)
+//            .whereField("isRead", isEqualTo: false)
+//            .getDocuments()
+//        
+//        // Batch update all unread messages
+//        let batch = db.batch()
+//        
+//        for document in unreadMessages.documents {
+//            batch.updateData([
+//                "isRead": true,
+//                "readAt": Date()
+//            ], forDocument: document.reference)
+//        }
+//        
+//        // Also mark messages sent by current user as delivered if not already
+//        let sentMessages = try await db.collection("messages")
+//            .whereField("conversationId", isEqualTo: conversationId)
+//            .whereField("senderId", isEqualTo: currentUserId)
+//            .whereField("isDelivered", isEqualTo: false)
+//            .getDocuments()
+//        
+//        for document in sentMessages.documents {
+//            batch.updateData([
+//                "isDelivered": true,
+//                "deliveredAt": Date()
+//            ], forDocument: document.reference)
+//        }
+//        
+//        // Commit all updates
+//        if !unreadMessages.documents.isEmpty || !sentMessages.documents.isEmpty {
+//            try await batch.commit()
+//        }
+//        
+//        // Update conversation unread count (optional, can fail)
+//        do {
+//            try await db.collection("conversations")
+//                .document(conversationId)
+//                .updateData([
+//                    "unreadCounts.\(currentUserId)": 0,
+//                    "lastReadTimestamps.\(currentUserId)": Date()
+//                ])
+//        } catch {
+//            // Non-critical - conversation update can fail
+//            print("Could not update conversation: \(error)")
+//        }
+//    }
+//    
     // Mark message as delivered
     func markMessageAsDelivered(_ messageId: String) async throws {
         try await db.collection("messages")
@@ -656,92 +656,92 @@ extension FirebaseService {
             ])
     }
     
-    func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
-        messagesListener?.remove()
-        
-        messagesListener = db.collection("messages")
-            .whereField("conversationId", isEqualTo: conversationId)
-            .order(by: "timestamp", descending: false)
-            .addSnapshotListener { snapshot, error in
-                if let error = error {
-                    print("Error listening to messages: \(error)")
-                    return
-                }
-                
-                print("DEBUG - Listener received \(snapshot?.documents.count ?? 0) documents")
-                
-                let messages: [Message] = snapshot?.documents.compactMap { doc in
-                    let data = doc.data()
-                    
-                    // Filter out deleted messages
-                    if let isDeleted = data["isDeleted"] as? Bool, isDeleted {
-                        return nil
-                    }
-                    
-                    // Always use manual creation - skip Firestore.Decoder completely
-                    guard let senderId = data["senderId"] as? String,
-                          let text = data["text"] as? String,
-                          let conversationId = data["conversationId"] as? String else {
-                        return nil
-                    }
-                    
-                    var message = Message(
-                        senderId: senderId,
-                        senderName: data["senderName"] as? String ?? "Unknown",
-                        senderProfileImage: data["senderProfileImage"] as? String,
-                        conversationId: conversationId,
-                        text: text
-                    )
-                    
-                    // Set optional fields
-                    message.id = doc.documentID
-                    
-                    // Handle timestamps
-                    if let timestamp = data["timestamp"] as? Timestamp {
-                        message.timestamp = timestamp.dateValue()
-                    }
-                    
-                    // Handle delivery/read status
-                    message.isDelivered = data["isDelivered"] as? Bool ?? false
-                    message.isRead = data["isRead"] as? Bool ?? false
-                    
-                    if let deliveredAt = data["deliveredAt"] as? Timestamp {
-                        message.deliveredAt = deliveredAt.dateValue()
-                    }
-                    
-                    if let readAt = data["readAt"] as? Timestamp {
-                        message.readAt = readAt.dateValue()
-                    }
-                    
-                    // Handle context fields
-                    if let contextType = data["contextType"] as? String, !contextType.isEmpty {
-                        message.contextType = Message.MessageContextType(rawValue: contextType)
-                    }
-                    
-                    if let contextId = data["contextId"] as? String, !contextId.isEmpty {
-                        message.contextId = contextId
-                    }
-                    
-                    message.contextTitle = data["contextTitle"] as? String
-                    message.contextImage = data["contextImage"] as? String
-                    message.contextUserId = data["contextUserId"] as? String
-                    
-                    // Handle edit status
-                    message.isEdited = data["isEdited"] as? Bool ?? false
-                    if let editedAt = data["editedAt"] as? Timestamp {
-                        message.editedAt = editedAt.dateValue()
-                    }
-                    
-                    return message
-                } ?? []
-                
-                print("DEBUG - Listener triggered with \(messages.count) messages")
-                
-                completion(messages)
-            }
-        
-        return messagesListener!
-    }
+//    func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
+//        messagesListener?.remove()
+//        
+//        messagesListener = db.collection("messages")
+//            .whereField("conversationId", isEqualTo: conversationId)
+//            .order(by: "timestamp", descending: false)
+//            .addSnapshotListener { snapshot, error in
+//                if let error = error {
+//                    print("Error listening to messages: \(error)")
+//                    return
+//                }
+//                
+//                print("DEBUG - Listener received \(snapshot?.documents.count ?? 0) documents")
+//                
+//                let messages: [Message] = snapshot?.documents.compactMap { doc in
+//                    let data = doc.data()
+//                    
+//                    // Filter out deleted messages
+//                    if let isDeleted = data["isDeleted"] as? Bool, isDeleted {
+//                        return nil
+//                    }
+//                    
+//                    // Always use manual creation - skip Firestore.Decoder completely
+//                    guard let senderId = data["senderId"] as? String,
+//                          let text = data["text"] as? String,
+//                          let conversationId = data["conversationId"] as? String else {
+//                        return nil
+//                    }
+//                    
+//                    var message = Message(
+//                        senderId: senderId,
+//                        senderName: data["senderName"] as? String ?? "Unknown",
+//                        senderProfileImage: data["senderProfileImage"] as? String,
+//                        conversationId: conversationId,
+//                        text: text
+//                    )
+//                    
+//                    // Set optional fields
+//                    message.id = doc.documentID
+//                    
+//                    // Handle timestamps
+//                    if let timestamp = data["timestamp"] as? Timestamp {
+//                        message.timestamp = timestamp.dateValue()
+//                    }
+//                    
+//                    // Handle delivery/read status
+//                    message.isDelivered = data["isDelivered"] as? Bool ?? false
+//                    message.isRead = data["isRead"] as? Bool ?? false
+//                    
+//                    if let deliveredAt = data["deliveredAt"] as? Timestamp {
+//                        message.deliveredAt = deliveredAt.dateValue()
+//                    }
+//                    
+//                    if let readAt = data["readAt"] as? Timestamp {
+//                        message.readAt = readAt.dateValue()
+//                    }
+//                    
+//                    // Handle context fields
+//                    if let contextType = data["contextType"] as? String, !contextType.isEmpty {
+//                        message.contextType = Message.MessageContextType(rawValue: contextType)
+//                    }
+//                    
+//                    if let contextId = data["contextId"] as? String, !contextId.isEmpty {
+//                        message.contextId = contextId
+//                    }
+//                    
+//                    message.contextTitle = data["contextTitle"] as? String
+//                    message.contextImage = data["contextImage"] as? String
+//                    message.contextUserId = data["contextUserId"] as? String
+//                    
+//                    // Handle edit status
+//                    message.isEdited = data["isEdited"] as? Bool ?? false
+//                    if let editedAt = data["editedAt"] as? Timestamp {
+//                        message.editedAt = editedAt.dateValue()
+//                    }
+//                    
+//                    return message
+//                } ?? []
+//                
+//                print("DEBUG - Listener triggered with \(messages.count) messages")
+//                
+//                completion(messages)
+//            }
+//        
+//        return messagesListener!
+//    }
     
     func blockUser(_ userId: String, in conversationId: String) async throws {
         try await MessageRepository.shared.blockUser(userId, in: conversationId)

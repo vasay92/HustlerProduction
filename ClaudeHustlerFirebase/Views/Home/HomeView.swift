@@ -64,21 +64,21 @@ struct HomeView: View {
                     .padding(.top, 10)
                     
                     HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
-                            
-                            TextField("Search services...", text: $viewModel.searchText)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            
-                            if !viewModel.searchText.isEmpty {
-                                Button(action: { viewModel.searchText = "" }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.gray)
-                                }
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                        
+                        TextField("Search services...", text: $viewModel.searchText)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        
+                        if !viewModel.searchText.isEmpty {
+                            Button(action: { viewModel.searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
                             }
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom, 10)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 10)
                     
                     // Content Section with Loading States
                     if viewModel.isLoading && viewModel.posts.isEmpty {
@@ -211,7 +211,7 @@ struct HomeView: View {
                 startListeningToUnreadCount()
             }
             .onDisappear {
-//                conversationsListener?.remove()
+                //                conversationsListener?.remove()
             }
         }
     }
@@ -224,12 +224,10 @@ struct HomeView: View {
     // MARK: - Real-time Unread Count
     
     private func startListeningToUnreadCount() {
-        conversationsListener?.remove()
-        conversationsListener = nil  // Clear the old listener
-        
-        // Load conversations and count unread messages
         Task { @MainActor in
-            let conversations = await firebase.loadConversations()
+            // CHANGE FROM: let conversations = await firebase.loadConversations()
+            // TO:
+            let conversations = await MessageRepository.shared.loadConversations()
             
             var total = 0
             if let userId = firebase.currentUser?.id {
@@ -238,321 +236,306 @@ struct HomeView: View {
                 }
             }
             self.unreadMessageCount = total
-            
-            // Optional: Set up periodic refresh (every 30 seconds)
-            // This replaces real-time listening temporarily
-            Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
-                Task { @MainActor in
-                    let updatedConversations = await firebase.loadConversations()
-                    var newTotal = 0
-                    if let userId = firebase.currentUser?.id {
-                        for conversation in updatedConversations {
-                            newTotal += conversation.unreadCounts[userId] ?? 0
-                        }
-                    }
-                    self.unreadMessageCount = newTotal
-                }
-            }
         }
     }
-}
-
-// Service Post Card
-struct ServicePostCard: View {
-    let post: ServicePost
-    @StateObject private var firebase = FirebaseService.shared
-    @State private var isSaved = false
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Image section if images exist
-            if !post.imageURLs.isEmpty {
-                TabView {
-                    ForEach(post.imageURLs, id: \.self) { imageURL in
-                        CachedAsyncImage(url: imageURL) {
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.2))
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .foregroundColor(.gray)
-                                )
+    // Service Post Card
+    struct ServicePostCard: View {
+        let post: ServicePost
+        @StateObject private var firebase = FirebaseService.shared
+        @State private var isSaved = false
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                // Image section if images exist
+                if !post.imageURLs.isEmpty {
+                    TabView {
+                        ForEach(post.imageURLs, id: \.self) { imageURL in
+                            CachedAsyncImage(url: imageURL) {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                                    .overlay(
+                                        Image(systemName: "photo")
+                                            .foregroundColor(.gray)
+                                    )
+                            }
+                            .frame(height: 200)
+                            .clipped()
                         }
-                        .frame(height: 200)
-                        .clipped()
                     }
+                    .frame(height: 200)
+                    .tabViewStyle(PageTabViewStyle())
+                    .cornerRadius(12)
                 }
-                .frame(height: 200)
-                .tabViewStyle(PageTabViewStyle())
-                .cornerRadius(12)
-            }
-            
-            // Header
-            HStack {
-                // User info
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Text(String(post.userName?.first ?? "U"))
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        )
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(post.userName ?? "User")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
+                
+                // Header
+                HStack {
+                    // User info
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Text(String(post.userName?.first ?? "U"))
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                            )
                         
-                        HStack(spacing: 4) {
-                            if let location = post.location, !location.isEmpty {
-                                Image(systemName: "location")
-                                    .font(.caption2)
-                                Text(location)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            } else {
-                                Image(systemName: "location")
-                                    .font(.caption2)
-                                Text("Aurora")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(post.userName ?? "User")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            
+                            HStack(spacing: 4) {
+                                if let location = post.location, !location.isEmpty {
+                                    Image(systemName: "location")
+                                        .font(.caption2)
+                                    Text(location)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Image(systemName: "location")
+                                        .font(.caption2)
+                                    Text("Aurora")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
                     }
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 2) {
-                    if post.isRequest {
-                        Text("REQUEST")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.orange)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.2))
-                            .cornerRadius(4)
-                    }
                     
-                    Text(post.createdAt, style: .relative)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if post.isRequest {
+                            Text("REQUEST")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange.opacity(0.2))
+                                .cornerRadius(4)
+                        }
+                        
+                        Text(post.createdAt, style: .relative)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
-            }
-            
-            // Title and Description
-            VStack(alignment: .leading, spacing: 6) {
-                Text(post.title)
-                    .font(.headline)
-                    .foregroundColor(.primary)
                 
-                Text(post.description)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-            }
-            
-            // Footer
-            HStack {
-                // Price
-                if let price = post.price {
-                    Text("$\(Int(price))")
+                // Title and Description
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(post.title)
                         .font(.headline)
-                        .foregroundColor(.green)
+                        .foregroundColor(.primary)
+                    
+                    Text(post.description)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
                 }
                 
-                // Category
-                Text(post.category.displayName)
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.1))
-                    .foregroundColor(.blue)
-                    .cornerRadius(8)
-                
-                Spacer()
-                
-                // Actions
-                HStack(spacing: 15) {
-                    Button(action: { toggleSave() }) {
-                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                            .foregroundColor(isSaved ? .blue : .gray)
-                            .scaleEffect(isSaved ? 1.1 : 1.0)
-                            .animation(.easeInOut(duration: 0.2), value: isSaved)
+                // Footer
+                HStack {
+                    // Price
+                    if let price = post.price {
+                        Text("$\(Int(price))")
+                            .font(.headline)
+                            .foregroundColor(.green)
                     }
                     
-                    Image(systemName: "bubble.right")
-                        .foregroundColor(.gray)
+                    // Category
+                    Text(post.category.displayName)
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(8)
                     
-                    Image(systemName: "square.and.arrow.up")
-                        .foregroundColor(.gray)
+                    Spacer()
+                    
+                    // Actions
+                    HStack(spacing: 15) {
+                        Button(action: { toggleSave() }) {
+                            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                                .foregroundColor(isSaved ? .blue : .gray)
+                                .scaleEffect(isSaved ? 1.1 : 1.0)
+                                .animation(.easeInOut(duration: 0.2), value: isSaved)
+                        }
+                        
+                        Image(systemName: "bubble.right")
+                            .foregroundColor(.gray)
+                        
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundColor(.gray)
+                    }
                 }
             }
+            .padding()
+            .background(Color(UIColor.systemBackground))
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+            .task {
+                await checkSaveStatus()
+            }
         }
-        .padding()
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
-        .task {
-            await checkSaveStatus()
-        }
-    }
-    
-    private func checkSaveStatus() async {
-        if let postId = post.id {
-            isSaved = await SavedItemsRepository.shared.isItemSaved(
-                itemId: postId,
-                type: .post
-            )
-        }
-    }
-    
-    private func toggleSave() {
-        guard let postId = post.id else { return }
         
-        Task {
-            do {
-                isSaved = try await SavedItemsRepository.shared.toggleSave(
+        private func checkSaveStatus() async {
+            if let postId = post.id {
+                isSaved = await SavedItemsRepository.shared.isItemSaved(
                     itemId: postId,
                     type: .post
                 )
-            } catch {
-                print("Error toggling save: \(error)")
             }
         }
-    }
-}
-
-// Mini Service Card (Trending)
-struct MiniServiceCard: View {
-    let post: ServicePost
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Image or placeholder
-            if !post.imageURLs.isEmpty, let firstImageURL = post.imageURLs.first {
-                AsyncImage(url: URL(string: firstImageURL)) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 150, height: 150)
-                            .clipped()
-                            .cornerRadius(10)
-                    case .failure(_):
-                        imagePlaceholder
-                    case .empty:
-                        ZStack {
-                            imagePlaceholder
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
-                        }
-                    @unknown default:
-                        imagePlaceholder
-                    }
-                }
-            } else {
-                imagePlaceholder
-            }
+        
+        private func toggleSave() {
+            guard let postId = post.id else { return }
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(post.title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .foregroundColor(.primary)
-                
-                if let price = post.price {
-                    Text("$\(Int(price))")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.blue)
+            Task {
+                do {
+                    isSaved = try await SavedItemsRepository.shared.toggleSave(
+                        itemId: postId,
+                        type: .post
+                    )
+                } catch {
+                    print("Error toggling save: \(error)")
                 }
             }
         }
-        .frame(width: 150)
-        .padding(10)
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
     
-    private var imagePlaceholder: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 150, height: 150)
-            .cornerRadius(10)
-            .overlay(
-                Image(systemName: "photo")
-                    .foregroundColor(.white)
-                    .font(.largeTitle)
-            )
-    }
-}
-
-// MARK: - Filter View
-struct FilterView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var selectedCategory: ServiceCategory?
-    @State private var minPrice = ""
-    @State private var maxPrice = ""
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Category") {
-                    Picker("Category", selection: $selectedCategory) {
-                        Text("All Categories").tag(nil as ServiceCategory?)
-                        ForEach(ServiceCategory.allCases, id: \.self) { category in
-                            Text(category.displayName).tag(category as ServiceCategory?)
+    // Mini Service Card (Trending)
+    struct MiniServiceCard: View {
+        let post: ServicePost
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                // Image or placeholder
+                if !post.imageURLs.isEmpty, let firstImageURL = post.imageURLs.first {
+                    AsyncImage(url: URL(string: firstImageURL)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 150, height: 150)
+                                .clipped()
+                                .cornerRadius(10)
+                        case .failure(_):
+                            imagePlaceholder
+                        case .empty:
+                            ZStack {
+                                imagePlaceholder
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            }
+                        @unknown default:
+                            imagePlaceholder
                         }
                     }
-                    .pickerStyle(MenuPickerStyle())
+                } else {
+                    imagePlaceholder
                 }
                 
-                Section("Price Range") {
-                    HStack {
-                        TextField("Min", text: $minPrice)
-                            .keyboardType(.numberPad)
-                        
-                        Text("-")
-                        
-                        TextField("Max", text: $maxPrice)
-                            .keyboardType(.numberPad)
-                    }
-                }
-                
-                Section {
-                    Button("Apply Filters") {
-                        dismiss()
-                    }
-                    .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(post.title)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                        .foregroundColor(.primary)
                     
-                    Button("Clear All") {
-                        selectedCategory = nil
-                        minPrice = ""
-                        maxPrice = ""
+                    if let price = post.price {
+                        Text("$\(Int(price))")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
                     }
-                    .frame(maxWidth: .infinity)
-                    .foregroundColor(.red)
                 }
             }
-            .navigationTitle("Filters")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
+            .frame(width: 150)
+            .padding(10)
+            .background(Color(UIColor.systemBackground))
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+        }
+        
+        private var imagePlaceholder: some View {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 150, height: 150)
+                .cornerRadius(10)
+                .overlay(
+                    Image(systemName: "photo")
+                        .foregroundColor(.white)
+                        .font(.largeTitle)
+                )
+        }
+    }
+    
+    // MARK: - Filter View
+    struct FilterView: View {
+        @Environment(\.dismiss) private var dismiss
+        @State private var selectedCategory: ServiceCategory?
+        @State private var minPrice = ""
+        @State private var maxPrice = ""
+        
+        var body: some View {
+            NavigationView {
+                Form {
+                    Section("Category") {
+                        Picker("Category", selection: $selectedCategory) {
+                            Text("All Categories").tag(nil as ServiceCategory?)
+                            ForEach(ServiceCategory.allCases, id: \.self) { category in
+                                Text(category.displayName).tag(category as ServiceCategory?)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                    }
+                    
+                    Section("Price Range") {
+                        HStack {
+                            TextField("Min", text: $minPrice)
+                                .keyboardType(.numberPad)
+                            
+                            Text("-")
+                            
+                            TextField("Max", text: $maxPrice)
+                                .keyboardType(.numberPad)
+                        }
+                    }
+                    
+                    Section {
+                        Button("Apply Filters") {
+                            dismiss()
+                        }
+                        .frame(maxWidth: .infinity)
+                        
+                        Button("Clear All") {
+                            selectedCategory = nil
+                            minPrice = ""
+                            maxPrice = ""
+                        }
+                        .frame(maxWidth: .infinity)
+                        .foregroundColor(.red)
+                    }
+                }
+                .navigationTitle("Filters")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") { dismiss() }
+                    }
                 }
             }
         }

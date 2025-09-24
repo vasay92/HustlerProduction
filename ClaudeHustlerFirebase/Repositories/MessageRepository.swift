@@ -276,34 +276,6 @@ final class MessageRepository: RepositoryProtocol {
         return docRef.documentID
     }
     
-    func markMessagesAsRead(conversationId: String) async throws {
-        guard let userId = FirebaseService.shared.currentUser?.id else { return }
-        
-        let batch = db.batch()
-        
-        // Update all unread messages in TOP-LEVEL messages collection
-        let unreadMessages = try await db.collection("messages")  // NOT subcollection
-            .whereField("conversationId", isEqualTo: conversationId)
-            .whereField("isRead", isEqualTo: false)
-            .whereField("senderId", isNotEqualTo: userId)
-            .getDocuments()
-        
-        for doc in unreadMessages.documents {
-            batch.updateData(["isRead": true], forDocument: doc.reference)
-        }
-        
-        // Update conversation unread count
-        let conversationRef = db.collection("conversations").document(conversationId)
-        batch.updateData([
-            "unreadCounts.\(userId)": 0,
-            "lastReadTimestamps.\(userId)": Date()
-        ], forDocument: conversationRef)
-        
-        try await batch.commit()
-        
-        cache.remove(for: "conversations_page_1")
-    }
-    
     // MARK: - Private Helper Methods
     
     private func updateConversationParticipantInfo(conversationId: String) async {
@@ -475,4 +447,157 @@ final class MessageRepository: RepositoryProtocol {
         cache.remove(for: "conversation_\(conversationId)")
         cache.remove(for: "messages_\(conversationId)")
     }
+    // Add this method for loading conversations (currently missing the proper implementation)
+    func loadConversations() async -> [Conversation] {
+        do {
+            let result = try await fetchConversations(limit: 50)
+            return result.items
+        } catch {
+            print("Error loading conversations: \(error)")
+            return []
+        }
+    }
+
+    // Add the complete listenToMessages implementation (move from FirebaseService)
+    func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
+        // Remove any existing listener for this conversation
+        messageListeners[conversationId]?.remove()
+        
+        let listener = db.collection("messages")
+            .whereField("conversationId", isEqualTo: conversationId)
+            .order(by: "timestamp", descending: false)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Error listening to messages: \(error)")
+                    return
+                }
+                
+                print("DEBUG - Listener received \(snapshot?.documents.count ?? 0) documents")
+                
+                let messages: [Message] = snapshot?.documents.compactMap { doc in
+                    let data = doc.data()
+                    
+                    // Filter out deleted messages
+                    if let isDeleted = data["isDeleted"] as? Bool, isDeleted {
+                        return nil
+                    }
+                    
+                    // Manual message creation to avoid decoding issues
+                    guard let senderId = data["senderId"] as? String,
+                          let text = data["text"] as? String,
+                          let conversationId = data["conversationId"] as? String else {
+                        return nil
+                    }
+                    
+                    var message = Message(
+                        senderId: senderId,
+                        senderName: data["senderName"] as? String ?? "Unknown",
+                        senderProfileImage: data["senderProfileImage"] as? String,
+                        conversationId: conversationId,
+                        text: text
+                    )
+                    
+                    // Set all optional fields
+                    message.id = doc.documentID
+                    
+                    if let timestamp = data["timestamp"] as? Timestamp {
+                        message.timestamp = timestamp.dateValue()
+                    }
+                    
+                    message.isDelivered = data["isDelivered"] as? Bool ?? false
+                    message.isRead = data["isRead"] as? Bool ?? false
+                    
+                    if let deliveredAt = data["deliveredAt"] as? Timestamp {
+                        message.deliveredAt = deliveredAt.dateValue()
+                    }
+                    
+                    if let readAt = data["readAt"] as? Timestamp {
+                        message.readAt = readAt.dateValue()
+                    }
+                    
+                    // Handle context fields
+                    if let contextType = data["contextType"] as? String, !contextType.isEmpty {
+                        message.contextType = Message.MessageContextType(rawValue: contextType)
+                    }
+                    
+                    if let contextId = data["contextId"] as? String, !contextId.isEmpty {
+                        message.contextId = contextId
+                    }
+                    
+                    message.contextTitle = data["contextTitle"] as? String
+                    message.contextImage = data["contextImage"] as? String
+                    message.contextUserId = data["contextUserId"] as? String
+                    
+                    message.isEdited = data["isEdited"] as? Bool ?? false
+                    if let editedAt = data["editedAt"] as? Timestamp {
+                        message.editedAt = editedAt.dateValue()
+                    }
+                    
+                    return message
+                } ?? []
+                
+                print("DEBUG - Listener triggered with \(messages.count) messages")
+                completion(messages)
+            }
+        
+        messageListeners[conversationId] = listener
+        return listener
+    }
+
+    // Add the complete markMessagesAsRead implementation (move from FirebaseService)
+    func markMessagesAsRead(conversationId: String) async throws {
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else { return }
+        
+        // Get all unread messages in this conversation for current user
+        let unreadMessages = try await db.collection("messages")
+            .whereField("conversationId", isEqualTo: conversationId)
+            .whereField("senderId", isNotEqualTo: currentUserId)
+            .whereField("isRead", isEqualTo: false)
+            .getDocuments()
+        
+        // Batch update all unread messages
+        let batch = db.batch()
+        
+        for document in unreadMessages.documents {
+            batch.updateData([
+                "isRead": true,
+                "readAt": Date()
+            ], forDocument: document.reference)
+        }
+        
+        // Also mark messages sent by current user as delivered if not already
+        let sentMessages = try await db.collection("messages")
+            .whereField("conversationId", isEqualTo: conversationId)
+            .whereField("senderId", isEqualTo: currentUserId)
+            .whereField("isDelivered", isEqualTo: false)
+            .getDocuments()
+        
+        for document in sentMessages.documents {
+            batch.updateData([
+                "isDelivered": true,
+                "deliveredAt": Date()
+            ], forDocument: document.reference)
+        }
+        
+        // Commit all updates
+        if !unreadMessages.documents.isEmpty || !sentMessages.documents.isEmpty {
+            try await batch.commit()
+        }
+        
+        // Update conversation unread count
+        do {
+            try await db.collection("conversations")
+                .document(conversationId)
+                .updateData([
+                    "unreadCounts.\(currentUserId)": 0,
+                    "lastReadTimestamps.\(currentUserId)": Date()
+                ])
+        } catch {
+            print("Could not update conversation: \(error)")
+        }
+        
+        // Clear cache
+        cache.remove(for: "messages_\(conversationId)")
+    }
+    
 }
