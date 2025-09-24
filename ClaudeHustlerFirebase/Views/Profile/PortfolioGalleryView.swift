@@ -69,7 +69,7 @@ struct PortfolioGalleryView: View {
             ImagePicker(images: $newImages, singleImage: .constant(nil))
         }
         .sheet(isPresented: $showingEditSheet) {
-            EditPortfolioDetailsView(card: card)
+            EditPortfolioDetailsView(card: card, profileViewModel: profileViewModel)
         }
         .fullScreenCover(item: $selectedImageURL) { identifiableURL in
             ImageViewerView(
@@ -248,7 +248,6 @@ struct PortfolioGalleryView: View {
     
     // MARK: - Helper Functions
     
-    // Replace addMoreImages method around line 45:
     private func addMoreImages(_ images: [UIImage]) async {
         isAddingImages = true
         
@@ -263,13 +262,13 @@ struct PortfolioGalleryView: View {
                 newURLs.append(url)
             }
             
-            // Update the card using repository
+            // Update the card using profileViewModel instead of repository
             mediaURLs.append(contentsOf: newURLs)
             
             var updatedCard = card
             updatedCard.mediaURLs = mediaURLs
             
-            try await PortfolioRepository.shared.updatePortfolioCard(updatedCard)
+            try await profileViewModel.updatePortfolioCard(updatedCard)  // CHANGED
             
             newImages = []
         } catch {
@@ -279,7 +278,6 @@ struct PortfolioGalleryView: View {
         isAddingImages = false
     }
 
-    // Replace deleteImage method:
     private func deleteImage(url: String) {
         guard let cardId = card.id else { return }
         
@@ -290,7 +288,7 @@ struct PortfolioGalleryView: View {
                 var updatedCard = card
                 updatedCard.mediaURLs = mediaURLs
                 
-                try await PortfolioRepository.shared.updatePortfolioCard(updatedCard)
+                try await profileViewModel.updatePortfolioCard(updatedCard)  // CHANGED
             } catch {
                 print("Error deleting image: \(error)")
             }
@@ -301,7 +299,7 @@ struct PortfolioGalleryView: View {
         guard let cardId = card.id else { return }
         
         do {
-            try await PortfolioRepository.shared.deletePortfolioCard(cardId)  // ✅ Uses repository
+            try await profileViewModel.deletePortfolioCard(cardId)  // CHANGED
             dismiss()
         } catch {
             print("Error deleting portfolio card: \(error)")
@@ -369,14 +367,16 @@ struct ImageViewerView: View {
 // MARK: - Edit Portfolio Details View
 struct EditPortfolioDetailsView: View {
     let card: PortfolioCard
+    @ObservedObject var profileViewModel: ProfileViewModel  // ADDED
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var title: String = ""
     @State private var description: String = ""
     @State private var isSaving = false
     
-    init(card: PortfolioCard) {
+    init(card: PortfolioCard, profileViewModel: ProfileViewModel) {  // CHANGED
         self.card = card
+        self.profileViewModel = profileViewModel  // ADDED
         _title = State(initialValue: card.title)
         _description = State(initialValue: card.description ?? "")
     }
@@ -443,7 +443,7 @@ struct EditPortfolioDetailsView: View {
             updatedCard.title = title
             updatedCard.description = description
             
-            try await PortfolioRepository.shared.updatePortfolioCard(updatedCard)
+            try await profileViewModel.updatePortfolioCard(updatedCard)  // CHANGED
             dismiss()
         } catch {
             print("Error updating details: \(error)")

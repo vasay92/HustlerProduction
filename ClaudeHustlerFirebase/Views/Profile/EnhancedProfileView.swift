@@ -356,7 +356,11 @@ struct EnhancedProfileView: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(viewModel.portfolioCards) { card in
                         // Using the existing PortfolioCardView from ProfileSupportingViews.swift
-                        PortfolioCardView(card: card, isOwner: viewModel.isOwnProfile)
+                        PortfolioCardView(
+                            card: card,
+                            isOwner: viewModel.isOwnProfile,
+                            profileViewModel: viewModel  // ADD THIS
+                        )
                     }
                 }
                 .padding()

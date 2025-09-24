@@ -10,6 +10,7 @@ import FirebaseFirestore
 struct PortfolioCardView: View {
     let card: PortfolioCard
     let isOwner: Bool
+    @ObservedObject var profileViewModel: ProfileViewModel
     @State private var showingGallery = false
     @State private var showingMenu = false
     @StateObject private var firebase = FirebaseService.shared
@@ -67,7 +68,7 @@ struct PortfolioCardView: View {
             .cornerRadius(12)
         }
         .fullScreenCover(isPresented: $showingGallery) {
-            PortfolioGalleryView(card: card, isOwner: isOwner)
+            PortfolioGalleryView(card: card, isOwner: isOwner, profileViewModel: profileViewModel)
         }
         .contextMenu {
             if isOwner {

@@ -242,12 +242,4 @@ final class ProfileViewModel: ObservableObject {
             portfolioCards[index] = card
         }
     }
-
-    // deletePortfolioCard should already exist, but if not:
-    func deletePortfolioCard(_ cardId: String) async throws {
-        try await portfolioRepository.delete(cardId)
-        
-        // Remove from local state
-        portfolioCards.removeAll { $0.id == cardId }
-    }
 }
