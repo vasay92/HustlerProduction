@@ -196,4 +196,17 @@ final class StatusRepository: RepositoryProtocol {
         
         return try await create(status)
     }
+    // Add to StatusRepository.swift:
+    func markStatusAsViewed(_ statusId: String) async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "StatusRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        
+        try await db.collection("statuses").document(statusId).updateData([
+            "viewedBy": FieldValue.arrayUnion([userId])
+        ])
+        
+        // Clear cache if needed
+        cache.remove(for: "status_\(statusId)")
+    }
 }

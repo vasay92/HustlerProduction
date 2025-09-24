@@ -188,7 +188,7 @@ class AuthenticationService: ObservableObject {
     // MARK: - Sign Out
     func signOut() throws {
         // Clean up all Firebase listeners - Direct method call since both classes are @MainActor
-        firebase.removeAllListeners()
+        
         
         // Clean up Firebase cached data
         firebase.cleanupOnSignOut()

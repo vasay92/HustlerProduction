@@ -2,6 +2,8 @@
 import SwiftUI
 import PhotosUI
 import FirebaseFirestore
+import Foundation
+import FirebaseAuth
 
 // MARK: - Portfolio Card View
 // Update this in ProfileSupportingViews.swift
@@ -946,7 +948,7 @@ struct FollowersListView: View {
                 }
             }
             .task {
-                followers = await firebase.getFollowers(for: userId)
+                followers = (try? await UserRepository.shared.fetchFollowers(for: userId)) ?? []
             }
         }
     }
@@ -991,7 +993,7 @@ struct FollowingListView: View {
                 }
             }
             .task {
-                following = await firebase.getFollowing(for: userId)
+                following = (try? await UserRepository.shared.fetchFollowing(for: userId)) ?? []
             }
         }
     }

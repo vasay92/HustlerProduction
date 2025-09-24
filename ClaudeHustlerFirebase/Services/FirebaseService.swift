@@ -24,16 +24,9 @@ class FirebaseService: ObservableObject {
 //    private let reviewRepository = ReviewRepository.shared
     @Published var currentUser: User?
     @Published var isAuthenticated = false
-    @Published var posts: [ServicePost] = []
-    @Published var offers: [ServicePost] = []
-    @Published var requests: [ServicePost] = []
-    @Published var statuses: [Status] = []
-    @Published var reels: [Reel] = []
     @Published var isLoading = false
     
-    // Listener properties for cleanup
-    private var conversationsListener: ListenerRegistration?
-    private var messagesListener: ListenerRegistration?
+    
     
     private init() {
         setupAuthListener()
@@ -81,17 +74,8 @@ class FirebaseService: ObservableObject {
     }
     
     func cleanupOnSignOut() {
-        // Remove all listeners
-        conversationsListener?.remove()
-        messagesListener?.remove()
-        
         // Clear cached data
         currentUser = nil
-        posts = []
-        offers = []
-        requests = []
-        statuses = []
-        reels = []
         
         // Clear any additional cached data
         isLoading = false
@@ -143,92 +127,8 @@ class FirebaseService: ObservableObject {
     }
     
     
-    // MARK: - Reels
-    
-    func loadReels() async {
-        do {
-            let (reels, _) = try await ReelRepository.shared.fetch(limit: 50)
-            self.reels = reels
-        } catch {
-            print("Error loading reels: \(error)")
-            self.reels = []
-        }
-    }
-    
-    func createReel(
-        videoURL: String,
-        thumbnailImage: UIImage?,
-        title: String,
-        description: String,
-        category: ServiceCategory?,
-        hashtags: [String] = []
-    ) async throws -> String {
-        guard let userId = currentUser?.id,
-              let userName = currentUser?.name else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        var thumbnailURL = ""
-        if let thumbnail = thumbnailImage {
-            thumbnailURL = try await uploadImage(thumbnail, path: "reels/\(userId)/thumbnails/\(UUID().uuidString).jpg")
-        }
-        
-        let reel = Reel(
-            userId: userId,
-            userName: userName,
-            userProfileImage: currentUser?.profileImageURL,
-            videoURL: videoURL,
-            thumbnailURL: thumbnailURL.isEmpty ? nil : thumbnailURL,
-            title: title,
-            description: description,
-            category: category,
-            hashtags: hashtags
-        )
-        
-        let reelId = try await ReelRepository.shared.create(reel)
-        
-        // Refresh reels in view model if needed
-        await ReelsViewModel.shared?.loadInitialReels()
-        
-        return reelId
-    }
-    
-    func createImageReel(
-        image: UIImage,
-        title: String,
-        description: String,
-        category: ServiceCategory? = nil
-    ) async throws -> String {
-        guard let userId = currentUser?.id else {
-            throw NSError(domain: "FirebaseService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        let imageURL = try await uploadImage(image, path: "reels/\(userId)/\(UUID().uuidString).jpg")
-        
-        return try await createReel(
-            videoURL: imageURL,
-            thumbnailImage: image,
-            title: title,
-            description: description,
-            category: category
-        )
-    }
 
     
-    // MARK: - Status Interactions
-    
-    func viewStatus(_ statusId: String) async {
-        guard let userId = currentUser?.id else { return }
-        
-        do {
-            let statusRef = db.collection("statuses").document(statusId)
-            try await statusRef.updateData([
-                "viewedBy": FieldValue.arrayUnion([userId])
-            ])
-        } catch {
-            print("Error marking status as viewed: \(error)")
-        }
-    }
     
     // MARK: - Image Upload
     
@@ -265,21 +165,14 @@ class FirebaseService: ObservableObject {
     }
     // MARK: - Following System
     
-    // In FirebaseService.swift, replace the existing methods:
+    // SIMPLIFIED VERSION - Keep in FirebaseService:
     func followUser(_ targetUserId: String) async throws {
         guard let currentUserId = currentUser?.id else { return }
         
         try await UserRepository.shared.followUser(targetUserId)
         
-        // Reload current user and statuses
+        // Just reload current user
         await loadUser(userId: currentUserId)
-        
-        // Use StatusRepository for loading statuses
-        if let user = currentUser {
-            var userIds = user.following
-            userIds.append(currentUserId)
-            statuses = try await StatusRepository.shared.fetchStatusesFromFollowing(userIds: userIds)
-        }
     }
 
     func unfollowUser(_ targetUserId: String) async throws {
@@ -287,15 +180,8 @@ class FirebaseService: ObservableObject {
         
         try await UserRepository.shared.unfollowUser(targetUserId)
         
-        // Reload current user and statuses
+        // Just reload current user
         await loadUser(userId: currentUserId)
-        
-        // Use StatusRepository for loading statuses
-        if let user = currentUser {
-            var userIds = user.following
-            userIds.append(currentUserId)
-            statuses = try await StatusRepository.shared.fetchStatusesFromFollowing(userIds: userIds)
-        }
     }
     
     
@@ -488,277 +374,8 @@ extension FirebaseService {
     }
 }
 
-// MARK: - Followers/Following Lists Extension
-extension FirebaseService {
-    
-    // Update getFollowers/getFollowing in FirebaseService:
-    func getFollowers(for userId: String) async -> [User] {
-        do {
-            return try await UserRepository.shared.fetchFollowers(for: userId)
-        } catch {
-            return []
-        }
-    }
-
-    func getFollowing(for userId: String) async -> [User] {
-        do {
-            return try await UserRepository.shared.fetchFollowing(for: userId)
-        } catch {
-            print("Error getting following: \(error)")
-            return []
-        }
-    }
-}
 
 
-// MARK: - Messaging Extension (Delegating to MessageRepository)
-extension FirebaseService {
-    
-//    func findOrCreateConversation(with recipientId: String) async throws -> String {
-//        guard let currentUserId = currentUser?.id else {
-//            throw NSError(domain: "MessagingError", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-//        }
-//        
-//        // Try to find existing conversation where BOTH users are participants
-//        let conversations1 = try await db.collection("conversations")
-//            .whereField("participantIds", arrayContains: currentUserId)
-//            .getDocuments()
-//        
-//        for doc in conversations1.documents {
-//            if let participantIds = doc.data()["participantIds"] as? [String],
-//               participantIds.contains(recipientId) && participantIds.count == 2 {
-//                return doc.documentID
-//            }
-//        }
-//        
-//        // Also check if the OTHER user created a conversation with us
-//        let conversations2 = try await db.collection("conversations")
-//            .whereField("participantIds", arrayContains: recipientId)
-//            .getDocuments()
-//        
-//        for doc in conversations2.documents {
-//            if let participantIds = doc.data()["participantIds"] as? [String],
-//               participantIds.contains(currentUserId) && participantIds.count == 2 {
-//                return doc.documentID
-//            }
-//        }
-//        
-//        // Create new conversation if none exists
-//        let conversationData: [String: Any] = [
-//            "participantIds": [currentUserId, recipientId],
-//            "participantNames": [:],
-//            "participantImages": [:],
-//            "lastMessage": "",
-//            "lastMessageTimestamp": Date(),
-//            "lastMessageSenderId": "",
-//            "unreadCounts": [currentUserId: 0, recipientId: 0],
-//            "lastReadTimestamps": [:],
-//            "createdAt": Date(),
-//            "updatedAt": Date(),
-//            "blockedUsers": []
-//        ]
-//        
-//        let docRef = try await db.collection("conversations").addDocument(data: conversationData)
-//        return docRef.documentID
-//    }
-    
-//    func loadConversations() async -> [Conversation] {
-//        do {
-//            let result = try await MessageRepository.shared.fetchConversations(limit: 50)
-//            return result.items
-//        } catch {
-//            print("Error loading conversations: \(error)")
-//            return []
-//        }
-//    }
-    
-//    func sendMessage(
-//        to recipientId: String,
-//        text: String,
-//        contextType: Message.MessageContextType? = nil,
-//        contextId: String? = nil,
-//        contextData: (title: String, image: String?, userId: String)? = nil
-//    ) async throws {
-//        try await MessageRepository.shared.sendMessage(
-//            to: recipientId,
-//            text: text,
-//            contextType: contextType,
-//            contextId: contextId,
-//            contextData: contextData  // ADD THIS - pass it through
-//        )
-//    }
-    
-//    func loadMessages(for conversationId: String, limit: Int = 50) async -> [Message] {
-//        return await MessageRepository.shared.loadMessages(for: conversationId, limit: limit)
-//    }
-//    
-//    // Replace your existing markMessagesAsRead function with this updated version
-//    func markMessagesAsRead(in conversationId: String) async throws {
-//        guard let currentUserId = currentUser?.id else { return }
-//        
-//        // Get all unread messages in this conversation for current user
-//        let unreadMessages = try await db.collection("messages")
-//            .whereField("conversationId", isEqualTo: conversationId)
-//            .whereField("senderId", isNotEqualTo: currentUserId)
-//            .whereField("isRead", isEqualTo: false)
-//            .getDocuments()
-//        
-//        // Batch update all unread messages
-//        let batch = db.batch()
-//        
-//        for document in unreadMessages.documents {
-//            batch.updateData([
-//                "isRead": true,
-//                "readAt": Date()
-//            ], forDocument: document.reference)
-//        }
-//        
-//        // Also mark messages sent by current user as delivered if not already
-//        let sentMessages = try await db.collection("messages")
-//            .whereField("conversationId", isEqualTo: conversationId)
-//            .whereField("senderId", isEqualTo: currentUserId)
-//            .whereField("isDelivered", isEqualTo: false)
-//            .getDocuments()
-//        
-//        for document in sentMessages.documents {
-//            batch.updateData([
-//                "isDelivered": true,
-//                "deliveredAt": Date()
-//            ], forDocument: document.reference)
-//        }
-//        
-//        // Commit all updates
-//        if !unreadMessages.documents.isEmpty || !sentMessages.documents.isEmpty {
-//            try await batch.commit()
-//        }
-//        
-//        // Update conversation unread count (optional, can fail)
-//        do {
-//            try await db.collection("conversations")
-//                .document(conversationId)
-//                .updateData([
-//                    "unreadCounts.\(currentUserId)": 0,
-//                    "lastReadTimestamps.\(currentUserId)": Date()
-//                ])
-//        } catch {
-//            // Non-critical - conversation update can fail
-//            print("Could not update conversation: \(error)")
-//        }
-//    }
-//    
-    // Mark message as delivered
-    func markMessageAsDelivered(_ messageId: String) async throws {
-        try await db.collection("messages")
-            .document(messageId)
-            .updateData([
-                "isDelivered": true,
-                "deliveredAt": Date()
-            ])
-    }
-    
-//    func listenToMessages(in conversationId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration {
-//        messagesListener?.remove()
-//        
-//        messagesListener = db.collection("messages")
-//            .whereField("conversationId", isEqualTo: conversationId)
-//            .order(by: "timestamp", descending: false)
-//            .addSnapshotListener { snapshot, error in
-//                if let error = error {
-//                    print("Error listening to messages: \(error)")
-//                    return
-//                }
-//                
-//                print("DEBUG - Listener received \(snapshot?.documents.count ?? 0) documents")
-//                
-//                let messages: [Message] = snapshot?.documents.compactMap { doc in
-//                    let data = doc.data()
-//                    
-//                    // Filter out deleted messages
-//                    if let isDeleted = data["isDeleted"] as? Bool, isDeleted {
-//                        return nil
-//                    }
-//                    
-//                    // Always use manual creation - skip Firestore.Decoder completely
-//                    guard let senderId = data["senderId"] as? String,
-//                          let text = data["text"] as? String,
-//                          let conversationId = data["conversationId"] as? String else {
-//                        return nil
-//                    }
-//                    
-//                    var message = Message(
-//                        senderId: senderId,
-//                        senderName: data["senderName"] as? String ?? "Unknown",
-//                        senderProfileImage: data["senderProfileImage"] as? String,
-//                        conversationId: conversationId,
-//                        text: text
-//                    )
-//                    
-//                    // Set optional fields
-//                    message.id = doc.documentID
-//                    
-//                    // Handle timestamps
-//                    if let timestamp = data["timestamp"] as? Timestamp {
-//                        message.timestamp = timestamp.dateValue()
-//                    }
-//                    
-//                    // Handle delivery/read status
-//                    message.isDelivered = data["isDelivered"] as? Bool ?? false
-//                    message.isRead = data["isRead"] as? Bool ?? false
-//                    
-//                    if let deliveredAt = data["deliveredAt"] as? Timestamp {
-//                        message.deliveredAt = deliveredAt.dateValue()
-//                    }
-//                    
-//                    if let readAt = data["readAt"] as? Timestamp {
-//                        message.readAt = readAt.dateValue()
-//                    }
-//                    
-//                    // Handle context fields
-//                    if let contextType = data["contextType"] as? String, !contextType.isEmpty {
-//                        message.contextType = Message.MessageContextType(rawValue: contextType)
-//                    }
-//                    
-//                    if let contextId = data["contextId"] as? String, !contextId.isEmpty {
-//                        message.contextId = contextId
-//                    }
-//                    
-//                    message.contextTitle = data["contextTitle"] as? String
-//                    message.contextImage = data["contextImage"] as? String
-//                    message.contextUserId = data["contextUserId"] as? String
-//                    
-//                    // Handle edit status
-//                    message.isEdited = data["isEdited"] as? Bool ?? false
-//                    if let editedAt = data["editedAt"] as? Timestamp {
-//                        message.editedAt = editedAt.dateValue()
-//                    }
-//                    
-//                    return message
-//                } ?? []
-//                
-//                print("DEBUG - Listener triggered with \(messages.count) messages")
-//                
-//                completion(messages)
-//            }
-//        
-//        return messagesListener!
-//    }
-    
-    func blockUser(_ userId: String, in conversationId: String) async throws {
-        try await MessageRepository.shared.blockUser(userId, in: conversationId)
-    }
-    
-    func unblockUser(_ userId: String, in conversationId: String) async throws {
-        try await MessageRepository.shared.unblockUser(userId, in: conversationId)
-    }
-    
-    func deleteMessage(_ messageId: String) async throws {
-        try await MessageRepository.shared.delete(messageId)
-    }
-    
-    func deleteConversation(_ conversationId: String) async throws {
-        try await MessageRepository.shared.deleteConversation(conversationId)
-    }
-}
 
 // MARK: - Chat Management Extension
 extension FirebaseService {
@@ -883,58 +500,7 @@ extension FirebaseService {
     }
 }
 
-// MARK: - Global Listener Management
-extension FirebaseService {
-    
-    /// Remove ALL active listeners (useful for sign out)
-    func removeAllListeners() {
-        // Remove conversation listeners
-        conversationsListener?.remove()
-        conversationsListener = nil
-        
-        // Remove messages listener
-        messagesListener?.remove()
-        messagesListener = nil
-        
-        // Remove all reel listeners
-        Self.reelListeners.values.forEach { $0.remove() }
-        Self.reelListeners.removeAll()
-        
-        // Remove all likes listeners
-        Self.likesListeners.values.forEach { $0.remove() }
-        Self.likesListeners.removeAll()
-        
-        
-        
-        print("✅ All Firebase listeners cleaned up")
-    }
-    
-    /// Get count of active listeners (for debugging)
-    func getActiveListenerCount() -> Int {
-        var count = 0
-        if conversationsListener != nil { count += 1 }
-        if messagesListener != nil { count += 1 }
-        count += Self.reelListeners.count
-        count += Self.likesListeners.count
-        return count
-    }
-}
 
 
 
-#if DEBUG
-var listenerDebugTimer: Timer?
-
-func startListenerMonitoring() {
-    listenerDebugTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
-        let count = FirebaseService.shared.getActiveListenerCount()  // ✅ Fixed - use shared instance
-        print("🔍 Active Listeners: \(count)")
-    }
-}
-
-func stopListenerMonitoring() {
-    listenerDebugTimer?.invalidate()
-    listenerDebugTimer = nil
-}
-#endif
 
