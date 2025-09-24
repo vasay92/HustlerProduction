@@ -26,6 +26,7 @@ final class ServicesViewModel: ObservableObject {
     private let pageSize = 20
     static weak var shared: ServicesViewModel?
     
+    
     // MARK: - Initialization
     init() {
         Self.shared = self
@@ -169,5 +170,35 @@ final class ServicesViewModel: ObservableObject {
     // MARK: - Helper Types
     enum ServiceType {
         case offers, requests
+    }
+    
+    // MARK: - Create/Update Methods (PHASE 2.2)
+
+    func createPost(_ post: ServicePost) async throws -> String {
+        let postId = try await repository.create(post)
+        
+        // Refresh the appropriate list
+        if post.isRequest {
+            await loadInitialRequests()
+        } else {
+            await loadInitialOffers()
+        }
+        
+        return postId
+    }
+
+    func updatePost(_ post: ServicePost) async throws {
+        try await repository.update(post)
+        
+        // Update local state
+        if post.isRequest {
+            if let index = requests.firstIndex(where: { $0.id == post.id }) {
+                requests[index] = post
+            }
+        } else {
+            if let index = offers.firstIndex(where: { $0.id == post.id }) {
+                offers[index] = post
+            }
+        }
     }
 }

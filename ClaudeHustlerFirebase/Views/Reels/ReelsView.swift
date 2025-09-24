@@ -45,7 +45,8 @@ struct ReelsView: View {
             await viewModel.refresh()
         }
         .sheet(isPresented: $showingCreateOptions) {
-            CreateContentOptionsSheet()
+            // CreateContentOptionsSheet()
+            Text("Create Content Options")  // Placeholder
         }
         .fullScreenCover(item: $selectedStatus) { status in
             StatusViewerView(status: status)
@@ -636,7 +637,8 @@ struct FullScreenReelView: View {
                     EmptyView()
                 }
             }
-        } else if let videoURL = displayReel.videoURL {
+        } else if !displayReel.videoURL.isEmpty {
+            let videoURL = displayReel.videoURL
             // Video player would go here
             Rectangle()
                 .fill(Color.black)

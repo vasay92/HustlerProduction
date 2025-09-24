@@ -45,19 +45,20 @@ final class ReelsViewModel: ObservableObject {
     // MARK: - Initialization
     init() {
         Self.shared = self
-        self.currentUserId = Auth.auth().currentUser?.uid
+        // REMOVED: self.currentUserId = Auth.auth().currentUser?.uid
         
         Task {
             await loadInitialData()
         }
     }
-    
+
     deinit {
         statusListener?.remove()
         for (_, listener) in reelListeners {
-            listener?.remove()
+            listener.remove()  // FIXED: Removed optional chaining
         }
     }
+
     
     // MARK: - Initial Data Loading
     
@@ -225,9 +226,13 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Load User Reels
     func loadUserReels(userId: String) async {
         do {
-            userReels = try await reelRepository.fetchUserReels(userId: userId, limit: 20)
+            // fetchUserReels returns a tuple (items: [Reel], lastDoc: DocumentSnapshot?)
+            // We only need the items part
+            let (reels, _) = try await reelRepository.fetchUserReels(userId, limit: 20)
+            userReels = reels
         } catch {
             print("Error loading user reels: \(error)")
         }

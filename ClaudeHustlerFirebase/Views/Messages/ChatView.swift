@@ -32,6 +32,7 @@ struct ChatView: View {
     @State private var postToShow: ServicePost? = nil
     @State private var reelToShow: Reel? = nil
     @State private var statusToShow: Status? = nil
+    @StateObject private var reelsViewModel = ReelsViewModel()
     
     // For scroll view
     @Namespace private var bottomAnchor
@@ -149,7 +150,8 @@ struct ChatView: View {
                     isCurrentReel: true,
                     onDismiss: {
                         reelToShow = nil
-                    }
+                    },
+                    viewModel: reelsViewModel  // ADD THIS LINE
                 )
                 
                 VStack {

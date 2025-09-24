@@ -25,6 +25,7 @@ struct PortfolioGalleryView: View {
     @State private var imageToDelete: String?
     @State private var mediaURLs: [String] = []
     @State private var selectedImageURL: IdentifiableString?
+    @ObservedObject var profileViewModel: ProfileViewModel
     
     var body: some View {
         NavigationView {

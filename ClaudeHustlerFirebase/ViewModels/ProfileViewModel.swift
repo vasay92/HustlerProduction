@@ -231,4 +231,23 @@ final class ProfileViewModel: ObservableObject {
             return []
         }
     }
+    
+    // MARK: - Portfolio Methods
+
+    func updatePortfolioCard(_ card: PortfolioCard) async throws {
+        try await portfolioRepository.update(card)
+        
+        // Update local state
+        if let index = portfolioCards.firstIndex(where: { $0.id == card.id }) {
+            portfolioCards[index] = card
+        }
+    }
+
+    // deletePortfolioCard should already exist, but if not:
+    func deletePortfolioCard(_ cardId: String) async throws {
+        try await portfolioRepository.delete(cardId)
+        
+        // Remove from local state
+        portfolioCards.removeAll { $0.id == cardId }
+    }
 }

@@ -27,6 +27,7 @@ struct ServiceFormView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var showValidationErrors = false
+    @StateObject private var servicesViewModel = ServicesViewModel()
     
     // For Edit Mode
     let existingPost: ServicePost?
@@ -433,7 +434,7 @@ struct ServiceFormView: View {
                         updatedPost.location = location.isEmpty ? nil : location
                         // Only update images if new ones were selected, otherwise keep existing
                         updatedPost.imageURLs = imageURLs.isEmpty ? (existingPost?.imageURLs ?? []) : imageURLs  // ✅ Preserves existing images!
-                        try await PostRepository.shared.update(updatedPost)
+                    try await servicesViewModel.updatePost(updatedPost)
                     // Trigger refresh
                     await HomeViewModel.shared?.refresh()
                     await ServicesViewModel.shared?.refresh(type: updatedPost.isRequest ? .requests : .offers)
@@ -455,7 +456,7 @@ struct ServiceFormView: View {
                         status: .active,
                         updatedAt: Date()
                     )
-                    _ = try await PostRepository.shared.create(newPost)
+                    _ = try await servicesViewModel.createPost(newPost)
                     
                     // Trigger refresh in ViewModels
                     await HomeViewModel.shared?.refresh()
