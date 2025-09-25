@@ -1,4 +1,4 @@
-// EnhancedProfileView.swift - Fixed version without duplicates
+// EnhancedProfileView.swift
 // Path: ClaudeHustlerFirebase/Views/Profile/EnhancedProfileView.swift
 
 import SwiftUI
@@ -9,7 +9,7 @@ struct EnhancedProfileView: View {
     let userId: String
     
     @StateObject private var viewModel: ProfileViewModel
-    @StateObject private var firebase = FirebaseService.shared // Only for current user info
+    @StateObject private var firebase = FirebaseService.shared
     @Environment(\.dismiss) var dismiss
     
     // UI States
@@ -39,20 +39,42 @@ struct EnhancedProfileView: View {
                         statsSection
                         actionButtons
                         
-                        // Tab selection
+                        // Tab selection - REORDERED: Portfolio, Services, Saved, Reviews
                         Picker("Profile Section", selection: $selectedTab) {
-                            Text("Services").tag(0)
-                            Text("Reviews").tag(1)
-                            Text("Portfolio").tag(2)
+                            Text("Portfolio").tag(0)
+                            Text("Services").tag(1)
                             if viewModel.isOwnProfile {
-                                Text("Saved").tag(3)
+                                Text("Saved").tag(2)
                             }
+                            Text("Reviews").tag(3)
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
                         
                         // Tab content
                         tabContent
+                    }
+                }
+                
+                // Floating Add Portfolio Button (only for own profile)
+                if viewModel.isOwnProfile && selectedTab == 0 {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: { showingCreateCard = true }) {
+                                Image(systemName: "plus")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(width: 56, height: 56)
+                                    .background(Color.blue)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 4)
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 20)
+                        }
                     }
                 }
                 
@@ -133,20 +155,27 @@ struct EnhancedProfileView: View {
                 .padding(.horizontal)
             }
             
-            // Profile image
-            ProfileImageView(imageURL: viewModel.user?.profileImageURL, size: 100)
+            // Profile image with Edit overlay for own profile
+            ZStack(alignment: .bottomTrailing) {
+                ProfileImageView(imageURL: viewModel.user?.profileImageURL, size: 100)
+                
+                if viewModel.isOwnProfile {
+                    Button(action: { showingEditProfile = true }) {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.title)
+                            .foregroundColor(.blue)
+                            .background(Circle().fill(Color.white))
+                            .clipShape(Circle())
+                    }
+                    .offset(x: -5, y: -5)
+                }
+            }
             
-            // Name and location
+            // Name (removed location)
             VStack(spacing: 4) {
                 Text(viewModel.user?.name ?? "Loading...")
                     .font(.title)
                     .fontWeight(.bold)
-                
-                if let location = viewModel.user?.location, !location.isEmpty {
-                    Label(location, systemImage: "location.fill")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
             
             // Bio
@@ -162,15 +191,17 @@ struct EnhancedProfileView: View {
             if let rating = viewModel.user?.rating,
                let reviewCount = viewModel.user?.reviewCount,
                reviewCount > 0 {
-                HStack(spacing: 4) {
-                    ForEach(0..<5) { index in
-                        Image(systemName: index < Int(rating) ? "star.fill" : "star")
+                Button(action: { selectedTab = 3 }) {
+                    HStack(spacing: 4) {
+                        ForEach(0..<5) { index in
+                            Image(systemName: index < Int(rating) ? "star.fill" : "star")
+                                .font(.caption)
+                                .foregroundColor(.yellow)
+                        }
+                        Text("(\(reviewCount))")
                             .font(.caption)
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.secondary)
                     }
-                    Text("(\(reviewCount))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -179,13 +210,16 @@ struct EnhancedProfileView: View {
     @ViewBuilder
     private var statsSection: some View {
         HStack(spacing: 30) {
-            // Posts
-            VStack {
-                Text("\(viewModel.userPosts.count)")
-                    .font(.headline)
-                Text("Posts")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            // Posts - Clickable to navigate to Services tab
+            Button(action: { selectedTab = 1 }) {
+                VStack {
+                    Text("\(viewModel.userPosts.count)")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text("Posts")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             
             // Followers
@@ -193,6 +227,7 @@ struct EnhancedProfileView: View {
                 VStack {
                     Text("\(viewModel.user?.followers.count ?? 0)")
                         .font(.headline)
+                        .foregroundColor(.primary)
                     Text("Followers")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -204,19 +239,23 @@ struct EnhancedProfileView: View {
                 VStack {
                     Text("\(viewModel.user?.following.count ?? 0)")
                         .font(.headline)
+                        .foregroundColor(.primary)
                     Text("Following")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
             
-            // Reviews
-            VStack {
-                Text("\(viewModel.reviews.count)")
-                    .font(.headline)
-                Text("Reviews")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            // Reviews - Clickable to navigate to Reviews tab
+            Button(action: { selectedTab = 3 }) {
+                VStack {
+                    Text("\(viewModel.reviews.count)")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text("Reviews")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding()
@@ -229,29 +268,7 @@ struct EnhancedProfileView: View {
     private var actionButtons: some View {
         HStack(spacing: 12) {
             if viewModel.isOwnProfile {
-                // Edit Profile button
-                Button(action: { showingEditProfile = true }) {
-                    Label("Edit Profile", systemImage: "pencil")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-                
-                // Add Portfolio button
-                Button(action: { showingCreateCard = true }) {
-                    Label("Add Portfolio", systemImage: "plus.square.fill")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color(.systemGray5))
-                        .foregroundColor(.primary)
-                        .cornerRadius(8)
-                }
+                // No Edit Profile button here anymore - moved to profile image
             } else {
                 // Follow/Unfollow button
                 Button(action: {
@@ -300,7 +317,31 @@ struct EnhancedProfileView: View {
     private var tabContent: some View {
         switch selectedTab {
         case 0:
-            // Services Tab
+            // Portfolio Tab - First tab now
+            if viewModel.portfolioCards.isEmpty {
+                EmptyStateView(
+                    icon: "photo.on.rectangle",
+                    title: "No Portfolio Items",
+                    message: viewModel.isOwnProfile ?
+                        "Tap the + button to showcase your work" :
+                        "No portfolio items to show"
+                )
+                .padding(.top, 40)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(viewModel.portfolioCards) { card in
+                        PortfolioCardView(
+                            card: card,
+                            isOwner: viewModel.isOwnProfile,
+                            profileViewModel: viewModel
+                        )
+                    }
+                }
+                .padding()
+            }
+            
+        case 1:
+            // Services Tab - Second tab now
             if viewModel.userPosts.isEmpty {
                 EmptyStateView(
                     icon: "briefcase",
@@ -321,8 +362,18 @@ struct EnhancedProfileView: View {
                 .padding()
             }
             
-        case 1:
-            // Reviews Tab - Using correct parameter name
+        case 2:
+            // Saved Tab - Third tab (only for own profile)
+            if viewModel.isOwnProfile {
+                SavedItemsView(
+                    savedPosts: viewModel.savedPosts,
+                    savedReels: viewModel.savedReels
+                )
+                .padding()
+            }
+            
+        case 3:
+            // Reviews Tab - Fourth tab now
             if viewModel.reviews.isEmpty {
                 EmptyStateView(
                     icon: "star",
@@ -341,48 +392,14 @@ struct EnhancedProfileView: View {
                 .padding()
             }
             
-        case 2:
-            // Portfolio Tab - Using existing PortfolioCardView from ProfileSupportingViews
-            if viewModel.portfolioCards.isEmpty {
-                EmptyStateView(
-                    icon: "photo.on.rectangle",
-                    title: "No Portfolio Items",
-                    message: viewModel.isOwnProfile ?
-                        "Add your work to showcase your skills" :
-                        "No portfolio items to show"
-                )
-                .padding(.top, 40)
-            } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    ForEach(viewModel.portfolioCards) { card in
-                        // Using the existing PortfolioCardView from ProfileSupportingViews.swift
-                        PortfolioCardView(
-                            card: card,
-                            isOwner: viewModel.isOwnProfile,
-                            profileViewModel: viewModel  // ADD THIS
-                        )
-                    }
-                }
-                .padding()
-            }
-            
-        case 3:
-            // Saved Tab (only for own profile)
-            if viewModel.isOwnProfile {
-                SavedItemsView(
-                    savedPosts: viewModel.savedPosts,
-                    savedReels: viewModel.savedReels
-                )
-                .padding()
-            }
-            
         default:
             EmptyView()
         }
     }
 }
 
-// MARK: - Supporting Views (only those not in ProfileSupportingViews.swift)
+// MARK: - Supporting Views
+// Note: ProfileImageView and EmptyStateView are imported from Components folder
 
 struct UserPostCard: View {
     let post: ServicePost
@@ -419,51 +436,42 @@ struct UserPostCard: View {
                     .frame(width: 80, height: 80)
                     .cornerRadius(10)
                     .overlay(
-                        Image(systemName: "briefcase.fill")
+                        Image(systemName: categoryIcon(for: post.category))
                             .foregroundColor(.white)
+                            .font(.title2)
                     )
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(post.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    // Request/Offer Badge
-                    Text(post.isRequest ? "REQUEST" : "OFFER")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(post.isRequest ? Color.orange : Color.blue)
-                        .cornerRadius(4)
-                }
+                Text(post.title)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
                 
                 Text(post.description)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                 
                 HStack {
                     if let price = post.price {
                         Text("$\(Int(price))")
-                            .font(.subheadline)
+                            .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(.green)
                     }
                     
                     Spacer()
                     
-                    Text(post.category.displayName)
+                    Text(post.isRequest ? "REQUEST" : "OFFER")
                         .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(post.isRequest ? .orange : .blue)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(Color(.systemGray6))
+                        .background(
+                            (post.isRequest ? Color.orange : Color.blue).opacity(0.1)
+                        )
                         .cornerRadius(4)
                 }
             }
@@ -471,108 +479,80 @@ struct UserPostCard: View {
             Spacer()
         }
         .padding()
-        .background(Color(.systemBackground))
+        .background(Color(.systemGray6))
         .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+    }
+    
+    private func categoryIcon(for category: ServiceCategory) -> String {
+        switch category {
+        case .cleaning: return "sparkles"
+        case .tutoring: return "book.fill"
+        case .delivery: return "shippingbox.fill"
+        case .electrical: return "bolt.fill"
+        case .plumbing: return "drop.fill"
+        case .carpentry: return "hammer.fill"
+        case .painting: return "paintbrush.fill"
+        case .landscaping: return "leaf.fill"
+        case .moving: return "box.truck.fill"
+        case .technology: return "desktopcomputer"
+        case .other: return "ellipsis.circle.fill"
+        }
     }
 }
 
 struct SavedItemsView: View {
     let savedPosts: [ServicePost]
     let savedReels: [Reel]
-    
-    @State private var selectedType = 0
+    @State private var selectedSegment = 0
     
     var body: some View {
         VStack {
-            Picker("Saved Type", selection: $selectedType) {
+            Picker("Saved Type", selection: $selectedSegment) {
                 Text("Posts").tag(0)
                 Text("Reels").tag(1)
             }
             .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
             
-            if selectedType == 0 {
+            if selectedSegment == 0 {
+                // Saved Posts
                 if savedPosts.isEmpty {
                     EmptyStateView(
                         icon: "bookmark",
                         title: "No Saved Posts",
-                        message: "Save posts to view them here"
+                        message: "Posts you save will appear here"
                     )
                     .padding(.top, 40)
                 } else {
                     LazyVStack(spacing: 12) {
                         ForEach(savedPosts) { post in
                             NavigationLink(destination: PostDetailView(post: post)) {
-                                UserPostCard(post: post)
+                                SavedPostCard(post: post)
                             }
                         }
                     }
                 }
             } else {
+                // Saved Reels
                 if savedReels.isEmpty {
                     EmptyStateView(
                         icon: "bookmark",
                         title: "No Saved Reels",
-                        message: "Save reels to view them here"
+                        message: "Reels you save will appear here"
                     )
                     .padding(.top, 40)
                 } else {
-                    // Saved reels grid
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 2),
+                        GridItem(.flexible(), spacing: 2),
+                        GridItem(.flexible(), spacing: 2)
+                    ], spacing: 2) {
                         ForEach(savedReels) { reel in
-                            SavedReelCard(reel: reel)
+                            SavedReelThumbnail(reel: reel)
                         }
                     }
                 }
             }
-        }
-    }
-}
-
-struct SavedReelCard: View {
-    let reel: Reel
-    
-    var body: some View {
-        NavigationLink(destination: EmptyView()) { // Replace with actual reel viewer
-            AsyncImage(url: URL(string: reel.thumbnailURL ?? "")) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 200)
-                    .clipped()
-                    .cornerRadius(12)
-            } placeholder: {
-                Rectangle()
-                    .fill(Color(.systemGray5))
-                    .frame(height: 200)
-                    .cornerRadius(12)
-                    .overlay(
-                        Image(systemName: "play.rectangle.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                    )
-            }
-            .overlay(
-                VStack {
-                    Spacer()
-                    HStack {
-                        Text(reel.title)
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                        Spacer()
-                    }
-                    .padding(8)
-                    .background(
-                        LinearGradient(
-                            colors: [Color.black.opacity(0.7), Color.clear],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
-                    )
-                }
-            )
         }
     }
 }
