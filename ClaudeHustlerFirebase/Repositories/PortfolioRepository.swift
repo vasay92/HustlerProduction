@@ -17,7 +17,7 @@ final class PortfolioRepository {
     func fetchUserPortfolioCards(userId: String) async throws -> [PortfolioCard] {
         let snapshot = try await db.collection("portfolioCards")
             .whereField("userId", isEqualTo: userId)
-            .order(by: "displayOrder")
+            .order(by: "createdAt", descending: true)  // Changed to show newest first
             .getDocuments()
         
         return snapshot.documents.compactMap { doc -> PortfolioCard? in
@@ -38,14 +38,15 @@ final class PortfolioRepository {
             throw NSError(domain: "PortfolioRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Create new card with proper userId (since userId is a let constant)
+        // Create new card with proper userId and add createdAt timestamp
         let newCard = PortfolioCard(
             userId: userId,
             title: card.title,
             coverImageURL: card.coverImageURL,
             mediaURLs: card.mediaURLs,
             description: card.description,
-            displayOrder: card.displayOrder
+            displayOrder: card.displayOrder,
+            createdAt: Date()  // Add creation timestamp
         )
         
         let docRef = try await db.collection("portfolioCards").addDocument(from: newCard)

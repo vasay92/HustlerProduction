@@ -19,8 +19,10 @@ struct EnhancedProfileView: View {
     @State private var showingFollowing = false
     @State private var showingSettings = false
     @State private var showingCreateCard = false
-    @State private var showingReviewForm = false
     @State private var showingMessageView = false
+    @State private var selectedStarFilter: Int? = nil
+    @State private var showAllReviews = false
+    @State private var showingReviewForm = false
     
     init(userId: String) {
         self.userId = userId
@@ -39,24 +41,23 @@ struct EnhancedProfileView: View {
                         statsSection
                         actionButtons
                         
-                        // Tab selection - REORDERED: Portfolio, Services, Saved, Reviews
+                        // Tab selection - REORDERED: Portfolio, Services, Saved (if own), Reviews
                         Picker("Profile Section", selection: $selectedTab) {
                             Text("Portfolio").tag(0)
                             Text("Services").tag(1)
                             if viewModel.isOwnProfile {
                                 Text("Saved").tag(2)
                             }
-                            Text("Reviews").tag(3)
+                            Text("Reviews").tag(viewModel.isOwnProfile ? 3 : 2)
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
                         
-                        // Tab content
                         tabContent
                     }
                 }
                 
-                // Floating Add Portfolio Button (only for own profile)
+                // Floating add button for portfolio (own profile only)
                 if viewModel.isOwnProfile && selectedTab == 0 {
                     VStack {
                         Spacer()
@@ -72,36 +73,26 @@ struct EnhancedProfileView: View {
                                     .clipShape(Circle())
                                     .shadow(radius: 4)
                             }
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 20)
+                            .padding()
                         }
                     }
                 }
-                
-                if viewModel.isLoadingProfile {
-                    Color.black.opacity(0.3)
-                        .ignoresSafeArea()
-                    ProgressView("Loading...")
-                        .padding()
-                        .background(Color(.systemBackground))
-                        .cornerRadius(10)
-                        .shadow(radius: 4)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(false)
+            .onAppear {
+                Task {
+                    await viewModel.loadProfileData()
                 }
             }
-            .navigationBarHidden(true)
-            .task {
-                await viewModel.loadProfileData()
-            }
-            .onDisappear {
-                viewModel.cleanupListeners()
+            .refreshable {
+                await viewModel.refreshProfileData()
             }
             .sheet(isPresented: $showingEditProfile) {
                 EditProfileView()
-                    .onDisappear {
-                        Task {
-                            await viewModel.refreshProfileData()
-                        }
-                    }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
             .sheet(isPresented: $showingFollowers) {
                 FollowersListView(userId: userId)
@@ -109,24 +100,15 @@ struct EnhancedProfileView: View {
             .sheet(isPresented: $showingFollowing) {
                 FollowingListView(userId: userId)
             }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-            }
             .sheet(isPresented: $showingCreateCard) {
                 CreatePortfolioCardView()
                     .onDisappear {
-                        Task {
-                            await viewModel.loadPortfolioCards()
-                        }
+                        Task { await viewModel.loadPortfolioCards() }
+                   
                     }
             }
             .sheet(isPresented: $showingReviewForm) {
                 CreateReviewView(userId: userId)
-                    .onDisappear {
-                        Task {
-                            await viewModel.loadProfileData()
-                        }
-                    }
             }
             .fullScreenCover(isPresented: $showingMessageView) {
                 ChatView(
@@ -171,7 +153,7 @@ struct EnhancedProfileView: View {
                 }
             }
             
-            // Name (removed location)
+            // Name
             VStack(spacing: 4) {
                 Text(viewModel.user?.name ?? "Loading...")
                     .font(.title)
@@ -191,7 +173,7 @@ struct EnhancedProfileView: View {
             if let rating = viewModel.user?.rating,
                let reviewCount = viewModel.user?.reviewCount,
                reviewCount > 0 {
-                Button(action: { selectedTab = 3 }) {
+                Button(action: { selectedTab = viewModel.isOwnProfile ? 3 : 2 }) {
                     HStack(spacing: 4) {
                         ForEach(0..<5) { index in
                             Image(systemName: index < Int(rating) ? "star.fill" : "star")
@@ -247,7 +229,7 @@ struct EnhancedProfileView: View {
             }
             
             // Reviews - Clickable to navigate to Reviews tab
-            Button(action: { selectedTab = 3 }) {
+            Button(action: { selectedTab = viewModel.isOwnProfile ? 3 : 2 }) {
                 VStack {
                     Text("\(viewModel.reviews.count)")
                         .font(.headline)
@@ -298,16 +280,7 @@ struct EnhancedProfileView: View {
                         .cornerRadius(8)
                 }
                 
-                // Review button
-                Button(action: { showingReviewForm = true }) {
-                    Image(systemName: "star.fill")
-                        .font(.subheadline)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 20)
-                        .background(Color.yellow.opacity(0.2))
-                        .foregroundColor(.yellow)
-                        .cornerRadius(8)
-                }
+                // Removed the star review button - reviews are now accessed via the Reviews tab
             }
         }
         .padding(.horizontal)
@@ -363,26 +336,13 @@ struct EnhancedProfileView: View {
             }
             
         case 2:
-            // Saved Tab - Third tab (only for own profile)
+            // This is either Saved (for own profile) or Reviews (for other profiles)
             if viewModel.isOwnProfile {
+                // Saved Tab - Use the existing SavedItemsView component
                 SavedItemsView(
                     savedPosts: viewModel.savedPosts,
                     savedReels: viewModel.savedReels
                 )
-                .padding()
-            }
-            
-        case 3:
-            // Reviews Tab - Fourth tab now
-            if viewModel.reviews.isEmpty {
-                EmptyStateView(
-                    icon: "star",
-                    title: "No Reviews Yet",
-                    message: viewModel.isOwnProfile ?
-                        "Complete services to receive reviews" :
-                        "No reviews for this user yet"
-                )
-                .padding(.top, 40)
             } else {
                 LazyVStack(spacing: 12) {
                     ForEach(viewModel.reviews) { review in
@@ -392,6 +352,108 @@ struct EnhancedProfileView: View {
                 .padding()
             }
             
+        case 3:
+            // Reviews Tab
+            VStack(spacing: 16) {
+                // Star filter buttons
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        // All button
+                        Button(action: {
+                            selectedStarFilter = nil
+                            showAllReviews = false
+                        }) {
+                            Text("All (\(viewModel.reviews.count))")
+                                .font(.subheadline)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(selectedStarFilter == nil ? Color.blue : Color(.systemGray5))
+                                .foregroundColor(selectedStarFilter == nil ? .white : .primary)
+                                .cornerRadius(20)
+                        }
+                        
+                        // 5-1 star buttons
+                        ForEach((1...5).reversed(), id: \.self) { rating in
+                            let count = viewModel.reviews.filter { $0.rating == rating }.count
+                            if count > 0 {
+                                Button(action: {
+                                    selectedStarFilter = rating
+                                    showAllReviews = false
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "star.fill")
+                                            .font(.caption)
+                                        Text("\(rating) (\(count))")
+                                    }
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(selectedStarFilter == rating ? Color.blue : Color(.systemGray5))
+                                    .foregroundColor(selectedStarFilter == rating ? .white : .primary)
+                                    .cornerRadius(20)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                // Filtered reviews
+                let filteredReviews = selectedStarFilter == nil ?
+                    viewModel.reviews :
+                    viewModel.reviews.filter { $0.rating == selectedStarFilter }
+                
+                let displayedReviews = showAllReviews ?
+                    filteredReviews :
+                    Array(filteredReviews.prefix(2))
+                
+                if filteredReviews.isEmpty {
+                    EmptyStateView(
+                        icon: "star",
+                        title: "No Reviews",
+                        message: selectedStarFilter != nil ?
+                            "No \(selectedStarFilter!) star reviews" :
+                            "No reviews yet"
+                    )
+                    .padding(.top, 40)
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(displayedReviews) { review in
+                            ReviewCard(review: review, isProfileOwner: viewModel.isOwnProfile)
+                        }
+                        
+                        // Show more/less button
+                        if filteredReviews.count > 2 {
+                            Button(action: { showAllReviews.toggle() }) {
+                                Text(showAllReviews ?
+                                    "Show less" :
+                                    "Show \(filteredReviews.count - 2) more reviews")
+                                    .font(.subheadline)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                    .padding()
+                }
+                
+                // Write Review button (only for non-owners)
+                if !viewModel.isOwnProfile && firebase.currentUser != nil {
+                    Button(action: { showingReviewForm = true }) {
+                        Label("Write a Review", systemImage: "pencil")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom)
+                }
+            }
+            
         default:
             EmptyView()
         }
@@ -399,7 +461,6 @@ struct EnhancedProfileView: View {
 }
 
 // MARK: - Supporting Views
-// Note: ProfileImageView and EmptyStateView are imported from Components folder
 
 struct UserPostCard: View {
     let post: ServicePost
@@ -427,8 +488,8 @@ struct UserPostCard: View {
                     .fill(
                         LinearGradient(
                             colors: post.isRequest ?
-                                [Color.orange.opacity(0.3), Color.red.opacity(0.3)] :
-                                [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                                [Color.purple.opacity(0.3), Color.blue.opacity(0.3)] :
+                                [Color.green.opacity(0.3), Color.blue.opacity(0.3)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -436,43 +497,41 @@ struct UserPostCard: View {
                     .frame(width: 80, height: 80)
                     .cornerRadius(10)
                     .overlay(
-                        Image(systemName: categoryIcon(for: post.category))
-                            .foregroundColor(.white)
+                        Image(systemName: post.isRequest ? "magnifyingglass" : "briefcase.fill")
                             .font(.title2)
+                            .foregroundColor(.white)
                     )
             }
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(post.title)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                
-                Text(post.description)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-                
+            // Post details
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    if let price = post.price {
-                        Text("$\(Int(price))")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.green)
-                    }
+                    Text(post.isRequest ? "Looking for:" : "Offering:")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(post.isRequest ? .purple : .green)
                     
                     Spacer()
                     
-                    Text(post.isRequest ? "REQUEST" : "OFFER")
+                    Text(post.updatedAt, style: .relative)
                         .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text(post.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(2)
+                
+                if let price = post.price {
+                    Text("$\(price, specifier: "%.0f")")
+                        .font(.subheadline)
                         .fontWeight(.bold)
-                        .foregroundColor(post.isRequest ? .orange : .blue)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(
-                            (post.isRequest ? Color.orange : Color.blue).opacity(0.1)
-                        )
-                        .cornerRadius(4)
+                        .foregroundColor(.blue)
+                } else {
+                    Text("Price negotiable")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             
@@ -482,24 +541,9 @@ struct UserPostCard: View {
         .background(Color(.systemGray6))
         .cornerRadius(12)
     }
-    
-    private func categoryIcon(for category: ServiceCategory) -> String {
-        switch category {
-        case .cleaning: return "sparkles"
-        case .tutoring: return "book.fill"
-        case .delivery: return "shippingbox.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .carpentry: return "hammer.fill"
-        case .painting: return "paintbrush.fill"
-        case .landscaping: return "leaf.fill"
-        case .moving: return "box.truck.fill"
-        case .technology: return "desktopcomputer"
-        case .other: return "ellipsis.circle.fill"
-        }
-    }
 }
 
+// MARK: - SavedItemsView with Posts and Reels tabs
 struct SavedItemsView: View {
     let savedPosts: [ServicePost]
     let savedReels: [Reel]
@@ -524,10 +568,12 @@ struct SavedItemsView: View {
                     )
                     .padding(.top, 40)
                 } else {
-                    LazyVStack(spacing: 12) {
-                        ForEach(savedPosts) { post in
-                            NavigationLink(destination: PostDetailView(post: post)) {
-                                SavedPostCard(post: post)
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(savedPosts) { post in
+                                NavigationLink(destination: PostDetailView(post: post)) {
+                                    SavedPostCard(post: post)
+                                }
                             }
                         }
                     }
@@ -542,13 +588,15 @@ struct SavedItemsView: View {
                     )
                     .padding(.top, 40)
                 } else {
-                    LazyVGrid(columns: [
-                        GridItem(.flexible(), spacing: 2),
-                        GridItem(.flexible(), spacing: 2),
-                        GridItem(.flexible(), spacing: 2)
-                    ], spacing: 2) {
-                        ForEach(savedReels) { reel in
-                            SavedReelThumbnail(reel: reel)
+                    ScrollView {
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(), spacing: 2),
+                            GridItem(.flexible(), spacing: 2),
+                            GridItem(.flexible(), spacing: 2)
+                        ], spacing: 2) {
+                            ForEach(savedReels) { reel in
+                                SavedReelThumbnail(reel: reel)
+                            }
                         }
                     }
                 }
@@ -556,3 +604,5 @@ struct SavedItemsView: View {
         }
     }
 }
+
+

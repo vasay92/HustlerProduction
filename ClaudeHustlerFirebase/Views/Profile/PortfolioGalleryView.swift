@@ -3,95 +3,75 @@
 
 import SwiftUI
 import PhotosUI
-import FirebaseFirestore
-
-// MARK: - Identifiable Wrapper for String
-struct IdentifiableString: Identifiable {
-    let id = UUID()
-    let value: String
-}
 
 struct PortfolioGalleryView: View {
     let card: PortfolioCard
     let isOwner: Bool
-    @StateObject private var firebase = FirebaseService.shared
-    @Environment(\.dismiss) var dismiss
-    @State private var selectedImageIndex = 0
-    @State private var showingImagePicker = false
-    @State private var showingDeleteConfirmation = false
-    @State private var showingEditSheet = false
-    @State private var isAddingImages = false
-    @State private var newImages: [UIImage] = []
-    @State private var imageToDelete: String?
-    @State private var mediaURLs: [String] = []
-    @State private var selectedImageURL: IdentifiableString?
     @ObservedObject var profileViewModel: ProfileViewModel
+    @Environment(\.dismiss) var dismiss
+    @StateObject private var firebase = FirebaseService.shared
+    
+    @State private var showingImagePicker = false
+    @State private var newImages: [UIImage] = []
+    @State private var singleImage: UIImage? = nil
+    @State private var isAddingImages = false
+    @State private var showingEditSheet = false
+    @State private var showingDeleteConfirmation = false
+    @State private var mediaURLs: [String] = []
     
     var body: some View {
         NavigationView {
-            ZStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        headerSection
-                        imageGridSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Title at the top
+                    Text(card.title)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .padding(.horizontal)
+                    
+                    // Show description if available (no "Description" label)
+                    if let description = card.description, !description.isEmpty {
+                        Text(description)
+                            .font(.body)
+                            .foregroundColor(.primary)
+                            .padding(.horizontal)
                     }
-                    .padding(.vertical)
-                }
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    toolbarContent
-                }
-                
-                // Floating Add Button
-                if isOwner {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            Button(action: { showingImagePicker = true }) {
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(width: 56, height: 56)
-                                    .background(Color.blue)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 4)
-                            }
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 20)
+                    
+                    // Show date created (no "Created" label)
+                    Text(card.createdAt, style: .date)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    
+                    // Images Grid
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
+                            portfolioImageCell(url: url, index: index)
+                        }
+                        
+                        if isOwner {
+                            addImagesButton
                         }
                     }
+                    .padding()
                 }
             }
-        }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(images: $newImages, singleImage: .constant(nil))
-        }
-        .sheet(isPresented: $showingEditSheet) {
-            EditPortfolioDetailsView(card: card, profileViewModel: profileViewModel)
-        }
-        .fullScreenCover(item: $selectedImageURL) { identifiableURL in
-            ImageViewerView(
-                imageURL: identifiableURL.value,
-                allImageURLs: mediaURLs,
-                currentIndex: $selectedImageIndex
-            )
-        }
-        .alert("Delete Photo?", isPresented: $showingDeleteConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                if let urlToDelete = imageToDelete {
-                    deleteImage(url: urlToDelete)
-                }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showingEditSheet) {
+                EditPortfolioDetailsView(card: card, profileViewModel: profileViewModel)
             }
-        } message: {
-            Text("This action cannot be undone.")
-        }
-        .onChange(of: newImages) { _, images in
-            if !images.isEmpty {
-                Task {
-                    await addMoreImages(images)
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(images: $newImages, singleImage: $singleImage)
+                    .onDisappear {
+                        if !newImages.isEmpty {
+                            Task { await addMoreImages(newImages) }
+                        }
+                    }
+            }
+            .confirmationDialog("Delete Portfolio?", isPresented: $showingDeleteConfirmation) {
+                Button("Delete", role: .destructive) {
+                    Task { await deletePortfolioCard() }
                 }
             }
         }
@@ -103,120 +83,70 @@ struct PortfolioGalleryView: View {
     // MARK: - View Components
     
     @ViewBuilder
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let description = card.description, !description.isEmpty {
-                Text("DESCRIPTION")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                
-                Text(description)
-                    .font(.body)
-                    .foregroundColor(.primary)
-            }
-            
-            Text("Created \(card.createdAt, style: .date)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .padding(.horizontal)
-    }
-    
-    @ViewBuilder
-    private var imageGridSection: some View {
-        if mediaURLs.isEmpty {
-            emptyStateView
-        } else {
-            imageGrid
-        }
-    }
-    
-    @ViewBuilder
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
-            
-            Text("No photos yet")
-                .font(.headline)
-                .foregroundColor(.gray)
-            
-            if isOwner {
-                Text("Tap + to add photos")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 50)
-    }
-    
-    @ViewBuilder
-    private var imageGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 2),
-            GridItem(.flexible(), spacing: 2),
-            GridItem(.flexible(), spacing: 2)
-        ], spacing: 2) {
-            ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
-                gridImageItem(at: index, url: url)
-            }
-        }
-        .padding(.horizontal, 2)
-    }
-    
-    @ViewBuilder
-    private func gridImageItem(at index: Int, url: String) -> some View {
-        let imageSize = UIScreen.main.bounds.width / 3 - 2
-        
-        ZStack(alignment: .topTrailing) {
-            AsyncImage(url: URL(string: url)) { phase in
-                switch phase {
-                case .success(let image):
+    private func portfolioImageCell(url: String, index: Int) -> some View {
+        NavigationLink(destination: ImageViewerView(
+            imageURL: url,
+            allImageURLs: mediaURLs,
+            currentIndex: .constant(index)
+        )) {
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: URL(string: url)) { image in
                     image
                         .resizable()
                         .scaledToFill()
-                        .frame(width: imageSize, height: imageSize)
+                        .frame(height: 180)
                         .clipped()
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedImageIndex = index
-                            selectedImageURL = IdentifiableString(value: url)
-                        }
-                case .failure(_):
+                        .cornerRadius(12)
+                } placeholder: {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
-                        .frame(width: imageSize, height: imageSize)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        )
-                case .empty:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.1))
-                        .frame(width: imageSize, height: imageSize)
+                        .frame(height: 180)
+                        .cornerRadius(12)
                         .overlay(ProgressView())
-                @unknown default:
-                    EmptyView()
                 }
-            }
-            
-            if isOwner {
-                Button(action: {
-                    imageToDelete = url
-                    showingDeleteConfirmation = true
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundColor(.white)
-                        .background(Color.black.opacity(0.6))
-                        .clipShape(Circle())
+                
+                if isOwner && isAddingImages {
+                    deleteImageButton(url: url)
                 }
-                .padding(4)
             }
         }
+    }
+    
+    @ViewBuilder
+    private var addImagesButton: some View {
+        Button(action: { showingImagePicker = true }) {
+            Rectangle()
+                .fill(Color.gray.opacity(0.1))
+                .frame(height: 180)
+                .cornerRadius(12)
+                .overlay(
+                    VStack(spacing: 8) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.largeTitle)
+                            .foregroundColor(.blue)
+                        Text("Add Images")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                )
+        }
+        .disabled(isAddingImages)
+    }
+    
+    @ViewBuilder
+    private func deleteImageButton(url: String) -> some View {
+        Button(action: {
+            withAnimation {
+                deleteImage(url: url)
+            }
+        }) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.title3)
+                .foregroundColor(.white)
+                .background(Color.black.opacity(0.6))
+                .clipShape(Circle())
+        }
+        .padding(4)
     }
     
     @ToolbarContentBuilder
@@ -233,9 +163,7 @@ struct PortfolioGalleryView: View {
                     }
                     
                     Button(role: .destructive, action: {
-                        Task {
-                            await deletePortfolioCard()
-                        }
+                        showingDeleteConfirmation = true
                     }) {
                         Label("Delete Portfolio", systemImage: "trash")
                     }
@@ -262,13 +190,12 @@ struct PortfolioGalleryView: View {
                 newURLs.append(url)
             }
             
-            // Update the card using profileViewModel instead of repository
             mediaURLs.append(contentsOf: newURLs)
             
             var updatedCard = card
             updatedCard.mediaURLs = mediaURLs
             
-            try await profileViewModel.updatePortfolioCard(updatedCard)  // CHANGED
+            try await profileViewModel.updatePortfolioCard(updatedCard)
             
             newImages = []
         } catch {
@@ -279,8 +206,6 @@ struct PortfolioGalleryView: View {
     }
 
     private func deleteImage(url: String) {
-        guard let cardId = card.id else { return }
-        
         mediaURLs.removeAll { $0 == url }
         
         Task {
@@ -288,7 +213,7 @@ struct PortfolioGalleryView: View {
                 var updatedCard = card
                 updatedCard.mediaURLs = mediaURLs
                 
-                try await profileViewModel.updatePortfolioCard(updatedCard)  // CHANGED
+                try await profileViewModel.updatePortfolioCard(updatedCard)
             } catch {
                 print("Error deleting image: \(error)")
             }
@@ -298,12 +223,8 @@ struct PortfolioGalleryView: View {
     private func deletePortfolioCard() async {
         guard let cardId = card.id else { return }
         
-        do {
-            try await profileViewModel.deletePortfolioCard(cardId)  // CHANGED
-            dismiss()
-        } catch {
-            print("Error deleting portfolio card: \(error)")
-        }
+        await profileViewModel.deletePortfolioCard(cardId)
+        dismiss()
     }
 }
 
@@ -367,16 +288,16 @@ struct ImageViewerView: View {
 // MARK: - Edit Portfolio Details View
 struct EditPortfolioDetailsView: View {
     let card: PortfolioCard
-    @ObservedObject var profileViewModel: ProfileViewModel  // ADDED
+    @ObservedObject var profileViewModel: ProfileViewModel
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var title: String = ""
     @State private var description: String = ""
     @State private var isSaving = false
     
-    init(card: PortfolioCard, profileViewModel: ProfileViewModel) {  // CHANGED
+    init(card: PortfolioCard, profileViewModel: ProfileViewModel) {
         self.card = card
-        self.profileViewModel = profileViewModel  // ADDED
+        self.profileViewModel = profileViewModel
         _title = State(initialValue: card.title)
         _description = State(initialValue: card.description ?? "")
     }
@@ -384,40 +305,26 @@ struct EditPortfolioDetailsView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section("Portfolio Title") {
-                    TextField("Enter title", text: $title)
+                Section("Title") {
+                    TextField("Portfolio Title", text: $title)
                 }
                 
                 Section("Description") {
-                    TextField("Describe your work", text: $description, axis: .vertical)
+                    TextField("Description", text: $description, axis: .vertical)
                         .lineLimit(3...6)
-                }
-                
-                Section {
-                    Text("Created: \(card.createdAt, style: .date)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("Last updated: \(card.updatedAt, style: .relative)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
             .navigationTitle("Edit Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .disabled(isSaving)
+                    Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        Task {
-                            await updateDetails()
-                        }
+                        Task { await saveChanges() }
                     }
                     .disabled(title.isEmpty || isSaving)
                 }
@@ -432,21 +339,18 @@ struct EditPortfolioDetailsView: View {
         }
     }
     
-    private func updateDetails() async {
-        guard let cardId = card.id else { return }
-        
+    private func saveChanges() async {
         isSaving = true
         
         do {
-            // Create updated card with new details
             var updatedCard = card
             updatedCard.title = title
-            updatedCard.description = description
+            updatedCard.description = description.isEmpty ? nil : description
             
-            try await profileViewModel.updatePortfolioCard(updatedCard)  // CHANGED
+            try await profileViewModel.updatePortfolioCard(updatedCard)
             dismiss()
         } catch {
-            print("Error updating details: \(error)")
+            print("Error saving changes: \(error)")
         }
         
         isSaving = false

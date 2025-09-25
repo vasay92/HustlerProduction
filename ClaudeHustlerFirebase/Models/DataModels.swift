@@ -50,10 +50,28 @@ struct PortfolioCard: Codable, Identifiable {
     var coverImageURL: String?
     var mediaURLs: [String] = []
     var description: String?
-    let createdAt: Date = Date()
-    var updatedAt: Date = Date()
     var displayOrder: Int = 0
+    var createdAt: Date = Date()  // Added timestamp for sorting
+    var updatedAt: Date = Date()
+    
+    // Computed properties remain the same
+    var hasImages: Bool {
+        return !mediaURLs.isEmpty || coverImageURL != nil
+    }
+    
+    var displayImageURL: String? {
+        return coverImageURL ?? mediaURLs.first
+    }
+    
+    var allImageURLs: [String] {
+        var urls = mediaURLs
+        if let cover = coverImageURL {
+            urls.insert(cover, at: 0)
+        }
+        return urls
+    }
 }
+
 // MARK: - Review Model
 struct Review: Codable, Identifiable {
     @DocumentID var id: String?
