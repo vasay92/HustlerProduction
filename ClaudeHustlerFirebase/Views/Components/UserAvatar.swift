@@ -15,6 +15,7 @@ struct UserAvatar: View {
     var showBorder: Bool = false
     var borderColor: Color = .blue
     var borderWidth: CGFloat = 2
+    var backgroundColor: Color = Color.gray.opacity(0.3)
     
     private var initials: String {
         guard let name = userName, !name.isEmpty else { return "?" }
@@ -22,11 +23,29 @@ struct UserAvatar: View {
         
         if components.count >= 2 {
             // First and last name initials
-            return "\(components.first?.first ?? "?")\(components.last?.first ?? "?")"
-        } else {
+            let first = components.first?.first ?? Character("?")
+            let last = components.last?.first ?? Character("?")
+            return "\(first)\(last)".uppercased()
+        } else if let firstChar = name.first {
             // Just first letter
-            return String(name.first ?? "?")
+            return String(firstChar).uppercased()
+        } else {
+            return "?"
         }
+    }
+    
+    private var gradientColors: [Color] {
+        // Generate consistent colors based on username
+        guard let name = userName, !name.isEmpty else {
+            return [Color.gray, Color.gray.opacity(0.7)]
+        }
+        
+        let hash = name.hashValue
+        let hue = Double(abs(hash % 360)) / 360.0
+        return [
+            Color(hue: hue, saturation: 0.5, brightness: 0.8),
+            Color(hue: hue, saturation: 0.7, brightness: 0.6)
+        ]
     }
     
     var body: some View {
@@ -34,21 +53,42 @@ struct UserAvatar: View {
             if let urlString = imageURL,
                !urlString.isEmpty,
                let url = URL(string: urlString) {
-                // Use WebImage for caching
+                // Use WebImage with correct syntax
                 WebImage(url: url)
+                    .onSuccess { image, data, cacheType in
+                        // Image loaded successfully
+                    }
                     .resizable()
-                    .indicator(.activity)
-                    .transition(.fade(duration: 0.3))
+                    .placeholder(content: {
+                        // Loading placeholder
+                        Circle()
+                            .fill(LinearGradient(
+                                colors: gradientColors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .overlay(
+                                Text(initials)
+                                    .font(fontSize ?? .system(size: size * 0.4))
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                            )
+                    })
+                    .animated() // This replaces .transition
                     .scaledToFill()
                     .frame(width: size, height: size)
                     .clipShape(Circle())
             } else {
-                // Fallback to initials
+                // Fallback to initials with gradient
                 Circle()
-                    .fill(Color.gray.opacity(0.3))
+                    .fill(LinearGradient(
+                        colors: gradientColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
                     .frame(width: size, height: size)
                     .overlay(
-                        Text(initials.uppercased())
+                        Text(initials)
                             .font(fontSize ?? .system(size: size * 0.4))
                             .fontWeight(.medium)
                             .foregroundColor(.white)
@@ -59,7 +99,7 @@ struct UserAvatar: View {
             showBorder ?
             Circle()
                 .stroke(borderColor, lineWidth: borderWidth)
-                .frame(width: size, height: size)
+                .frame(width: size + borderWidth, height: size + borderWidth)
             : nil
         )
     }
@@ -91,23 +131,55 @@ extension UserAvatar {
     static func extraLarge(imageURL: String?, userName: String?) -> UserAvatar {
         UserAvatar(imageURL: imageURL, userName: userName, size: 100)
     }
+    
+    // Profile avatar (120px) - for main profile view
+    static func profile(imageURL: String?, userName: String?) -> UserAvatar {
+        UserAvatar(imageURL: imageURL, userName: userName, size: 120)
+    }
 }
 
 // Preview
 struct UserAvatar_Previews: PreviewProvider {
     static var previews: some View {
         VStack(spacing: 20) {
-            UserAvatar(imageURL: nil, userName: "John Doe", size: 60)
-            UserAvatar(imageURL: nil, userName: "Jane", size: 60)
-            UserAvatar(imageURL: nil, userName: nil, size: 60)
-            UserAvatar(
-                imageURL: nil,
-                userName: "Test User",
-                size: 60,
-                showBorder: true,
-                borderColor: .blue
-            )
+            // Different sizes
+            HStack(spacing: 20) {
+                UserAvatar.tiny(imageURL: nil, userName: "John Doe")
+                UserAvatar.small(imageURL: nil, userName: "Jane Smith")
+                UserAvatar.medium(imageURL: nil, userName: "Bob")
+                UserAvatar.large(imageURL: nil, userName: "Alice Wonder")
+                UserAvatar.extraLarge(imageURL: nil, userName: "X")
+            }
+            
+            // With borders
+            HStack(spacing: 20) {
+                UserAvatar(
+                    imageURL: nil,
+                    userName: "Test User",
+                    size: 60,
+                    showBorder: true,
+                    borderColor: .blue
+                )
+                
+                UserAvatar(
+                    imageURL: nil,
+                    userName: "Another User",
+                    size: 60,
+                    showBorder: true,
+                    borderColor: .purple,
+                    borderWidth: 3
+                )
+            }
+            
+            // Different initials
+            HStack(spacing: 20) {
+                UserAvatar(imageURL: nil, userName: "Single", size: 50)
+                UserAvatar(imageURL: nil, userName: "", size: 50)
+                UserAvatar(imageURL: nil, userName: nil, size: 50)
+                UserAvatar(imageURL: nil, userName: "Three Name Person", size: 50)
+            }
         }
         .padding()
+        .background(Color.gray.opacity(0.1))
     }
 }

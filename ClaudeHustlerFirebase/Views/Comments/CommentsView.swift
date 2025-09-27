@@ -1,212 +1,229 @@
 // CommentsView.swift
+// Path: ClaudeHustlerFirebase/Views/Comments/CommentsView.swift
+
 import SwiftUI
 import FirebaseFirestore
 
 struct CommentsView: View {
     let reelId: String
     let reelOwnerId: String
-    
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var comments: [Comment] = []
     @State private var commentText = ""
+    @State private var isLoading = false
     @State private var replyingTo: Comment?
-    @State private var showingDeleteConfirmation = false
+    @State private var showDeleteConfirmation = false
     @State private var commentToDelete: Comment?
-    @State private var commentsListener: ListenerRegistration?
-    @State private var isPosting = false
-    
-    var topLevelComments: [Comment] {
-        comments.filter { $0.parentCommentId == nil }
-    }
-    
-    func replies(for commentId: String) -> [Comment] {
-        comments.filter { $0.parentCommentId == commentId }
-    }
+    @State private var listener: ListenerRegistration?
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Text("Comments")
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .overlay(
+                    Divider(),
+                    alignment: .bottom
+                )
+                
                 // Comments List
-                if comments.isEmpty {
-                    emptyStateView
+                if isLoading && comments.isEmpty {
+                    Spacer()
+                    ProgressView("Loading comments...")
+                    Spacer()
+                } else if comments.isEmpty {
+                    Spacer()
+                    VStack(spacing: 10) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 50))
+                            .foregroundColor(.gray)
+                        Text("No comments yet")
+                            .foregroundColor(.secondary)
+                        Text("Be the first to comment!")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
                 } else {
-                    commentsList
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            ForEach(comments.filter { $0.parentCommentId == nil }) { comment in
+                                CommentCell(
+                                    comment: comment,
+                                    reelOwnerId: reelOwnerId,
+                                    onReply: { replyingTo = comment },
+                                    onDelete: {
+                                        commentToDelete = comment
+                                        showDeleteConfirmation = true
+                                    }
+                                )
+                            }
+                        }
+                        .padding()
+                    }
                 }
                 
                 // Reply indicator
                 if let replyingTo = replyingTo {
-                    replyIndicator(for: replyingTo)
-                }
-                
-                // Comment Input Bar
-                commentInputBar
-            }
-            .navigationTitle("Comments")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .onAppear {
-            startListeningToComments()
-        }
-        .onDisappear {
-            commentsListener?.remove()
-            CommentRepository.shared.stopListeningToComments(reelId)
-        }
-        .confirmationDialog("Delete Comment?", isPresented: $showingDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                if let comment = commentToDelete {
-                    deleteComment(comment)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-    }
-    
-    // MARK: - Views
-    
-    @ViewBuilder
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "bubble.left")
-                .font(.system(size: 50))
-                .foregroundColor(.gray)
-            Text("No comments yet")
-                .font(.headline)
-                .foregroundColor(.primary)
-            Text("Be the first to comment!")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-    }
-    
-    @ViewBuilder
-    private var commentsList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                ForEach(topLevelComments) { comment in
-                    CommentCell(
-                        comment: comment,
-                        replies: replies(for: comment.id ?? ""),
-                        reelOwnerId: reelOwnerId,
-                        onReply: { replyingTo = comment },
-                        onDelete: {
-                            commentToDelete = comment
-                            showingDeleteConfirmation = true
+                    HStack {
+                        Text("Replying to \(replyingTo.userName ?? "User")")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Button("Cancel") {
+                            self.replyingTo = nil
                         }
-                    )
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
+                    .background(Color(.systemGray6))
                 }
-            }
-            .padding()
-        }
-    }
-    
-    @ViewBuilder
-    private func replyIndicator(for comment: Comment) -> some View {
-        HStack {
-            Text("Replying to \(comment.userName ?? "User")")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Spacer()
-            
-            Button(action: { replyingTo = nil }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.systemGray6))
-    }
-    
-    @ViewBuilder
-    private var commentInputBar: some View {
-        HStack {
-            TextField(replyingTo != nil ? "Reply..." : "Add a comment...", text: $commentText)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-            
-            Button(action: postComment) {
-                if isPosting {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "paperplane.fill")
-                        .foregroundColor(commentText.isEmpty ? .gray : .blue)
-                }
-            }
-            .disabled(commentText.isEmpty || isPosting)
-        }
-        .padding()
-        .background(Color(.systemBackground))
-    }
-    
-    // MARK: - Methods
-    
-    // In CommentsView, after fetching comments:
-    private func startListeningToComments() {
-        commentsListener = CommentRepository.shared.listenToComments(for: reelId) { updatedComments in
-            withAnimation {
-                self.comments = updatedComments
                 
-                // DEBUG: Check replies
-                let repliesCount = updatedComments.filter { $0.parentCommentId != nil }.count
-                print("📝 Total comments: \(updatedComments.count)")
-                print("📝 Replies: \(repliesCount)")
-                for comment in updatedComments where comment.parentCommentId != nil {
-                    print("  Reply: \(comment.text) -> Parent: \(comment.parentCommentId ?? "")")
+                // Input Section
+                HStack(spacing: 12) {
+                    UserAvatar.small(
+                        imageURL: firebase.currentUser?.profileImageURL,
+                        userName: firebase.currentUser?.name
+                    )
+                    
+                    HStack {
+                        TextField(
+                            replyingTo != nil ? "Add a reply..." : "Add a comment...",
+                            text: $commentText
+                        )
+                        .textFieldStyle(PlainTextFieldStyle())
+                        
+                        if !commentText.isEmpty {
+                            Button(action: postComment) {
+                                Image(systemName: "paperplane.fill")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(20)
                 }
+                .padding()
+                .background(Color(.systemBackground))
+            }
+            .navigationBarHidden(true)
+            .confirmationDialog(
+                "Delete Comment?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let comment = commentToDelete {
+                        Task {
+                            await deleteComment(comment)
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .onAppear {
+                startListeningToComments()
+            }
+            .onDisappear {
+                listener?.remove()
             }
         }
     }
     
-    // In CommentsView, update postComment():
-    private func postComment() {
-        let text = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+    private func startListeningToComments() {
+        isLoading = true
         
-        isPosting = true
+        listener = Firestore.firestore()
+            .collection("comments")
+            .whereField("reelId", isEqualTo: reelId)
+            .order(by: "timestamp", descending: false)
+            .addSnapshotListener { snapshot, error in
+                guard let documents = snapshot?.documents else {
+                    isLoading = false
+                    return
+                }
+                
+                self.comments = documents.compactMap { doc in
+                    var comment = try? doc.data(as: Comment.self)
+                    comment?.id = doc.documentID
+                    return comment
+                }
+                
+                isLoading = false
+            }
+    }
+    
+    private func postComment() {
+        guard !commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let userId = firebase.currentUser?.id else { return }
         
         Task {
             do {
-                _ = try await CommentRepository.shared.postComment(
-                    on: reelId,
-                    text: text,
+                let comment = Comment(
+                    reelId: reelId,
+                    userId: userId,
+                    userName: firebase.currentUser?.name,
+                    userProfileImage: firebase.currentUser?.profileImageURL,
+                    text: commentText.trimmingCharacters(in: .whitespacesAndNewlines),
                     parentCommentId: replyingTo?.id
                 )
                 
-                await MainActor.run {
-                    commentText = ""
-                    replyingTo = nil
-                    isPosting = false
+                try await CommentRepository.shared.create(comment)
+                
+                commentText = ""
+                replyingTo = nil
+                
+                // Update comment count on reel
+                if replyingTo == nil {
+                    try await Firestore.firestore()
+                        .collection("reels")
+                        .document(reelId)
+                        .updateData([
+                            "comments": FieldValue.increment(Int64(1))
+                        ])
                 }
+                
             } catch {
-                await MainActor.run {
-                    isPosting = false
-                    // Show error to user
-                    print("Error posting comment: \(error.localizedDescription)")
-                    // You should add an @State var showingError and errorMessage to display this
-                }
+                print("Error posting comment: \(error)")
             }
         }
     }
     
-    private func deleteComment(_ comment: Comment) {
+    private func deleteComment(_ comment: Comment) async {
         guard let commentId = comment.id else { return }
         
-        Task {
-            do {
-                try await CommentRepository.shared.deleteComment(commentId, reelId: reelId)
-            } catch {
-                print("Error deleting comment: \(error)")
+        do {
+            try await CommentRepository.shared.delete(commentId)
+            
+            // Update comment count if it was a top-level comment
+            if comment.parentCommentId == nil {
+                try await Firestore.firestore()
+                    .collection("reels")
+                    .document(reelId)
+                    .updateData([
+                        "comments": FieldValue.increment(Int64(-1))
+                    ])
             }
+        } catch {
+            print("Error deleting comment: \(error)")
         }
     }
 }
@@ -215,13 +232,13 @@ struct CommentsView: View {
 
 struct CommentCell: View {
     let comment: Comment
-    let replies: [Comment]
     let reelOwnerId: String
     let onReply: () -> Void
     let onDelete: () -> Void
     
     @StateObject private var firebase = FirebaseService.shared
     @State private var isLiked = false
+    @State private var replies: [Comment] = []
     @State private var showReplies = false
     
     var canDelete: Bool {
@@ -230,73 +247,77 @@ struct CommentCell: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Main comment
             HStack(alignment: .top, spacing: 10) {
-                // Profile image
+                // Profile image with navigation
                 NavigationLink(destination: EnhancedProfileView(userId: comment.userId)) {
-                    profileImage
+                    UserAvatar(
+                        imageURL: comment.userProfileImage,
+                        userName: comment.userName,
+                        size: 32
+                    )
                 }
                 .buttonStyle(PlainButtonStyle())
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    // Username and time
-                    HStack {
+                    // Username and comment
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(comment.userName ?? "User")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                         
-                        Text("• \(comment.timestamp, style: .relative)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        if canDelete {
-                            Menu {
-                                Button(role: .destructive, action: onDelete) {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            }
-                        }
+                        Text(comment.text)
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    
-                    // Comment text
-                    Text(comment.text)
-                        .font(.body)
                     
                     // Actions
                     HStack(spacing: 16) {
-                        Button(action: toggleLike) {
-                            HStack(spacing: 4) {
+                        Text(timeAgo(from: comment.timestamp))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Button(action: { toggleLike() }) {
+                            HStack(spacing: 2) {
                                 Image(systemName: isLiked ? "heart.fill" : "heart")
                                     .font(.caption)
-                                if comment.likes.count > 0 {
+                                    .foregroundColor(isLiked ? .red : .secondary)
+                                
+                                if !comment.likes.isEmpty {
                                     Text("\(comment.likes.count)")
                                         .font(.caption)
+                                        .foregroundColor(.secondary)
                                 }
                             }
-                            .foregroundColor(isLiked ? .red : .gray)
                         }
                         
-                        Button(action: onReply) {
-                            Text("Reply")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
+                        Button("Reply", action: onReply)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         
-                        if comment.replyCount > 0 {
-                            Button(action: { showReplies.toggle() }) {
-                                HStack(spacing: 4) {
-                                    Text(showReplies ? "Hide" : "View")
-                                    Text("\(comment.replyCount) \(comment.replyCount == 1 ? "reply" : "replies")")
-                                }
+                        if canDelete {
+                            Button("Delete", action: onDelete)
                                 .font(.caption)
-                                .foregroundColor(.blue)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    
+                    // Show/hide replies
+                    if comment.replyCount > 0 {
+                        Button(action: {
+                            showReplies.toggle()
+                            if showReplies && replies.isEmpty {
+                                loadReplies()
                             }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "minus")
+                                    .font(.caption)
+                                
+                                Text(showReplies ? "Hide" : "View")
+                                Text("\(comment.replyCount) \(comment.replyCount == 1 ? "reply" : "replies")")
+                            }
+                            .font(.caption)
+                            .foregroundColor(.blue)
                         }
                     }
                 }
@@ -322,32 +343,6 @@ struct CommentCell: View {
         }
     }
     
-    @ViewBuilder
-    private var profileImage: some View {
-        if let imageURL = comment.userProfileImage, !imageURL.isEmpty {
-            AsyncImage(url: URL(string: imageURL)) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
-            } placeholder: {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 32, height: 32)
-            }
-        } else {
-            Circle()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 32, height: 32)
-                .overlay(
-                    Text(String(comment.userName?.first ?? "U"))
-                        .font(.caption)
-                        .foregroundColor(.white)
-                )
-        }
-    }
-    
     private func toggleLike() {
         guard let commentId = comment.id else { return }
         
@@ -359,10 +354,39 @@ struct CommentCell: View {
                     try await CommentRepository.shared.likeComment(commentId)
                 }
                 
+                isLiked.toggle()
             } catch {
                 print("Error toggling like: \(error)")
             }
         }
+    }
+    
+    private func loadReplies() {
+        guard let commentId = comment.id else { return }
+        
+        Task {
+            do {
+                let snapshot = try await Firestore.firestore()
+                    .collection("comments")
+                    .whereField("parentCommentId", isEqualTo: commentId)
+                    .order(by: "timestamp", descending: false)
+                    .getDocuments()
+                
+                replies = snapshot.documents.compactMap { doc in
+                    var reply = try? doc.data(as: Comment.self)
+                    reply?.id = doc.documentID
+                    return reply
+                }
+            } catch {
+                print("Error loading replies: \(error)")
+            }
+        }
+    }
+    
+    private func timeAgo(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -384,28 +408,11 @@ struct ReplyCell: View {
         HStack(alignment: .top, spacing: 8) {
             // Profile image
             NavigationLink(destination: EnhancedProfileView(userId: comment.userId)) {
-                if let imageURL = comment.userProfileImage, !imageURL.isEmpty {
-                    AsyncImage(url: URL(string: imageURL)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 24, height: 24)
-                            .clipShape(Circle())
-                    } placeholder: {
-                        Circle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 24, height: 24)
-                    }
-                } else {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 24, height: 24)
-                        .overlay(
-                            Text(String(comment.userName?.first ?? "U"))
-                                .font(.caption2)
-                                .foregroundColor(.white)
-                        )
-                }
+                UserAvatar(
+                    imageURL: comment.userProfileImage,
+                    userName: comment.userName,
+                    size: 24
+                )
             }
             .buttonStyle(PlainButtonStyle())
             
@@ -415,24 +422,36 @@ struct ReplyCell: View {
                         .font(.caption)
                         .fontWeight(.semibold)
                     
-                    Text("• \(comment.timestamp, style: .relative)")
+                    Text(timeAgo(from: comment.timestamp))
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    if canDelete {
-                        Button(action: onDelete) {
-                            Image(systemName: "trash")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                    }
                 }
                 
                 Text(comment.text)
                     .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                HStack(spacing: 12) {
+                    if canDelete {
+                        Button("Delete", action: onDelete)
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    }
+                }
+                .padding(.top, 2)
             }
+            
+            Spacer()
         }
     }
+    
+    private func timeAgo(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+#Preview {
+    CommentsView(reelId: "test", reelOwnerId: "owner")
 }

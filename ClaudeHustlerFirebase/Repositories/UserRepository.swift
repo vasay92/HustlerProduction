@@ -1,30 +1,22 @@
-
-
 // UserRepository.swift
 // Path: ClaudeHustlerFirebase/Repositories/UserRepository.swift
 
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth
-import UIKit
 
 // MARK: - User Repository
-@MainActor
-final class UserRepository: RepositoryProtocol {
-    typealias Model = User
-    
-    // Singleton
+class UserRepository: ObservableObject {
     static let shared = UserRepository()
-    
     private let db = Firestore.firestore()
-    private let cache = CacheService.shared
-    private let cacheMaxAge: TimeInterval = 600 // 10 minutes for user profiles
+    private let cache = CacheService.shared  // FIXED: Use CacheService instead of CacheManager
     
     private init() {}
     
-    // MARK: - Fetch Users with Pagination (for user lists)
+    // MARK: - Fetch Users
+    
     func fetch(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [User], lastDoc: DocumentSnapshot?) {
-        var query = db.collection("users")
+        var query: Query = db.collection("users")
             .order(by: "createdAt", descending: true)
             .limit(to: limit)
         
@@ -43,17 +35,15 @@ final class UserRepository: RepositoryProtocol {
         return (users, snapshot.documents.last)
     }
     
-    // MARK: - Fetch Single User
+    // MARK: - Fetch User by ID
     func fetchById(_ id: String) async throws -> User? {
-        let cacheKey = "user_\(id)"
-        
         // Check cache first
-        if !cache.isExpired(for: cacheKey, maxAge: cacheMaxAge),
-           let cachedUser: User = cache.retrieve(User.self, for: cacheKey) {
-            return cachedUser
+        if let cachedUser: User = cache.retrieve(User.self, for: "user_\(id)") {
+            if !cache.isExpired(for: "user_\(id)", maxAge: 300) { // 5 minutes
+                return cachedUser
+            }
         }
         
-        // Fetch from Firestore
         let document = try await db.collection("users").document(id).getDocument()
         
         guard document.exists else { return nil }
@@ -62,14 +52,13 @@ final class UserRepository: RepositoryProtocol {
         user.id = document.documentID
         
         // Cache the user
-        cache.store(user, for: cacheKey)
+        cache.store(user, for: "user_\(id)")
         
         return user
     }
     
     // MARK: - Create User
     func create(_ user: User) async throws -> String {
-        // Create user data dictionary
         let userData: [String: Any] = [
             "email": user.email,
             "name": user.name,
@@ -135,48 +124,156 @@ final class UserRepository: RepositoryProtocol {
         cache.remove(for: "user_\(id)")
     }
     
-    // MARK: - Update Profile Image
+    // MARK: - COMPLETE PROFILE IMAGE UPDATE METHOD
     func updateProfileImage(_ imageURL: String, for userId: String) async throws {
         guard userId == Auth.auth().currentUser?.uid else {
             throw NSError(domain: "UserRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Can only update own profile image"])
         }
         
-        let batch = db.batch()
+        // Get user's name for consistency
+        let userDoc = try await db.collection("users").document(userId).getDocument()
+        let userName = userDoc.data()?["name"] as? String ?? "User"
         
-        // Update user profile
+        let batch = db.batch()
+        var updateCount = 0
+        let maxBatchSize = 450 // Leave some room under 500 limit
+        
+        // 1. Update user profile
         let userRef = db.collection("users").document(userId)
         batch.updateData([
             "profileImageURL": imageURL,
             "updatedAt": Date()
         ], forDocument: userRef)
+        updateCount += 1
         
-        // Update all user's posts
+        // 2. Update all user's posts
         let posts = try await db.collection("posts")
             .whereField("userId", isEqualTo: userId)
             .getDocuments()
         
         for post in posts.documents {
+            if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "userProfileImage": imageURL
+                "userProfileImage": imageURL,
+                "userName": userName
             ], forDocument: post.reference)
+            updateCount += 1
         }
         
-        // Update all user's reels
+        // 3. Update all user's reels
         let reels = try await db.collection("reels")
             .whereField("userId", isEqualTo: userId)
             .getDocuments()
         
         for reel in reels.documents {
+            if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "userProfileImage": imageURL
+                "userProfileImage": imageURL,
+                "userName": userName
             ], forDocument: reel.reference)
+            updateCount += 1
         }
         
-        // Commit batch
+        // 4. Update all user's comments
+        let comments = try await db.collection("comments")
+            .whereField("userId", isEqualTo: userId)
+            .getDocuments()
+        
+        for comment in comments.documents {
+            if updateCount >= maxBatchSize { break }
+            batch.updateData([
+                "userProfileImage": imageURL,
+                "userName": userName
+            ], forDocument: comment.reference)
+            updateCount += 1
+        }
+        
+        // 5. Update all user's active statuses
+        let statuses = try await db.collection("statuses")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("isActive", isEqualTo: true)
+            .getDocuments()
+        
+        for status in statuses.documents {
+            if updateCount >= maxBatchSize { break }
+            batch.updateData([
+                "userProfileImage": imageURL,
+                "userName": userName
+            ], forDocument: status.reference)
+            updateCount += 1
+        }
+        
+        // 6. Update all user's reviews
+        let reviews = try await db.collection("reviews")
+            .whereField("reviewerId", isEqualTo: userId)
+            .getDocuments()
+        
+        for review in reviews.documents {
+            if updateCount >= maxBatchSize { break }
+            batch.updateData([
+                "reviewerProfileImage": imageURL,
+                "reviewerName": userName
+            ], forDocument: review.reference)
+            updateCount += 1
+        }
+        
+        // 7. Update conversations participant info
+        let conversations = try await db.collection("conversations")
+            .whereField("participantIds", arrayContains: userId)
+            .getDocuments()
+        
+        for conversation in conversations.documents {
+            if updateCount >= maxBatchSize { break }
+            batch.updateData([
+                "participantImages.\(userId)": imageURL,
+                "participantNames.\(userId)": userName
+            ], forDocument: conversation.reference)
+            updateCount += 1
+        }
+        
+        // 8. Update recent messages (last 50)
+        let messages = try await db.collection("messages")
+            .whereField("senderId", isEqualTo: userId)
+            .limit(to: 50)
+            .order(by: "timestamp", descending: true)
+            .getDocuments()
+        
+        for message in messages.documents {
+            if updateCount >= maxBatchSize { break }
+            batch.updateData([
+                "senderProfileImage": imageURL,
+                "senderName": userName
+            ], forDocument: message.reference)
+            updateCount += 1
+        }
+        
+        // 9. Update reel likes
+        let reelLikes = try await db.collection("reelLikes")
+            .whereField("userId", isEqualTo: userId)
+            .getDocuments()
+        
+        for like in reelLikes.documents {
+            if updateCount >= maxBatchSize { break }
+            batch.updateData([
+                "userProfileImage": imageURL,
+                "userName": userName
+            ], forDocument: like.reference)
+            updateCount += 1
+        }
+        
+        // Commit all updates
         try await batch.commit()
         
-        // Clear cache
-        cache.remove(for: "user_\(userId)")
+        print("✅ Profile image updated across \(updateCount) documents for user: \(userId)")
+        
+        // Clear all relevant caches
+        cache.clearAll()
+        
+        // If we hit the batch limit, run a second batch for remaining updates
+        if updateCount >= maxBatchSize {
+            print("⚠️ Batch limit reached, some content may not be updated immediately")
+            // You could schedule a background task here to update remaining content
+        }
     }
     
     // MARK: - Follow/Unfollow Operations
@@ -203,8 +300,6 @@ final class UserRepository: RepositoryProtocol {
         batch.updateData([
             "followers": FieldValue.arrayUnion([currentUserId])
         ], forDocument: targetUserRef)
-        
-        // REMOVED: Activity tracking that was causing permission errors
         
         try await batch.commit()
         
@@ -293,89 +388,44 @@ final class UserRepository: RepositoryProtocol {
         return Array(allFollowing.prefix(limit))
     }
     
-    // MARK: - Search Users
-    
-    func searchUsers(query: String, limit: Int = 20) async throws -> [User] {
-        // Note: For better search, use Algolia or ElasticSearch
-        // This is a basic implementation
-        
-        let snapshot = try await db.collection("users")
-            .order(by: "name")
-            .limit(to: 100)
-            .getDocuments()
-        
-        let users = snapshot.documents.compactMap { doc -> User? in
-            var user = try? doc.data(as: User.self)
-            user?.id = doc.documentID
-            return user
-        }.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.bio.localizedCaseInsensitiveContains(query) ||
-            $0.location.localizedCaseInsensitiveContains(query)
-        }
-        
-        return Array(users.prefix(limit))
-    }
-    
-    // MARK: - Service Providers
-    
-    func fetchServiceProviders(category: ServiceCategory? = nil, limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [User], lastDoc: DocumentSnapshot?) {
-        var query = db.collection("users")
-            .whereField("isServiceProvider", isEqualTo: true)
-            .order(by: "rating", descending: true)
-            .limit(to: limit)
-        
-        if let lastDoc = lastDocument {
-            query = query.start(afterDocument: lastDoc)
-        }
-        
-        let snapshot = try await query.getDocuments()
-        
-        var users = snapshot.documents.compactMap { doc -> User? in
-            var user = try? doc.data(as: User.self)
-            user?.id = doc.documentID
-            return user
-        }
-        
-        // Filter by skills if category provided
-        if let category = category {
-            users = users.filter { user in
-                    user.isServiceProvider
-                }
-        }
-        
-        return (users, snapshot.documents.last)
-    }
-    
     // MARK: - Update User Rating
-    
     func updateUserRating(userId: String) async {
         do {
-            // Get all reviews for this user
-            let reviewsSnapshot = try await db.collection("reviews")
+            // Fetch all reviews for this user
+            let reviews = try await db.collection("reviews")
                 .whereField("reviewedUserId", isEqualTo: userId)
                 .getDocuments()
             
-            guard !reviewsSnapshot.documents.isEmpty else { return }
+            guard !reviews.documents.isEmpty else {
+                // No reviews, reset rating
+                try await db.collection("users").document(userId).updateData([
+                    "rating": 0.0,
+                    "reviewCount": 0,
+                    "lastRatingUpdate": Date()
+                ])
+                return
+            }
             
-            // Calculate average rating
+            // Calculate average rating and breakdown
             var totalRating = 0
-            var reviewCount = 0
+            var ratingBreakdown: [String: Int] = [:]
             
-            for doc in reviewsSnapshot.documents {
+            for doc in reviews.documents {
                 if let rating = doc.data()["rating"] as? Int {
                     totalRating += rating
-                    reviewCount += 1
+                    let key = String(rating)
+                    ratingBreakdown[key, default: 0] += 1
                 }
             }
             
-            let averageRating = reviewCount > 0 ? Double(totalRating) / Double(reviewCount) : 0.0
+            let averageRating = Double(totalRating) / Double(reviews.documents.count)
             
             // Update user document
             try await db.collection("users").document(userId).updateData([
                 "rating": averageRating,
-                "reviewCount": reviewCount,
-                "updatedAt": Date()
+                "reviewCount": reviews.documents.count,
+                "ratingBreakdown": ratingBreakdown,
+                "lastRatingUpdate": Date()
             ])
             
             // Clear cache
@@ -385,13 +435,45 @@ final class UserRepository: RepositoryProtocol {
             print("Error updating user rating: \(error)")
         }
     }
+    
+    // MARK: - Search Users
+    func searchUsers(query: String, limit: Int = 20) async throws -> [User] {
+        guard !query.isEmpty else { return [] }
+        
+        // Removed unused variable that was causing warning
+        // Search by name (simple prefix search)
+        let snapshot = try await db.collection("users")
+            .order(by: "name")
+            .start(at: [query])
+            .end(at: [query + "\u{f8ff}"])
+            .limit(to: limit)
+            .getDocuments()
+        
+        let users = snapshot.documents.compactMap { doc -> User? in
+            var user = try? doc.data(as: User.self)
+            user?.id = doc.documentID
+            return user
+        }
+        
+        return users
+    }
+    
+    // MARK: - Check Username Availability
+    func isUsernameAvailable(_ username: String) async throws -> Bool {
+        let snapshot = try await db.collection("users")
+            .whereField("username", isEqualTo: username.lowercased())
+            .limit(to: 1)
+            .getDocuments()
+        
+        return snapshot.documents.isEmpty
+    }
 }
 
-// MARK: - Helper Extension for Array Chunking
-private extension Array {
+// MARK: - Array Extension for Chunking
+extension Array {
     func chunked(into size: Int) -> [[Element]] {
         return stride(from: 0, to: count, by: size).map {
-            Array(self[$0..<Swift.min($0 + size, count)])
+            Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
 }

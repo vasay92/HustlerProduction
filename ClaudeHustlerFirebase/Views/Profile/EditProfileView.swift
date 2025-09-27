@@ -1,5 +1,5 @@
-// EditProfileView.swift - CORRECTED VERSION
-// Replace your entire EditProfileView with this working version
+// EditProfileView.swift
+// Path: ClaudeHustlerFirebase/Views/Profile/EditProfileView.swift
 
 import SwiftUI
 import PhotosUI
@@ -17,11 +17,8 @@ struct EditProfileView: View {
     @State private var isSaving = false
     @State private var showingError = false
     @State private var errorMessage = ""
-    @State private var selectedItem: PhotosPickerItem? // Add this for PhotosPicker
-    
-    init() {
-        // Initialize with current user data
-    }
+    @State private var selectedItem: PhotosPickerItem?
+    @State private var isUpdatingProfileImage = false
     
     var body: some View {
         NavigationView {
@@ -39,35 +36,24 @@ struct EditProfileView: View {
                                     .scaledToFill()
                                     .frame(width: 100, height: 100)
                                     .clipShape(Circle())
-                            } else if let imageURL = firebase.currentUser?.profileImageURL {
-                                AsyncImage(url: URL(string: imageURL)) { image in
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100, height: 100)
-                                        .clipShape(Circle())
-                                } placeholder: {
-                                    profileImagePlaceholder
-                                }
                             } else {
-                                profileImagePlaceholder
+                                UserAvatar(
+                                    imageURL: firebase.currentUser?.profileImageURL,
+                                    userName: firebase.currentUser?.name,
+                                    size: 100
+                                )
                             }
                             
-                            // Camera Button - THIS IS THE FIX
+                            // Camera button
                             PhotosPicker(selection: $selectedItem,
                                        matching: .images,
                                        photoLibrary: .shared()) {
-                                Image(systemName: "camera.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                                    .padding(8)
-                                    .background(Color.blue)
-                                    .clipShape(Circle())
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 2)
-                                    )
+                                Image(systemName: "camera.circle.fill")
+                                    .font(.title)
+                                    .foregroundColor(.blue)
+                                    .background(Circle().fill(Color.white))
                             }
+                            .offset(x: -5, y: -5)
                         }
                         
                         Spacer()
@@ -75,35 +61,55 @@ struct EditProfileView: View {
                     .padding(.vertical, 10)
                 }
                 
-                // Profile Info
-                Section("Profile Information") {
-                    TextField("Name", text: $name)
-                        .textContentType(.name)
-                    
-                    TextField("Bio", text: $bio, axis: .vertical)
-                        .lineLimit(3...6)
-                    
-                    TextField("Location", text: $location)
-                        .textContentType(.location)
+                // Name Section
+                Section(header: Text("Name")) {
+                    TextField("Enter your name", text: $name)
+                        .autocapitalization(.words)
+                        .disableAutocorrection(true)
+                }
+                
+                // Bio Section
+                Section(header: Text("Bio")) {
+                    TextEditor(text: $bio)
+                        .frame(minHeight: 100)
+                        .overlay(
+                            Group {
+                                if bio.isEmpty {
+                                    Text("Tell us about yourself...")
+                                        .foregroundColor(Color(.placeholderText))
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 8)
+                                        .allowsHitTesting(false)
+                                }
+                            },
+                            alignment: .topLeading
+                        )
+                }
+                
+                // Location Section
+                Section(header: Text("Location")) {
+                    TextField("City or area", text: $location)
+                        .autocapitalization(.words)
                 }
                 
                 // Service Provider Toggle
-                Section("Account Type") {
-                    Toggle("Service Provider", isOn: $isServiceProvider)
-                    
-                    if isServiceProvider {
-                        Text("Enable this to offer services to other users")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                Section {
+                    Toggle("I provide services", isOn: $isServiceProvider)
+                        .tint(.blue)
+                } footer: {
+                    Text("Enable this if you offer services to others")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(isSaving)
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isSaving || isUpdatingProfileImage)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -113,19 +119,17 @@ struct EditProfileView: View {
                         }
                     }
                     .fontWeight(.semibold)
-                    .disabled(name.isEmpty || isSaving)
+                    .disabled(isSaving || isUpdatingProfileImage || name.isEmpty)
                 }
             }
             .onAppear {
                 loadCurrentUserData()
             }
-            // Watch for photo selection
             .onChange(of: selectedItem) { newItem in
                 Task {
                     if let data = try? await newItem?.loadTransferable(type: Data.self) {
                         if let uiImage = UIImage(data: data) {
                             profileImage = uiImage
-                            print("✅ Profile image selected: \(uiImage.size)")
                         }
                     }
                 }
@@ -136,33 +140,32 @@ struct EditProfileView: View {
                 Text(errorMessage)
             }
             .overlay {
-                if isSaving {
+                if isSaving || isUpdatingProfileImage {
                     Color.black.opacity(0.3)
                         .ignoresSafeArea()
                         .overlay(
                             VStack(spacing: 15) {
                                 ProgressView()
-                                Text("Saving Profile...")
-                                    .font(.caption)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                                
+                                if isUpdatingProfileImage {
+                                    Text("Updating profile image everywhere...")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                } else {
+                                    Text("Saving Profile...")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                }
                             }
-                            .padding(20)
-                            .background(Color.white)
-                            .cornerRadius(10)
+                            .padding(25)
+                            .background(Color.black.opacity(0.8))
+                            .cornerRadius(15)
                         )
                 }
             }
         }
-    }
-    
-    private var profileImagePlaceholder: some View {
-        Circle()
-            .fill(Color.gray.opacity(0.3))
-            .frame(width: 100, height: 100)
-            .overlay(
-                Image(systemName: "person.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.gray)
-            )
     }
     
     private func loadCurrentUserData() {
@@ -179,20 +182,28 @@ struct EditProfileView: View {
         
         do {
             guard let userId = firebase.currentUser?.id else {
-                throw NSError(domain: "EditProfile", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID"])
+                throw NSError(domain: "EditProfile", code: 0, userInfo: [NSLocalizedDescriptionKey: "No user ID found"])
             }
             
-            // Upload profile image if changed
             var profileImageURL = firebase.currentUser?.profileImageURL
             
+            // Upload and update profile image if changed
             if let image = profileImage {
-                print("⬆️ Uploading new profile image...")
+                isUpdatingProfileImage = true
+                
+                // Upload image to storage
                 let path = "profiles/\(userId)/profile_\(Date().timeIntervalSince1970).jpg"
                 profileImageURL = try await firebase.uploadImage(image, path: path)
-                print("✅ Profile image uploaded: \(profileImageURL ?? "failed")")
+                
+                // Update profile image across all content
+                if let newImageURL = profileImageURL {
+                    try await UserRepository.shared.updateProfileImage(newImageURL, for: userId)
+                }
+                
+                isUpdatingProfileImage = false
             }
             
-            // Use the existing updateUserProfile method which handles the refresh internally
+            // Update other profile fields
             try await firebase.updateUserProfile(
                 name: name,
                 bio: bio,
@@ -201,14 +212,20 @@ struct EditProfileView: View {
                 isServiceProvider: isServiceProvider
             )
             
-            print("✅ Profile updated successfully")
+            // Refresh current user data
+            await firebase.refreshCurrentUser()
+            
             dismiss()
             
         } catch {
-            print("❌ Error saving profile: \(error)")
             errorMessage = error.localizedDescription
             showingError = true
             isSaving = false
+            isUpdatingProfileImage = false
         }
     }
+}
+
+#Preview {
+    EditProfileView()
 }
