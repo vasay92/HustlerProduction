@@ -109,8 +109,7 @@ final class UserRepository: RepositoryProtocol {
             "bio": user.bio,
             "location": user.location,
             "isServiceProvider": user.isServiceProvider,
-//            "skills": user.skills ?? [],
-//            "availability": user.availability ?? "",
+            "profileImageURL": user.profileImageURL ?? "",
             "updatedAt": Date()
         ]
         

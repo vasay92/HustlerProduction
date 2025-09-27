@@ -17,7 +17,7 @@ struct ImagePicker: UIViewControllerRepresentable {
         var config = PHPickerConfiguration()
         config.filter = .images
         // If singleImage is being used, limit to 1, otherwise unlimited
-        config.selectionLimit = singleImage != nil ? 1 : 0
+        config.selectionLimit = images.isEmpty ? 1 : 0
         
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
@@ -45,7 +45,7 @@ struct ImagePicker: UIViewControllerRepresentable {
             }
             
             // Check if we're doing single or multiple selection based on bindings
-            let isSingleSelection = (parent.singleImage != nil || parent.images.isEmpty)
+            let isSingleSelection = parent.images.isEmpty
             
             if isSingleSelection && results.count == 1 {
                 // Single image selection

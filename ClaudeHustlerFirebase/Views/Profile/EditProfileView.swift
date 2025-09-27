@@ -1,6 +1,6 @@
+// EditProfileView.swift - CORRECTED VERSION
+// Replace your entire EditProfileView with this working version
 
-
-// EditProfileView.swift
 import SwiftUI
 import PhotosUI
 import FirebaseFirestore
@@ -17,6 +17,7 @@ struct EditProfileView: View {
     @State private var isSaving = false
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var selectedItem: PhotosPickerItem? // Add this for PhotosPicker
     
     init() {
         // Initialize with current user data
@@ -52,8 +53,10 @@ struct EditProfileView: View {
                                 profileImagePlaceholder
                             }
                             
-                            // Camera Button
-                            Button(action: { showingImagePicker = true }) {
+                            // Camera Button - THIS IS THE FIX
+                            PhotosPicker(selection: $selectedItem,
+                                       matching: .images,
+                                       photoLibrary: .shared()) {
                                 Image(systemName: "camera.fill")
                                     .font(.caption)
                                     .foregroundColor(.white)
@@ -116,8 +119,16 @@ struct EditProfileView: View {
             .onAppear {
                 loadCurrentUserData()
             }
-            .sheet(isPresented: $showingImagePicker) {
-                ImagePicker(images: .constant([]), singleImage: $profileImage)
+            // Watch for photo selection
+            .onChange(of: selectedItem) { newItem in
+                Task {
+                    if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                        if let uiImage = UIImage(data: data) {
+                            profileImage = uiImage
+                            print("✅ Profile image selected: \(uiImage.size)")
+                        }
+                    }
+                }
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK") { }
@@ -175,8 +186,10 @@ struct EditProfileView: View {
             var profileImageURL = firebase.currentUser?.profileImageURL
             
             if let image = profileImage {
-                let path = "profiles/\(userId)/profile.jpg"
+                print("⬆️ Uploading new profile image...")
+                let path = "profiles/\(userId)/profile_\(Date().timeIntervalSince1970).jpg"
                 profileImageURL = try await firebase.uploadImage(image, path: path)
+                print("✅ Profile image uploaded: \(profileImageURL ?? "failed")")
             }
             
             // Use the existing updateUserProfile method which handles the refresh internally
@@ -188,9 +201,11 @@ struct EditProfileView: View {
                 isServiceProvider: isServiceProvider
             )
             
+            print("✅ Profile updated successfully")
             dismiss()
             
         } catch {
+            print("❌ Error saving profile: \(error)")
             errorMessage = error.localizedDescription
             showingError = true
             isSaving = false
