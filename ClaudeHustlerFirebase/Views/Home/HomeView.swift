@@ -272,13 +272,10 @@ struct HomeView: View {
                 HStack {
                     // User info
                     HStack(spacing: 10) {
-                        Circle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 40, height: 40)
-                            .overlay(
-                                Text(String(post.userName?.first ?? "U"))
-                                    .font(.caption)
-                                    .foregroundColor(.white)
+                        UserAvatar(
+                                imageURL: post.userProfileImage,
+                                userName: post.userName,
+                                size: 40
                             )
                         
                         VStack(alignment: .leading, spacing: 2) {

@@ -53,28 +53,10 @@ struct UserAvatar: View {
             if let urlString = imageURL,
                !urlString.isEmpty,
                let url = URL(string: urlString) {
-                // Use WebImage with correct syntax
+                // Simplified WebImage usage
                 WebImage(url: url)
-                    .onSuccess { image, data, cacheType in
-                        // Image loaded successfully
-                    }
                     .resizable()
-                    .placeholder(content: {
-                        // Loading placeholder
-                        Circle()
-                            .fill(LinearGradient(
-                                colors: gradientColors,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ))
-                            .overlay(
-                                Text(initials)
-                                    .font(fontSize ?? .system(size: size * 0.4))
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                            )
-                    })
-                    .animated() // This replaces .transition
+                    .indicator(.activity) // Loading indicator
                     .scaledToFill()
                     .frame(width: size, height: size)
                     .clipShape(Circle())

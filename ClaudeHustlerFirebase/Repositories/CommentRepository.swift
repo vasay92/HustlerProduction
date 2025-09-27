@@ -153,4 +153,33 @@ final class CommentRepository {
         commentListeners.values.forEach { $0.remove() }
         commentListeners.removeAll()
     }
+    // Add these methods to CommentRepository.swift (after the existing methods)
+
+    
 }
+
+//extension CommentRepository {
+//    
+//    // MARK: - Protocol-compliant method names
+//    
+//    // Create method that CommentsView expects
+//    func create(_ comment: Comment) async throws {
+//        _ = try await postComment(
+//            on: comment.reelId,
+//            text: comment.text,
+//            parentCommentId: comment.parentCommentId
+//        )
+//    }
+//    
+//    // Delete method that CommentsView expects
+//    func delete(_ commentId: String) async throws {
+//        // We need to get the reelId for the existing deleteComment method
+//        let commentDoc = try await db.collection("comments").document(commentId).getDocument()
+//        guard let commentData = commentDoc.data(),
+//              let reelId = commentData["reelId"] as? String else {
+//            throw NSError(domain: "CommentRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Comment or reelId not found"])
+//        }
+//        
+//        try await deleteComment(commentId, reelId: reelId)
+//    }
+//}

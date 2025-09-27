@@ -97,9 +97,10 @@ struct CommentsView: View {
                 
                 // Input Section
                 HStack(spacing: 12) {
-                    UserAvatar.small(
+                    UserAvatar(
                         imageURL: firebase.currentUser?.profileImageURL,
-                        userName: firebase.currentUser?.name
+                        userName: firebase.currentUser?.name,
+                        size: 32
                     )
                     
                     HStack {
@@ -144,6 +145,7 @@ struct CommentsView: View {
             }
             .onDisappear {
                 listener?.remove()
+                CommentRepository.shared.stopListeningToComments(reelId)
             }
         }
     }
@@ -151,55 +153,35 @@ struct CommentsView: View {
     private func startListeningToComments() {
         isLoading = true
         
-        listener = Firestore.firestore()
-            .collection("comments")
-            .whereField("reelId", isEqualTo: reelId)
-            .order(by: "timestamp", descending: false)
-            .addSnapshotListener { snapshot, error in
-                guard let documents = snapshot?.documents else {
-                    isLoading = false
-                    return
-                }
-                
-                self.comments = documents.compactMap { doc in
-                    var comment = try? doc.data(as: Comment.self)
-                    comment?.id = doc.documentID
-                    return comment
-                }
-                
-                isLoading = false
-            }
+        // Use CommentRepository's listener instead of direct Firestore
+        listener = CommentRepository.shared.listenToComments(for: reelId) { fetchedComments in
+            self.comments = fetchedComments
+            self.isLoading = false
+        }
     }
     
     private func postComment() {
-        guard !commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        guard let userId = firebase.currentUser?.id else { return }
+        let trimmedText = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
         
         Task {
             do {
-                let comment = Comment(
-                    reelId: reelId,
-                    userId: userId,
-                    userName: firebase.currentUser?.name,
-                    userProfileImage: firebase.currentUser?.profileImageURL,
-                    text: commentText.trimmingCharacters(in: .whitespacesAndNewlines),
+                // Use the existing postComment method from CommentRepository
+                _ = try await CommentRepository.shared.postComment(
+                    on: reelId,
+                    text: trimmedText,
                     parentCommentId: replyingTo?.id
                 )
                 
-                try await CommentRepository.shared.create(comment)
-                
-                commentText = ""
-                replyingTo = nil
-                
-                // Update comment count on reel
-                if replyingTo == nil {
-                    try await Firestore.firestore()
-                        .collection("reels")
-                        .document(reelId)
-                        .updateData([
-                            "comments": FieldValue.increment(Int64(1))
-                        ])
+                // Clear the input fields
+                await MainActor.run {
+                    commentText = ""
+                    replyingTo = nil
                 }
+                
+                // Note: The CommentRepository.postComment method already handles:
+                // - Updating the comment count on the reel
+                // - Updating the reply count on parent comments
                 
             } catch {
                 print("Error posting comment: \(error)")
@@ -211,17 +193,15 @@ struct CommentsView: View {
         guard let commentId = comment.id else { return }
         
         do {
-            try await CommentRepository.shared.delete(commentId)
+            // Use the existing deleteComment method from CommentRepository
+            try await CommentRepository.shared.deleteComment(commentId, reelId: reelId)
             
-            // Update comment count if it was a top-level comment
-            if comment.parentCommentId == nil {
-                try await Firestore.firestore()
-                    .collection("reels")
-                    .document(reelId)
-                    .updateData([
-                        "comments": FieldValue.increment(Int64(-1))
-                    ])
-            }
+            // Note: The CommentRepository.deleteComment method already handles:
+            // - Checking permissions (owner or reel owner can delete)
+            // - Updating the comment count on the reel
+            // - Updating the reply count on parent comments
+            // - Soft deleting the comment
+            
         } catch {
             print("Error deleting comment: \(error)")
         }
@@ -262,7 +242,7 @@ struct CommentCell: View {
                     // Username and comment
                     VStack(alignment: .leading, spacing: 2) {
                         Text(comment.userName ?? "User")
-                            .font(.subheadline)
+                            .font(.footnote)
                             .fontWeight(.semibold)
                         
                         Text(comment.text)
@@ -273,67 +253,72 @@ struct CommentCell: View {
                     // Actions
                     HStack(spacing: 16) {
                         Text(timeAgo(from: comment.timestamp))
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundColor(.secondary)
                         
                         Button(action: { toggleLike() }) {
-                            HStack(spacing: 2) {
+                            HStack(spacing: 4) {
                                 Image(systemName: isLiked ? "heart.fill" : "heart")
                                     .font(.caption)
-                                    .foregroundColor(isLiked ? .red : .secondary)
-                                
-                                if !comment.likes.isEmpty {
+                                if comment.likes.count > 0 {
                                     Text("\(comment.likes.count)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .font(.caption2)
                                 }
                             }
+                            .foregroundColor(isLiked ? .red : .secondary)
                         }
                         
-                        Button("Reply", action: onReply)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Button("Reply") {
+                            onReply()
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                         
                         if canDelete {
-                            Button("Delete", action: onDelete)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                    }
-                    
-                    // Show/hide replies
-                    if comment.replyCount > 0 {
-                        Button(action: {
-                            showReplies.toggle()
-                            if showReplies && replies.isEmpty {
-                                loadReplies()
+                            Button("Delete") {
+                                onDelete()
                             }
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "minus")
-                                    .font(.caption)
-                                
-                                Text(showReplies ? "Hide" : "View")
-                                Text("\(comment.replyCount) \(comment.replyCount == 1 ? "reply" : "replies")")
-                            }
-                            .font(.caption)
-                            .foregroundColor(.blue)
+                            .font(.caption2)
+                            .foregroundColor(.red)
                         }
                     }
                 }
+                
+                Spacer()
             }
             
-            // Replies
-            if showReplies && !replies.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(replies) { reply in
-                        ReplyCell(
-                            comment: reply,
-                            reelOwnerId: reelOwnerId,
-                            onReply: onReply,
-                            onDelete: onDelete
-                        )
-                        .padding(.leading, 40)
+            // Show replies button
+            if comment.replyCount > 0 {
+                Button(action: {
+                    showReplies.toggle()
+                    if showReplies && replies.isEmpty {
+                        loadReplies()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.3))
+                            .frame(width: 2, height: 12)
+                            .offset(x: 16)
+                        
+                        Text(showReplies ? "Hide replies" : "View \(comment.replyCount) replies")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                }
+                
+                // Replies
+                if showReplies {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(replies) { reply in
+                            ReplyCell(
+                                comment: reply,
+                                reelOwnerId: reelOwnerId,
+                                onReply: onReply,
+                                onDelete: onDelete
+                            )
+                            .padding(.leading, 40)
+                        }
                     }
                 }
             }
@@ -354,7 +339,9 @@ struct CommentCell: View {
                     try await CommentRepository.shared.likeComment(commentId)
                 }
                 
-                isLiked.toggle()
+                await MainActor.run {
+                    isLiked.toggle()
+                }
             } catch {
                 print("Error toggling like: \(error)")
             }
@@ -372,10 +359,14 @@ struct CommentCell: View {
                     .order(by: "timestamp", descending: false)
                     .getDocuments()
                 
-                replies = snapshot.documents.compactMap { doc in
+                let loadedReplies = snapshot.documents.compactMap { doc in
                     var reply = try? doc.data(as: Comment.self)
                     reply?.id = doc.documentID
                     return reply
+                }
+                
+                await MainActor.run {
+                    self.replies = loadedReplies
                 }
             } catch {
                 print("Error loading replies: \(error)")
@@ -422,7 +413,7 @@ struct ReplyCell: View {
                         .font(.caption)
                         .fontWeight(.semibold)
                     
-                    Text(timeAgo(from: comment.timestamp))
+                    Text("• \(timeAgo(from: comment.timestamp))")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -431,14 +422,14 @@ struct ReplyCell: View {
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
                 
-                HStack(spacing: 12) {
-                    if canDelete {
-                        Button("Delete", action: onDelete)
-                            .font(.caption2)
-                            .foregroundColor(.red)
+                if canDelete {
+                    Button("Delete") {
+                        onDelete()
                     }
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .padding(.top, 2)
                 }
-                .padding(.top, 2)
             }
             
             Spacer()
@@ -450,8 +441,4 @@ struct ReplyCell: View {
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
-}
-
-#Preview {
-    CommentsView(reelId: "test", reelOwnerId: "owner")
 }
