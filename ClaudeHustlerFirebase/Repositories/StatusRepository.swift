@@ -209,4 +209,22 @@ final class StatusRepository: RepositoryProtocol {
         // Clear cache if needed
         cache.remove(for: "status_\(statusId)")
     }
-}
+        
+        func getCurrentUserActiveStatus() async throws -> Status? {
+            guard let userId = Auth.auth().currentUser?.uid else { return nil }
+            
+            let snapshot = try await db.collection("statuses")
+                .whereField("userId", isEqualTo: userId)
+                .whereField("isActive", isEqualTo: true)
+                .whereField("expiresAt", isGreaterThan: Date())
+                .limit(to: 1)
+                .getDocuments()
+            
+            guard let doc = snapshot.documents.first else { return nil }
+            
+            var status = try doc.data(as: Status.self)
+            status.id = doc.documentID
+            
+            return status.isExpired ? nil : status
+        }
+    }

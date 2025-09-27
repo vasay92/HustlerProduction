@@ -24,6 +24,7 @@ struct EnhancedProfileView: View {
     @State private var showAllReviews = false
     @State private var showingReviewForm = false
     
+    
     init(userId: String) {
         self.userId = userId
         self._viewModel = StateObject(wrappedValue: ProfileViewModel(userId: userId))
@@ -350,7 +351,22 @@ struct EnhancedProfileView: View {
                     }
                 }
                 .padding()
-            }
+                if firebase.currentUser != nil {
+                                Button(action: { showingReviewForm = true }) {
+                                    Label("Write a Review", systemImage: "pencil")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(10)
+                                }
+                                .padding(.horizontal)
+                                .padding(.bottom)
+                            }
+                        }
+            
             
         case 3:
             // Reviews Tab
@@ -438,20 +454,21 @@ struct EnhancedProfileView: View {
                 }
                 
                 // Write Review button (only for non-owners)
-                if !viewModel.isOwnProfile && firebase.currentUser != nil {
-                    Button(action: { showingReviewForm = true }) {
-                        Label("Write a Review", systemImage: "pencil")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom)
-                }
+//                if !viewModel.isOwnProfile && firebase.currentUser != nil {
+//                    Button(action: { showingReviewForm = true }) {
+//                        Label("Write a Review", systemImage: "pencil")
+//                            .font(.subheadline)
+//                            .fontWeight(.semibold)
+//                            .frame(maxWidth: .infinity)
+//                            .padding(.vertical, 12)
+//                            .background(Color.blue)
+//                            .foregroundColor(.white)
+//                            .cornerRadius(10)
+//                    }
+//                    .padding(.horizontal)
+//                    .padding(.bottom)
+//                }
+                
             }
             
         default:

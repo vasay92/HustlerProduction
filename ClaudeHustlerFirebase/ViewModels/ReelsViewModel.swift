@@ -441,6 +441,21 @@ final class ReelsViewModel: ObservableObject {
     func getReelIndex(_ reel: Reel) -> Int {
         return reels.firstIndex(where: { $0.id == reel.id }) ?? 0
     }
+    // Track reel view
+    func incrementReelView(_ reelId: String) async {
+        guard !reelId.isEmpty else { return }
+        
+        do {
+            try await reelRepository.incrementViewCount(for: reelId)
+            
+            // Update local state
+            if let index = reels.firstIndex(where: { $0.id == reelId }) {
+                reels[index].views += 1
+            }
+        } catch {
+            print("Error incrementing view count: \(error)")
+        }
+    }
 }
 
 // MARK: - Status Creation Type

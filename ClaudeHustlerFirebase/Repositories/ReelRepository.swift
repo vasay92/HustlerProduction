@@ -299,7 +299,7 @@ final class ReelRepository: RepositoryProtocol {
         cache.remove(for: "reel_\(reelId)")
     }
     
-    private func incrementViewCount(for reelId: String) async throws {
+    func incrementViewCount(for reelId: String) async throws {
         try await db.collection("reels").document(reelId).updateData([
             "views": FieldValue.increment(Int64(1))
         ])
