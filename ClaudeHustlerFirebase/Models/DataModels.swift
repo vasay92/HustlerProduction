@@ -35,6 +35,8 @@ struct NotificationSettings: Codable {
     var reviewReplies: Bool = true
     var reviewEdits: Bool = true
     var helpfulVotes: Bool = true
+    var newMessages: Bool = true      // ADD THIS
+    var messageRequests: Bool = true  // ADD THIS
 }
 
 struct PortfolioMedia: Codable, Equatable {
@@ -98,25 +100,8 @@ struct ReviewReply: Codable {
     let repliedAt: Date = Date()
 }
 
-// MARK: - Review Notification Model
-struct ReviewNotification: Codable, Identifiable {
-    @DocumentID var id: String?
-    let userId: String // Who receives the notification
-    let reviewId: String
-    let type: ReviewNotificationType
-    let fromUserId: String
-    let fromUserName: String
-    let message: String
-    var isRead: Bool = false
-    let createdAt: Date = Date()
-    
-    enum ReviewNotificationType: String, Codable {
-        case newReview = "new_review"
-        case reviewReply = "review_reply"
-        case reviewEdit = "review_edit"
-        case helpfulVote = "helpful_vote"
-    }
-}
+
+
 
 // MARK: - Saved Items Model
 struct SavedItem: Codable, Identifiable {

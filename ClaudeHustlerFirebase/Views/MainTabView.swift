@@ -31,41 +31,45 @@ struct MainTabView: View {
     @State private var previousTab = 0
     @State private var activeSheet: ActiveSheet?
     @State private var pendingSheet: ActiveSheet?
+    @StateObject private var notificationsViewModel = NotificationsViewModel()
     
     var body: some View {
-        ZStack {
             TabView(selection: $selectedTab) {
+                // Home Tab
                 HomeView()
                     .tabItem {
                         Label("Home", systemImage: "house.fill")
                     }
                     .tag(0)
                 
+                // Services Tab
                 ServicesView()
                     .tabItem {
                         Label("Services", systemImage: "briefcase.fill")
                     }
                     .tag(1)
                 
-                // Placeholder for Post tab - this view will never actually show
-                Color.clear
-                    .tabItem {
-                        Label("Post", systemImage: "plus.circle.fill")
-                    }
-                    .tag(2)
-                
+                // Reels Tab
                 ReelsView()
                     .tabItem {
                         Label("Reels", systemImage: "play.rectangle.fill")
                     }
+                    .tag(2)
+                
+                // Messages Tab
+                ConversationsListView()
+                    .tabItem {
+                        Label("Messages", systemImage: "message.fill")
+                    }
                     .tag(3)
                 
-                EnhancedProfileView(userId: firebase.currentUser?.id ?? "")
+                // Profile Tab
+                ProfileView()
                     .tabItem {
                         Label("Profile", systemImage: "person.fill")
                     }
                     .tag(4)
-            }
+            
             .accentColor(.blue)
             .onChange(of: selectedTab) { oldValue, newValue in
                 if newValue == 2 {

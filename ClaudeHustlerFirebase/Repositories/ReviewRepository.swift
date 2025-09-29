@@ -1,7 +1,6 @@
-
-
-// ReviewRepository.swift
+// ReviewRepository.swift - PROPERLY FIXED VERSION
 // Path: ClaudeHustlerFirebase/Repositories/ReviewRepository.swift
+// Fixed the deinit actor isolation issue correctly
 
 import Foundation
 import FirebaseFirestore
@@ -19,6 +18,7 @@ final class ReviewRepository: RepositoryProtocol {
     private let db = Firestore.firestore()
     private let cache = CacheService.shared
     private let userRepository = UserRepository.shared
+    private let notificationRepository = NotificationRepository.shared
     private let cacheMaxAge: TimeInterval = 300 // 5 minutes
     
     // Active listeners
@@ -46,7 +46,6 @@ final class ReviewRepository: RepositoryProtocol {
         
         return (reviews, snapshot.documents.last)
     }
-    
     
     // MARK: - Fetch Single Review
     func fetchById(_ id: String) async throws -> Review? {
@@ -80,7 +79,7 @@ final class ReviewRepository: RepositoryProtocol {
     ) async throws -> (items: [Review], lastDoc: DocumentSnapshot?) {
         let cacheKey = "reviews_user_\(userId)"
         
-        // Check cache for first page
+        // Check cache if no pagination
         if lastDocument == nil,
            !cache.isExpired(for: cacheKey, maxAge: cacheMaxAge),
            let cachedReviews: [Review] = cache.retrieve([Review].self, for: cacheKey) {
@@ -104,8 +103,8 @@ final class ReviewRepository: RepositoryProtocol {
             return review
         }
         
-        // Cache first page
-        if lastDocument == nil && !reviews.isEmpty {
+        // Cache if first page
+        if lastDocument == nil {
             cache.store(reviews, for: cacheKey)
         }
         
@@ -159,7 +158,7 @@ final class ReviewRepository: RepositoryProtocol {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Maximum 3 reviews per user allowed"])
         }
         
-        // Create review data dictionary (don't modify the input review)
+        // Create review data dictionary
         let reviewData: [String: Any] = [
             "reviewerId": reviewerId,
             "reviewedUserId": review.reviewedUserId,
@@ -167,7 +166,7 @@ final class ReviewRepository: RepositoryProtocol {
             "reviewerProfileImage": review.reviewerProfileImage ?? "",
             "rating": review.rating,
             "text": review.text,
-            "mediaURLs": review.mediaURLs,  // Already exists in Review model
+            "mediaURLs": review.mediaURLs,
             "createdAt": Date(),
             "updatedAt": Date(),
             "isEdited": false,
@@ -180,12 +179,13 @@ final class ReviewRepository: RepositoryProtocol {
         // Update user rating
         await userRepository.updateUserRating(userId: review.reviewedUserId)
         
-        // Create notification
-        await createReviewNotification(
+        // Create notification using unified system
+        await notificationRepository.createReviewNotification(
             for: review.reviewedUserId,
             reviewId: docRef.documentID,
             type: .newReview,
-            fromUserId: reviewerId
+            fromUserId: reviewerId,
+            reviewText: review.text
         )
         
         // Clear cache
@@ -225,12 +225,13 @@ final class ReviewRepository: RepositoryProtocol {
         if let reviewedUserId = data["reviewedUserId"] as? String {
             await userRepository.updateUserRating(userId: reviewedUserId)
             
-            // Create notification
-            await createReviewNotification(
+            // Create notification using unified system
+            await notificationRepository.createReviewNotification(
                 for: reviewedUserId,
                 reviewId: reviewId,
                 type: .reviewEdit,
-                fromUserId: currentUserId
+                fromUserId: currentUserId,
+                reviewText: review.text
             )
         }
         
@@ -299,12 +300,13 @@ final class ReviewRepository: RepositoryProtocol {
             "updatedAt": Date()
         ])
         
-        // Create notification
-        await createReviewNotification(
+        // Create notification using unified system
+        await notificationRepository.createReviewNotification(
             for: reviewerId,
             reviewId: reviewId,
             type: .reviewReply,
-            fromUserId: currentUserId
+            fromUserId: currentUserId,
+            reviewText: replyText
         )
         
         // Clear cache
@@ -337,9 +339,9 @@ final class ReviewRepository: RepositoryProtocol {
                 "helpfulVotes": FieldValue.arrayUnion([userId])
             ])
             
-            // Create notification only for new votes
+            // Create notification only for new votes using unified system
             if userId != reviewerId {
-                await createReviewNotification(
+                await notificationRepository.createReviewNotification(
                     for: reviewerId,
                     reviewId: reviewId,
                     type: .helpfulVote,
@@ -350,6 +352,48 @@ final class ReviewRepository: RepositoryProtocol {
         
         // Clear cache
         cache.remove(for: "review_\(reviewId)")
+    }
+    
+    // MARK: - Toggle Helpful Vote (returns new state)
+    func toggleHelpfulVote(for reviewId: String) async throws -> (isVoted: Bool, count: Int) {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            return (false, 0)
+        }
+        
+        let reviewRef = db.collection("reviews").document(reviewId)
+        let review = try await reviewRef.getDocument()
+        
+        guard let data = review.data() else {
+            return (false, 0)
+        }
+        
+        var helpfulVotes = data["helpfulVotes"] as? [String] ?? []
+        let wasVoted = helpfulVotes.contains(userId)
+        
+        if wasVoted {
+            helpfulVotes.removeAll { $0 == userId }
+        } else {
+            helpfulVotes.append(userId)
+            
+            // Create notification for helpful vote (only on adding) using unified system
+            if let reviewerId = data["reviewerId"] as? String, reviewerId != userId {
+                await notificationRepository.createReviewNotification(
+                    for: reviewerId,
+                    reviewId: reviewId,
+                    type: .helpfulVote,
+                    fromUserId: userId
+                )
+            }
+        }
+        
+        try await reviewRef.updateData([
+            "helpfulVotes": helpfulVotes
+        ])
+        
+        // Clear cache
+        cache.remove(for: "review_\(reviewId)")
+        
+        return (!wasVoted, helpfulVotes.count)
     }
     
     // MARK: - Get Review Stats
@@ -388,87 +432,7 @@ final class ReviewRepository: RepositoryProtocol {
         }
     }
     
-    // MARK: - Real-time Listening
-    
-    func listenToUserReviews(userId: String, completion: @escaping ([Review]) -> Void) -> ListenerRegistration {
-        // Remove existing listener
-        reviewListeners[userId]?.remove()
-        
-        let listener = db.collection("reviews")
-            .whereField("reviewedUserId", isEqualTo: userId)
-            .order(by: "createdAt", descending: true)
-            .addSnapshotListener { snapshot, error in
-                if let error = error {
-                    print("Error listening to reviews: \(error)")
-                    completion([])
-                    return
-                }
-                
-                let reviews = snapshot?.documents.compactMap { doc -> Review? in
-                    var review = try? doc.data(as: Review.self)
-                    review?.id = doc.documentID
-                    return review
-                } ?? []
-                
-                completion(reviews)
-            }
-        
-        reviewListeners[userId] = listener
-        return listener
-    }
-    
-    func stopListeningToUserReviews(userId: String) {
-        reviewListeners[userId]?.remove()
-        reviewListeners.removeValue(forKey: userId)
-    }
-    
-    func removeAllListeners() {
-        reviewListeners.values.forEach { $0.remove() }
-        reviewListeners.removeAll()
-    }
-    
-    // MARK: - Private Helpers
-    
-    private func createReviewNotification(
-        for userId: String,
-        reviewId: String,
-        type: ReviewNotification.ReviewNotificationType,
-        fromUserId: String
-    ) async {
-        // Get from user name
-        guard let fromUser = try? await userRepository.fetchById(fromUserId) else { return }
-        
-        let message: String
-        switch type {
-        case .newReview:
-            message = "\(fromUser.name) left you a review"
-        case .reviewReply:
-            message = "\(fromUser.name) replied to your review"
-        case .reviewEdit:
-            message = "\(fromUser.name) edited their review"
-        case .helpfulVote:
-            message = "\(fromUser.name) found your review helpful"
-        }
-        
-        let notificationData: [String: Any] = [
-            "userId": userId,
-            "reviewId": reviewId,
-            "type": type.rawValue,
-            "fromUserId": fromUserId,
-            "fromUserName": fromUser.name,
-            "message": message,
-            "isRead": false,
-            "createdAt": Date()
-        ]
-        
-        do {
-            try await db.collection("reviewNotifications").addDocument(data: notificationData)
-        } catch {
-            print("Error creating review notification: \(error)")
-        }
-    }
-    
-    // 1. Create review with images
+    // MARK: - Create Review with Images
     func createReview(
         for userId: String,
         rating: Int,
@@ -525,8 +489,8 @@ final class ReviewRepository: RepositoryProtocol {
         
         return newReview
     }
-
-    // 2. Update review (match FirebaseService signature)
+    
+    // MARK: - Update Review (with optional parameters)
     func updateReview(
         _ reviewId: String,
         rating: Int? = nil,
@@ -569,12 +533,13 @@ final class ReviewRepository: RepositoryProtocol {
         if rating != nil, let reviewedUserId = data["reviewedUserId"] as? String {
             await userRepository.updateUserRating(userId: reviewedUserId)
             
-            // Create notification
-            await createReviewNotification(
+            // Create notification using unified system
+            await notificationRepository.createReviewNotification(
                 for: reviewedUserId,
                 reviewId: reviewId,
                 type: .reviewEdit,
-                fromUserId: currentUserId
+                fromUserId: currentUserId,
+                reviewText: text
             )
         }
         
@@ -586,92 +551,65 @@ final class ReviewRepository: RepositoryProtocol {
         
         return updatedReview
     }
-
-    // 3. Toggle helpful vote (return new state)
-    func toggleHelpfulVote(
-        for reviewId: String
-    ) async throws -> (isVoted: Bool, count: Int) {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            return (false, 0)
-        }
+    
+    // MARK: - Real-time Listening
+    func listenToUserReviews(userId: String, completion: @escaping ([Review]) -> Void) -> ListenerRegistration {
+        // Remove existing listener
+        reviewListeners[userId]?.remove()
         
-        let reviewRef = db.collection("reviews").document(reviewId)
-        let review = try await reviewRef.getDocument()
-        
-        guard let data = review.data() else {
-            return (false, 0)
-        }
-        
-        var helpfulVotes = data["helpfulVotes"] as? [String] ?? []
-        let wasVoted = helpfulVotes.contains(userId)
-        
-        if wasVoted {
-            helpfulVotes.removeAll { $0 == userId }
-        } else {
-            helpfulVotes.append(userId)
-            
-            // Create notification for helpful vote (only on adding, not removing)
-            if let reviewerId = data["reviewerId"] as? String, reviewerId != userId {
-                await createReviewNotification(
-                    for: reviewerId,
-                    reviewId: reviewId,
-                    type: .helpfulVote,
-                    fromUserId: userId
-                )
+        let listener = db.collection("reviews")
+            .whereField("reviewedUserId", isEqualTo: userId)
+            .order(by: "createdAt", descending: true)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Error listening to reviews: \(error)")
+                    completion([])
+                    return
+                }
+                
+                let reviews = snapshot?.documents.compactMap { doc -> Review? in
+                    var review = try? doc.data(as: Review.self)
+                    review?.id = doc.documentID
+                    return review
+                } ?? []
+                
+                completion(reviews)
             }
-        }
         
-        try await reviewRef.updateData([
-            "helpfulVotes": helpfulVotes
-        ])
-        
-        // Clear cache
-        cache.remove(for: "review_\(reviewId)")
-        
-        return (!wasVoted, helpfulVotes.count)
+        reviewListeners[userId] = listener
+        return listener
     }
-
-    // 4. Load review notifications
-    func loadReviewNotifications() async -> [ReviewNotification] {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            return []
-        }
-        
-        do {
-            let snapshot = try await db.collection("reviewNotifications")
-                .whereField("userId", isEqualTo: userId)
-                .whereField("isRead", isEqualTo: false)
-                .order(by: "createdAt", descending: true)
-                .limit(to: 20)
-                .getDocuments()
-            
-            return snapshot.documents.compactMap { doc in
-                var notification = try? doc.data(as: ReviewNotification.self)
-                notification?.id = doc.documentID
-                return notification
-            }
-        } catch {
-            print("Error loading review notifications: \(error)")
-            return []
-        }
+    
+    func stopListeningToUserReviews(userId: String) {
+        reviewListeners[userId]?.remove()
+        reviewListeners.removeValue(forKey: userId)
     }
+    
+    func removeAllListeners() {
+        reviewListeners.values.forEach { $0.remove() }
+        reviewListeners.removeAll()
+    }
+    
 
-    // 5. Mark notification as read
+    
+    // MARK: - Mark Notification as Read (Deprecated - use NotificationRepository instead)
     func markReviewNotificationAsRead(_ notificationId: String) async {
         do {
-            try await db.collection("reviewNotifications").document(notificationId).updateData([
-                "isRead": true
-            ])
+            try await notificationRepository.markAsRead(notificationId)
         } catch {
             print("Error marking notification as read: \(error)")
         }
     }
-
-    // 6. Stop listening to user reviews
-    func stopListeningToUserReviews(_ userId: String) {
-        reviewListeners[userId]?.remove()
-        reviewListeners.removeValue(forKey: userId)
-    }
-
     
+    // MARK: - Cleanup
+    deinit {
+        // Option 1: Simply don't clean up - Firebase auto-cleans listeners when the object is deallocated
+        // The listeners will be automatically removed when the repository is deallocated
+        
+        // Option 2: If you really need explicit cleanup, use Task.detached (fire-and-forget)
+        let listenersToClean = reviewListeners
+        Task.detached {
+            listenersToClean.values.forEach { $0.remove() }
+        }
+    }
 }

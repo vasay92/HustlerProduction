@@ -7,8 +7,11 @@ import FirebaseFirestore
 struct HomeView: View {
     @StateObject private var firebase = FirebaseService.shared
     @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var notificationsViewModel = NotificationsViewModel() // NEW
     @State private var showingFilters = false
     @State private var showingMessages = false
+    @State private var showingNotifications = false // NEW
+    @State private var showingCategories = false // NEW
     @State private var showingCreatePost = false
     @State private var unreadMessageCount: Int = 0
     @State private var conversationsListener: ListenerRegistration?
@@ -17,7 +20,7 @@ struct HomeView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Custom Navigation Bar
+                    // Custom Navigation Bar - MODIFIED
                     HStack {
                         Text("Hustler")
                             .font(.largeTitle)
@@ -32,30 +35,55 @@ struct HomeView: View {
                         
                         Spacer()
                         
-                        Button(action: { showingFilters = true }) {
-                            Image(systemName: "line.3.horizontal.decrease")
-                                .font(.title2)
-                                .foregroundColor(.primary)
-                        }
-                        
-                        // Messages button with badge
-                        Button(action: { showingMessages = true }) {
-                            ZStack(alignment: .topTrailing) {
-                                Image(systemName: "message")
+                        // Top-right buttons - MODIFIED TO ADD NOTIFICATIONS
+                        HStack(spacing: 12) {
+                            Button(action: { showingFilters = true }) {
+                                Image(systemName: "line.3.horizontal.decrease")
                                     .font(.title2)
                                     .foregroundColor(.primary)
-                                
-                                // Unread badge
-                                if unreadMessageCount > 0 {
-                                    Text("\(min(unreadMessageCount, 99))\(unreadMessageCount > 99 ? "+" : "")")
-                                        .font(.caption2)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                        .frame(minWidth: 16, minHeight: 16)
-                                        .padding(.horizontal, unreadMessageCount > 9 ? 4 : 0)
-                                        .background(Color.red)
-                                        .clipShape(Capsule())
-                                        .offset(x: 8, y: -8)
+                            }
+                            
+                            // Notifications button with badge - NEW
+                            Button(action: { showingNotifications = true }) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "bell")
+                                        .font(.title2)
+                                        .foregroundColor(.primary)
+                                    
+                                    // Unread badge for notifications
+                                    if notificationsViewModel.unreadCount > 0 {
+                                        Text("\(min(notificationsViewModel.unreadCount, 99))")
+                                            .font(.caption2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                            .frame(minWidth: 16, minHeight: 16)
+                                            .padding(.horizontal, notificationsViewModel.unreadCount > 9 ? 4 : 0)
+                                            .background(Color.red)
+                                            .clipShape(Capsule())
+                                            .offset(x: 8, y: -8)
+                                    }
+                                }
+                            }
+                            
+                            // Messages button with badge - MODIFIED (changed color to blue)
+                            Button(action: { showingMessages = true }) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "message")
+                                        .font(.title2)
+                                        .foregroundColor(.primary)
+                                    
+                                    // Unread badge
+                                    if unreadMessageCount > 0 {
+                                        Text("\(min(unreadMessageCount, 99))\(unreadMessageCount > 99 ? "+" : "")")
+                                            .font(.caption2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                            .frame(minWidth: 16, minHeight: 16)
+                                            .padding(.horizontal, unreadMessageCount > 9 ? 4 : 0)
+                                            .background(Color.blue) // CHANGED from red to blue
+                                            .clipShape(Capsule())
+                                            .offset(x: 8, y: -8)
+                                    }
                                 }
                             }
                         }
@@ -63,24 +91,45 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.top, 10)
                     
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        
-                        TextField("Search services...", text: $viewModel.searchText)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                        
-                        if !viewModel.searchText.isEmpty {
-                            Button(action: { viewModel.searchText = "" }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
+                    // Search Bar with Categories button - MODIFIED
+                    HStack(spacing: 10) {
+                        // Search field
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            
+                            TextField("Search services...", text: $viewModel.searchText)
+                                .textFieldStyle(PlainTextFieldStyle())
+                            
+                            if !viewModel.searchText.isEmpty {
+                                Button(action: { viewModel.searchText = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                }
                             }
+                        }
+                        .padding(10)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                        
+                        // Categories button - NEW
+                        Button(action: { showingCategories = true }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.grid.2x2")
+                                Text("Categories")
+                                    .font(.subheadline)
+                            }
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(10)
                         }
                     }
                     .padding(.horizontal)
                     .padding(.bottom, 10)
                     
-                    // Content Section with Loading States
+                    // Content Section with Loading States - UNCHANGED
                     if viewModel.isLoading && viewModel.posts.isEmpty {
                         // INITIAL LOADING - Show skeletons
                         VStack(spacing: 15) {
@@ -183,6 +232,21 @@ struct HomeView: View {
             .sheet(isPresented: $showingFilters) {
                 FilterView()
             }
+            .sheet(isPresented: $showingCategories) { // NEW
+                CategoriesView()
+            }
+            .fullScreenCover(isPresented: $showingNotifications) { // NEW
+                NavigationView {
+                    NotificationsView()
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Close") {
+                                    showingNotifications = false
+                                }
+                            }
+                        }
+                }
+            }
             .fullScreenCover(isPresented: $showingMessages) {
                 NavigationView {
                     ConversationsListView()
@@ -209,9 +273,11 @@ struct HomeView: View {
             }
             .onAppear {
                 startListeningToUnreadCount()
+                notificationsViewModel.startListening() // NEW
             }
             .onDisappear {
-                //                conversationsListener?.remove()
+                notificationsViewModel.stopListening() // NEW
+                //conversationsListener?.remove()
             }
         }
     }
@@ -221,8 +287,7 @@ struct HomeView: View {
         viewModel.searchText
     }
     
-    // MARK: - Real-time Unread Count
-    
+    // MARK: - Real-time Unread Count - UNCHANGED
     private func startListeningToUnreadCount() {
         Task { @MainActor in
             // CHANGE FROM: let conversations = await firebase.loadConversations()
@@ -239,7 +304,7 @@ struct HomeView: View {
         }
     }
     
-    // Service Post Card
+    // Service Post Card - UNCHANGED (keeping all your original code)
     struct ServicePostCard: View {
         let post: ServicePost
         @StateObject private var firebase = FirebaseService.shared
@@ -405,7 +470,7 @@ struct HomeView: View {
         }
     }
     
-    // Mini Service Card (Trending)
+    // Mini Service Card (Trending) - UNCHANGED
     struct MiniServiceCard: View {
         let post: ServicePost
         
@@ -480,7 +545,7 @@ struct HomeView: View {
         }
     }
     
-    // MARK: - Filter View
+    // MARK: - Filter View - UNCHANGED
     struct FilterView: View {
         @Environment(\.dismiss) private var dismiss
         @State private var selectedCategory: ServiceCategory?
@@ -537,4 +602,85 @@ struct HomeView: View {
             }
         }
     }
+    
+    // Fixed CategoriesView - Replace this section in your HomeView.swift
+
+    // MARK: - Categories View - FIXED
+    struct CategoriesView: View {
+        @Environment(\.dismiss) var dismiss
+        @State private var selectedCategory: ServiceCategory?
+        
+        let columns = [
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ]
+        
+        // Create a static array to avoid the ForEach binding issue
+        let categories = ServiceCategory.allCases
+        
+        var body: some View {
+            NavigationView {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 15) {
+                        ForEach(categories, id: \.self) { category in
+                            Button(action: {
+                                selectedCategory = category
+                                // TODO: Apply category filter
+                                dismiss()
+                            }) {
+                                VStack(spacing: 8) {
+                                    Image(systemName: getCategoryIcon(for: category))
+                                        .font(.title2)
+                                        .frame(width: 50, height: 50)
+                                        .background(Color.blue.opacity(0.1))
+                                        .cornerRadius(10)
+                                    
+                                    Text(category.displayName)
+                                        .font(.caption)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color(.systemGray6))
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding()
+                }
+                .navigationTitle("Categories")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+            }
+        }
+        
+        // Helper function to get icon for category
+        private func getCategoryIcon(for category: ServiceCategory) -> String {
+            switch category {
+            case .tutoring: return "book.fill"
+            case .homeServices: return "house.fill"
+            case .tech: return "laptopcomputer"
+            case .beauty: return "sparkles"
+            case .fitness: return "figure.run"
+            case .photography: return "camera.fill"
+            case .music: return "music.note"
+            case .art: return "paintbrush.fill"
+            case .food: return "fork.knife"
+            case .events: return "calendar"
+            case .transportation: return "car.fill"
+            case .petCare: return "pawprint.fill"
+            case .other: return "square.grid.2x2"
+            }
+        }
+    }
 }
+

@@ -383,10 +383,22 @@ final class MessageRepository: RepositoryProtocol {
         text: String,
         contextType: Message.MessageContextType? = nil,
         contextId: String? = nil,
-        contextData: (title: String, image: String?, userId: String)? = nil  // ADD THIS PARAMETER
+        contextData: (title: String, image: String?, userId: String)? = nil
     ) async throws {
         guard let currentUserId = FirebaseService.shared.currentUser?.id else {
             throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        
+        // Check if this is a new conversation BEFORE creating it
+        let existingConversations = try await db.collection("conversations")
+            .whereField("participantIds", arrayContains: currentUserId)
+            .getDocuments()
+        
+        let isNewConversation = !existingConversations.documents.contains { doc in
+            if let participantIds = doc.data()["participantIds"] as? [String] {
+                return participantIds.contains(recipientId)
+            }
+            return false
         }
         
         // Find or create conversation
@@ -405,12 +417,22 @@ final class MessageRepository: RepositoryProtocol {
             text: text,
             contextType: contextType,
             contextId: contextId,
-            contextTitle: contextData?.title,  // ADD THIS
-            contextImage: contextData?.image,  // ADD THIS
-            contextUserId: contextData?.userId  // ADD THIS
+            contextTitle: contextData?.title,
+            contextImage: contextData?.image,
+            contextUserId: contextData?.userId
         )
         
+        // Create the message in Firestore
         _ = try await create(message, in: conversationId)
+        
+        // Create notification for the recipient
+        await NotificationRepository.shared.createMessageNotification(
+            for: recipientId,
+            fromUserId: currentUserId,
+            conversationId: conversationId,
+            messageText: text,
+            isNewConversation: isNewConversation
+        )
     }
     
     // Add these methods to MessageRepository.swift:
@@ -639,5 +661,69 @@ final class MessageRepository: RepositoryProtocol {
         } catch {
             print("❌ Error refreshing conversation participant info: \(error)")
         }
+    }
+    
+    
+}
+// MessageRepository+Notifications.swift
+// Add these methods to your existing MessageRepository.swift
+
+extension MessageRepository {
+    
+    // Update the sendMessage method to create notifications
+    func sendMessageWithNotification(
+        to recipientId: String,
+        text: String,
+        contextType: Message.MessageContextType? = nil,
+        contextId: String? = nil,
+        contextData: (title: String, image: String?, userId: String)? = nil
+    ) async throws {
+        guard let currentUserId = FirebaseService.shared.currentUser?.id else {
+            throw NSError(domain: "MessageRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+        }
+        
+        // Check if this is a new conversation
+        let existingConversations = try await db.collection("conversations")
+            .whereField("participantIds", arrayContains: currentUserId)
+            .getDocuments()
+        
+        let isNewConversation = !existingConversations.documents.contains { doc in
+            if let participantIds = doc.data()["participantIds"] as? [String] {
+                return participantIds.contains(recipientId)
+            }
+            return false
+        }
+        
+        // Find or create conversation
+        let conversationId = try await findOrCreateConversation(with: recipientId)
+        
+        // Get current user info
+        let userDoc = try await db.collection("users").document(currentUserId).getDocument()
+        let userData = try? userDoc.data(as: User.self)
+        
+        // Create message
+        let message = Message(
+            senderId: currentUserId,
+            senderName: userData?.name ?? "Unknown",
+            senderProfileImage: userData?.profileImageURL,
+            conversationId: conversationId,
+            text: text,
+            contextType: contextType,
+            contextId: contextId,
+            contextTitle: contextData?.title,
+            contextImage: contextData?.image,
+            contextUserId: contextData?.userId
+        )
+        
+        _ = try await create(message, in: conversationId)
+        
+        // Create notification for the recipient
+        await NotificationRepository.shared.createMessageNotification(
+            for: recipientId,
+            fromUserId: currentUserId,
+            conversationId: conversationId,
+            messageText: text,
+            isNewConversation: isNewConversation
+        )
     }
 }

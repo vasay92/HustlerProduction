@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		EB0A08FF2E8B2A000002D40C /* NotificationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A08FE2E8B29FF0002D40C /* NotificationRepository.swift */; };
+		EB0A09052E8B2B530002D40C /* NotificationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */; };
 		EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */; };
 		EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA492E68F52F006DB468 /* ContentView.swift */; };
 		EB6BBA762E68F6BB006DB468 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = EB6BBA752E68F6BB006DB468 /* FirebaseAuth */; };
@@ -61,6 +63,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		EB0A08FE2E8B29FF0002D40C /* NotificationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRepository.swift; sourceTree = "<group>"; };
+		EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsViewModel.swift; sourceTree = "<group>"; };
 		EB6BBA442E68F52F006DB468 /* ClaudeHustlerFirebase.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeHustlerFirebase.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeHustlerFirebaseApp.swift; sourceTree = "<group>"; };
 		EB6BBA492E68F52F006DB468 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -96,6 +100,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		EB0A09002E8B2AFE0002D40C /* Notifications */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Notifications;
+			sourceTree = "<group>";
+		};
 		EB6BBA842E68FA44006DB468 /* Profile */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Profile;
@@ -244,6 +253,7 @@
 		EB6BBA722E68F5E9006DB468 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				EB0A09002E8B2AFE0002D40C /* Notifications */,
 				EBD038D52E7CFC0B004E0CBD /* Camera */,
 				EB6BBB562E760F6D006DB468 /* Comments */,
 				EB6BBB382E724080006DB468 /* Post */,
@@ -282,6 +292,7 @@
 		EB6E08A02E7C9641004B253C /* Repositories */ = {
 			isa = PBXGroup;
 			children = (
+				EB0A08FE2E8B29FF0002D40C /* NotificationRepository.swift */,
 				EBD039152E7E3A31004E0CBD /* PortfolioRepository.swift */,
 				EBD039132E7E3A1E004E0CBD /* SavedItemsRepository.swift */,
 				EBD039112E7E3A0A004E0CBD /* CommentRepository.swift */,
@@ -298,6 +309,7 @@
 		EB6E08A32E7C9641004B253C /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */,
 				EBD039672E81CE93004E0CBD /* ProfileViewModel.swift */,
 				EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */,
 				EBD038E12E7D06C4004E0CBD /* ReelsViewModel.swift */,
@@ -338,6 +350,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				EB0A09002E8B2AFE0002D40C /* Notifications */,
 				EB6BBA842E68FA44006DB468 /* Profile */,
 				EB6BBA852E68FA48006DB468 /* Home */,
 				EB6BBA862E68FA4C006DB468 /* Authentication */,
@@ -480,6 +493,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EB0A09052E8B2B530002D40C /* NotificationsViewModel.swift in Sources */,
 				EB6BBA802E68F9CF006DB468 /* DataModels.swift in Sources */,
 				EB6BBA8F2E68FAF9006DB468 /* MainTabView.swift in Sources */,
 				EB6BBAC02E69325D006DB468 /* PostDetailView.swift in Sources */,
@@ -505,6 +519,7 @@
 				EBD039162E7E3A32004E0CBD /* PortfolioRepository.swift in Sources */,
 				EBD038E22E7D06C4004E0CBD /* ReelsViewModel.swift in Sources */,
 				EBD038E42E7D06DE004E0CBD /* MessagesViewModel.swift in Sources */,
+				EB0A08FF2E8B2A000002D40C /* NotificationRepository.swift in Sources */,
 				EBD038D42E7CF9AB004E0CBD /* ListenerManageable.swift in Sources */,
 				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
 			);
