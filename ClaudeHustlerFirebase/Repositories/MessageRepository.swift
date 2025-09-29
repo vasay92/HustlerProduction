@@ -281,7 +281,10 @@ final class MessageRepository: RepositoryProtocol {
     private func updateConversationParticipantInfo(conversationId: String) async {
         do {
             let conversation = try await db.collection("conversations").document(conversationId).getDocument()
-            guard let participantIds = conversation.data()?["participantIds"] as? [String] else { return }
+            guard let participantIds = conversation.data()?["participantIds"] as? [String] else {
+                print("❌ No participant IDs found for conversation: \(conversationId)")
+                return
+            }
             
             var participantNames: [String: String] = [:]
             var participantImages: [String: String] = [:]
@@ -289,19 +292,31 @@ final class MessageRepository: RepositoryProtocol {
             for participantId in participantIds {
                 let userDoc = try await db.collection("users").document(participantId).getDocument()
                 if let userData = userDoc.data() {
+                    // Get name
                     participantNames[participantId] = userData["name"] as? String ?? "Unknown"
-                    if let imageURL = userData["profileImageURL"] as? String {
+                    
+                    // Get profile image URL - check different possible field names
+                    if let imageURL = userData["profileImageURL"] as? String, !imageURL.isEmpty {
                         participantImages[participantId] = imageURL
+                        print("✅ Found profile image for \(participantId): \(imageURL)")
+                    } else if let imageURL = userData["profileImage"] as? String, !imageURL.isEmpty {
+                        participantImages[participantId] = imageURL
+                        print("✅ Found profile image (alt field) for \(participantId): \(imageURL)")
+                    } else {
+                        print("⚠️ No profile image for user \(participantId)")
                     }
                 }
             }
             
+            // Update the conversation with participant info
             try await db.collection("conversations").document(conversationId).updateData([
                 "participantNames": participantNames,
                 "participantImages": participantImages
             ])
+            
+            print("✅ Updated conversation \(conversationId) with participant info")
         } catch {
-            print("Error updating participant info: \(error)")
+            print("❌ Error updating participant info for conversation \(conversationId): \(error)")
         }
     }
     
@@ -451,7 +466,13 @@ final class MessageRepository: RepositoryProtocol {
     func loadConversations() async -> [Conversation] {
         do {
             let result = try await fetchConversations(limit: 50)
-            return result.items
+            
+            // Ensure participant info is up to date for all conversations
+            await refreshAllConversationsParticipantInfo()
+            
+            // Fetch again to get updated data
+            let updatedResult = try await fetchConversations(limit: 50)
+            return updatedResult.items
         } catch {
             print("Error loading conversations: \(error)")
             return []
@@ -600,4 +621,23 @@ final class MessageRepository: RepositoryProtocol {
         cache.remove(for: "messages_\(conversationId)")
     }
     
+    func refreshAllConversationsParticipantInfo() async {
+        guard let userId = FirebaseService.shared.currentUser?.id else { return }
+        
+        do {
+            // Get all conversations for the current user
+            let snapshot = try await db.collection("conversations")
+                .whereField("participantIds", arrayContains: userId)
+                .getDocuments()
+            
+            // Update participant info for each conversation
+            for doc in snapshot.documents {
+                await updateConversationParticipantInfo(conversationId: doc.documentID)
+            }
+            
+            print("✅ Updated participant info for \(snapshot.documents.count) conversations")
+        } catch {
+            print("❌ Error refreshing conversation participant info: \(error)")
+        }
+    }
 }

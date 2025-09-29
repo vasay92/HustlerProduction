@@ -199,7 +199,11 @@ struct ChatView: View {
             }
             
             HStack(spacing: 10) {
-                ProfileImageView(imageURL: otherUser?.profileImageURL, size: 36)
+                UserAvatar(
+                        imageURL: otherUser?.profileImageURL,
+                        userName: chatTitle,  // This will generate initials from the chat title/name
+                        size: 36
+                    )
                 
                 Text(chatTitle)
                     .font(.headline)

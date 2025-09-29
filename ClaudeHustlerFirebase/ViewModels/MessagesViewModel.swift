@@ -31,7 +31,10 @@ final class MessagesViewModel: ObservableObject {
         isLoading = true
         error = nil
         
-        // Use FirebaseService to load conversations since MessageRepository.fetch returns Messages
+        // First refresh participant info
+        await repository.refreshAllConversationsParticipantInfo()
+        
+        // Then load conversations with updated info
         let fetchedConversations = await repository.loadConversations()
         
         await MainActor.run {

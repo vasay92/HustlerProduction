@@ -97,7 +97,9 @@ struct ConversationsListView: View {
             .background(Color(.systemGray6))
             .cornerRadius(10)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.top, -20)  // ← NEGATIVE padding to pull it up closer to the title
+        .padding(.bottom, 8)  // Small bottom padding for spacing from list
     }
     
     private var conversationsList: some View {
@@ -185,7 +187,14 @@ struct ConversationRow: View {
     
     private var otherParticipantImage: String? {
         guard let userId = currentUserId else { return nil }
-        return conversation.otherParticipantImage(currentUserId: userId)
+        let imageURL = conversation.otherParticipantImage(currentUserId: userId)
+        
+        // Debug logging
+        if imageURL == nil || imageURL?.isEmpty == true {
+            print("⚠️ No image URL for \(otherParticipantName) in conversation \(conversation.id ?? "unknown")")
+        }
+        
+        return imageURL
     }
     
     private var unreadCount: Int {
@@ -199,8 +208,12 @@ struct ConversationRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar
-            ProfileImageView(imageURL: otherParticipantImage, size: 56)
+            // Avatar - Now using UserAvatar with initials fallback!
+            UserAvatar(
+                imageURL: otherParticipantImage,
+                userName: otherParticipantName,
+                size: 56
+            )
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
@@ -212,13 +225,14 @@ struct ConversationRow: View {
                     
                     Spacer()
                     
-                    // CORRECT - no need for conditional binding
+                    // Time
                     Text(conversation.lastMessageTimestamp.timeAgo())
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
                 HStack {
+                    // Last message preview
                     if let lastMessage = conversation.lastMessage {
                         Text(lastMessage)
                             .font(.subheadline)
@@ -233,54 +247,57 @@ struct ConversationRow: View {
                     
                     Spacer()
                     
+                    // Unread badge
                     if hasUnread {
                         Text("\(unreadCount)")
-                            .font(.caption2)
+                            .font(.caption)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
                             .background(Color.blue)
                             .clipShape(Capsule())
                     }
                 }
             }
         }
-        .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color(.systemBackground))
+        .padding(.horizontal)
+        .background(hasUnread ? Color.blue.opacity(0.05) : Color.clear)
+        .contentShape(Rectangle())
     }
 }
-
-
 
 // MARK: - Date Extension for Time Ago
 extension Date {
     func timeAgo() -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
         let now = Date()
-        let timeInterval = now.timeIntervalSince(self)
+        let components = Calendar.current.dateComponents([.year, .month, .weekOfYear, .day, .hour, .minute], from: self, to: now)
         
-        switch timeInterval {
-        case 0..<60:
-            return "now"
-        case 60..<3600:
-            let minutes = Int(timeInterval / 60)
-            return "\(minutes)m"
-        case 3600..<86400:
-            let hours = Int(timeInterval / 3600)
+        if let years = components.year, years > 0 {
+            return "\(years)y"
+        } else if let months = components.month, months > 0 {
+            return "\(months)mo"
+        } else if let weeks = components.weekOfYear, weeks > 0 {
+            return "\(weeks)w"
+        } else if let days = components.day, days > 0 {
+            if days == 1 {
+                return "Yesterday"
+            } else {
+                return "\(days)d"
+            }
+        } else if let hours = components.hour, hours > 0 {
             return "\(hours)h"
-        case 86400..<604800:
-            let days = Int(timeInterval / 86400)
-            return "\(days)d"
-        default:
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "MMM d"
-            return dateFormatter.string(from: self)
+        } else if let minutes = components.minute, minutes > 0 {
+            return "\(minutes)m"
+        } else {
+            return "Now"
         }
     }
 }
+
+
+
 
 // MARK: - New Message View (Placeholder)
 // Note: This is a placeholder - you should already have this view in your project
