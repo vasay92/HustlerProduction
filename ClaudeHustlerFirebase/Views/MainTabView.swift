@@ -34,52 +34,51 @@ struct MainTabView: View {
     @StateObject private var notificationsViewModel = NotificationsViewModel()
     
     var body: some View {
-            TabView(selection: $selectedTab) {
-                // Home Tab
-                HomeView()
-                    .tabItem {
-                        Label("Home", systemImage: "house.fill")
-                    }
-                    .tag(0)
-                
-                // Services Tab
-                ServicesView()
-                    .tabItem {
-                        Label("Services", systemImage: "briefcase.fill")
-                    }
-                    .tag(1)
-                
-                // Reels Tab
-                ReelsView()
-                    .tabItem {
-                        Label("Reels", systemImage: "play.rectangle.fill")
-                    }
-                    .tag(2)
-                
-                // Messages Tab
-                ConversationsListView()
-                    .tabItem {
-                        Label("Messages", systemImage: "message.fill")
-                    }
-                    .tag(3)
-                
-                // Profile Tab
-                ProfileView()
-                    .tabItem {
-                        Label("Profile", systemImage: "person.fill")
-                    }
-                    .tag(4)
-            
-            .accentColor(.blue)
-            .onChange(of: selectedTab) { oldValue, newValue in
-                if newValue == 2 {
-                    // Post tab was selected - show options and revert to previous tab
-                    showingPostOptions = true
-                    selectedTab = previousTab
-                } else {
-                    // Normal tab selection - store as previous tab
-                    previousTab = newValue
+        TabView(selection: $selectedTab) {
+            // Home Tab
+            HomeView()
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
                 }
+                .tag(0)
+            
+            // Services Tab
+            ServicesView()
+                .tabItem {
+                    Label("Services", systemImage: "briefcase.fill")
+                }
+                .tag(1)
+            
+            // Post Tab (Middle) - This doesn't show a view, just triggers the sheet
+            Color.clear
+                .tabItem {
+                    Label("Post", systemImage: "plus.square.fill")
+                }
+                .tag(2)
+            
+            // Reels Tab
+            ReelsView()
+                .tabItem {
+                    Label("Reels", systemImage: "play.rectangle.fill")
+                }
+                .tag(3)
+            
+            // Profile Tab
+            ProfileView()
+                .tabItem {
+                    Label("Profile", systemImage: "person.fill")
+                }
+                .tag(4)
+        }
+        .accentColor(.blue)
+        .onChange(of: selectedTab) { oldValue, newValue in
+            if newValue == 2 {
+                // Post tab was selected - show options and revert to previous tab
+                showingPostOptions = true
+                selectedTab = previousTab
+            } else {
+                // Normal tab selection - store as previous tab
+                previousTab = newValue
             }
         }
         .sheet(isPresented: $showingPostOptions, onDismiss: {
@@ -94,7 +93,7 @@ struct MainTabView: View {
         .fullScreenCover(item: $activeSheet) { sheet in
             switch sheet {
             case .serviceForm:
-                ServiceFormView()  // ← CHANGED TO ServiceFormView
+                ServiceFormView()
             case .camera(let mode):
                 CameraView(mode: mode)
             }
@@ -224,8 +223,4 @@ struct PostOptionButton: View {
         }
     }
 }
-
-// Update this section in MainTabView.swift - CreateServicePostView
-
-
 

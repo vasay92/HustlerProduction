@@ -26,6 +26,10 @@ struct AppNotification: Codable, Identifiable {
         case reviewEdit = "review_edit"
         case helpfulVote = "helpful_vote"
         
+        // ADD THESE NEW TYPES:
+        case reelLike = "reel_like"
+        case commentLike = "comment_like"
+            
         // Message notifications
         case newMessage = "new_message"
         case messageRequest = "message_request"
@@ -38,8 +42,21 @@ struct AppNotification: Codable, Identifiable {
                 return "hand.thumbsup.fill"
             case .newMessage, .messageRequest:
                 return "message.fill"
+            case .reelLike:              // ← ADD THIS
+                return "heart.fill"
+            case .commentLike:           // ← ADD THIS
+                return "bubble.left.fill"
             }
         }
+        // ADD THIS: Categorize notifications
+            var isBellNotification: Bool {
+                switch self {
+                case .newReview, .helpfulVote, .reelLike, .commentLike:
+                    return true
+                case .reviewReply, .reviewEdit, .newMessage, .messageRequest:
+                    return false
+                }
+            }
     }
 }
 
@@ -185,6 +202,75 @@ final class NotificationRepository {
             }
         } catch {
             print("Error creating review notification: \(error)")
+        }
+    }
+    
+    // MARK: - Create Reel Notification
+    func createReelNotification(
+        for userId: String,
+        reelId: String,
+        type: AppNotification.NotificationType,
+        fromUserId: String
+    ) async {
+        // Don't notify yourself
+        guard userId != fromUserId else { return }
+        
+        // Get sender info
+        guard let fromUser = try? await UserRepository.shared.fetchById(fromUserId) else { return }
+        
+        // Check user's notification settings
+        let recipientUser = try? await UserRepository.shared.fetchById(userId)
+        if let settings = recipientUser?.notificationSettings {
+            switch type {
+            case .reelLike:
+                if !(settings.reelLikes ?? true) { return }
+            case .commentLike:
+                if !(settings.commentLikes ?? true) { return }
+            default:
+                break
+            }
+        }
+        
+        let title: String
+        let body: String
+        
+        switch type {
+        case .reelLike:
+            title = "Reel Liked"
+            body = "\(fromUser.name) liked your reel"
+        case .commentLike:
+            title = "Comment Liked"
+            body = "\(fromUser.name) liked your comment"
+        default:
+            return
+        }
+        
+        let notification = AppNotification(
+            userId: userId,
+            type: type,
+            fromUserId: fromUserId,
+            fromUserName: fromUser.name,
+            fromUserProfileImage: fromUser.profileImageURL,
+            title: title,
+            body: body,
+            data: ["reelId": reelId],
+            isRead: false
+        )
+        
+        do {
+            try await createNotification(notification)
+            
+            // Send push notification if user has FCM token
+            if let fcmToken = recipientUser?.fcmToken {
+                await sendPushNotification(
+                    to: fcmToken,
+                    title: notification.title,
+                    body: notification.body,
+                    data: notification.data ?? [:]
+                )
+            }
+        } catch {
+            print("Error creating reel notification: \(error)")
         }
     }
     

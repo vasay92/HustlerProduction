@@ -1,4 +1,4 @@
-// CommentRepository.swift
+// CommentRepository.swift (Updated with notifications)
 // Path: ClaudeHustlerFirebase/Repositories/CommentRepository.swift
 
 import Foundation
@@ -12,6 +12,7 @@ final class CommentRepository {
     
     private let db = Firestore.firestore()
     private let cache = CacheService.shared
+    private let notificationRepository = NotificationRepository.shared
     
     // Listener storage
     private var commentListeners: [String: ListenerRegistration] = [:]
@@ -95,14 +96,29 @@ final class CommentRepository {
         ])
     }
     
-    // MARK: - Like/Unlike Comment
+    // MARK: - Like/Unlike Comment WITH NOTIFICATIONS
     
     func likeComment(_ commentId: String) async throws {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         
+        // Get comment to find owner and reel
+        let commentDoc = try await db.collection("comments").document(commentId).getDocument()
+        guard let commentData = commentDoc.data(),
+              let commentOwnerId = commentData["userId"] as? String,
+              let reelId = commentData["reelId"] as? String else { return }
+        
+        // Add like
         try await db.collection("comments").document(commentId).updateData([
             "likes": FieldValue.arrayUnion([userId])
         ])
+        
+        // CREATE NOTIFICATION for comment owner
+        await notificationRepository.createReelNotification(
+            for: commentOwnerId,
+            reelId: reelId,
+            type: .commentLike,
+            fromUserId: userId
+        )
     }
     
     func unlikeComment(_ commentId: String) async throws {
@@ -111,6 +127,37 @@ final class CommentRepository {
         try await db.collection("comments").document(commentId).updateData([
             "likes": FieldValue.arrayRemove([userId])
         ])
+    }
+    
+    // MARK: - Fetch Comments
+    
+    func fetchComments(for reelId: String, limit: Int = 100) async throws -> [Comment] {
+        let snapshot = try await db.collection("comments")
+            .whereField("reelId", isEqualTo: reelId)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "timestamp", descending: false)
+            .limit(to: limit)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { doc in
+            var comment = try? doc.data(as: Comment.self)
+            comment?.id = doc.documentID
+            return comment
+        }
+    }
+    
+    func fetchReplies(for commentId: String) async throws -> [Comment] {
+        let snapshot = try await db.collection("comments")
+            .whereField("parentCommentId", isEqualTo: commentId)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "timestamp", descending: false)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { doc in
+            var comment = try? doc.data(as: Comment.self)
+            comment?.id = doc.documentID
+            return comment
+        }
     }
     
     // MARK: - Real-time Listening
@@ -153,33 +200,25 @@ final class CommentRepository {
         commentListeners.values.forEach { $0.remove() }
         commentListeners.removeAll()
     }
-    // Add these methods to CommentRepository.swift (after the existing methods)
-
     
+    // MARK: - Protocol Compliance Methods (for CommentsView compatibility)
+    
+    func create(_ comment: Comment) async throws {
+        _ = try await postComment(
+            on: comment.reelId,
+            text: comment.text,
+            parentCommentId: comment.parentCommentId
+        )
+    }
+    
+    func delete(_ commentId: String) async throws {
+        // Get the reelId for the existing deleteComment method
+        let commentDoc = try await db.collection("comments").document(commentId).getDocument()
+        guard let commentData = commentDoc.data(),
+              let reelId = commentData["reelId"] as? String else {
+            throw NSError(domain: "CommentRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Comment or reelId not found"])
+        }
+        
+        try await deleteComment(commentId, reelId: reelId)
+    }
 }
-
-//extension CommentRepository {
-//    
-//    // MARK: - Protocol-compliant method names
-//    
-//    // Create method that CommentsView expects
-//    func create(_ comment: Comment) async throws {
-//        _ = try await postComment(
-//            on: comment.reelId,
-//            text: comment.text,
-//            parentCommentId: comment.parentCommentId
-//        )
-//    }
-//    
-//    // Delete method that CommentsView expects
-//    func delete(_ commentId: String) async throws {
-//        // We need to get the reelId for the existing deleteComment method
-//        let commentDoc = try await db.collection("comments").document(commentId).getDocument()
-//        guard let commentData = commentDoc.data(),
-//              let reelId = commentData["reelId"] as? String else {
-//            throw NSError(domain: "CommentRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Comment or reelId not found"])
-//        }
-//        
-//        try await deleteComment(commentId, reelId: reelId)
-//    }
-//}

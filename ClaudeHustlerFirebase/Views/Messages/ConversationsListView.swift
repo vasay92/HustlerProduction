@@ -98,8 +98,8 @@ struct ConversationsListView: View {
             .cornerRadius(10)
         }
         .padding(.horizontal)
-        .padding(.top, -20)  // ← NEGATIVE padding to pull it up closer to the title
-        .padding(.bottom, 8)  // Small bottom padding for spacing from list
+            .padding(.top, -35)  // ← INCREASED negative padding to pull it much closer
+            .padding(.bottom, 4)  // Reduced bottom padding for tighter spacing
     }
     
     private var conversationsList: some View {

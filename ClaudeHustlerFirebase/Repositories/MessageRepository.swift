@@ -425,13 +425,12 @@ final class MessageRepository: RepositoryProtocol {
         // Create the message in Firestore
         _ = try await create(message, in: conversationId)
         
-        // Create notification for the recipient
         await NotificationRepository.shared.createMessageNotification(
             for: recipientId,
-            fromUserId: currentUserId,
+            fromUserId: currentUserId,  // ← Use the correct variable name
             conversationId: conversationId,
             messageText: text,
-            isNewConversation: isNewConversation
+            isNewConversation: isNewConversation  // ← Also use the actual variable
         )
     }
     

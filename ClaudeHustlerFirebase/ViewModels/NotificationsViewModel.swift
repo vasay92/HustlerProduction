@@ -25,6 +25,30 @@ final class NotificationsViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Filtered Counts
+    var bellNotificationCount: Int {
+        notifications.filter { notification in
+            !notification.isRead && notification.type.isBellNotification
+        }.count
+    }
+    
+    var messageNotificationCount: Int {
+        notifications.filter { notification in
+            !notification.isRead && (notification.type == .newMessage || notification.type == .messageRequest)
+        }.count
+    }
+    
+    // MARK: - Filtered Notifications
+    func getBellNotifications() -> [AppNotification] {
+        notifications.filter { $0.type.isBellNotification }
+    }
+    
+    func getMessageNotifications() -> [AppNotification] {
+        notifications.filter {
+            $0.type == .newMessage || $0.type == .messageRequest
+        }
+    }
+    
     // MARK: - Load Notifications
     func loadNotifications() async {
         isLoading = true
@@ -129,6 +153,11 @@ final class NotificationsViewModel: ObservableObject {
             if let reviewId = notification.data?["reviewId"] {
                 return .openReview(reviewId, notification.fromUserId)
             }
+            
+        case .reelLike, .commentLike:
+            if let reelId = notification.data?["reelId"] {
+                return .openReel(reelId)
+            }
         }
         
         return nil
@@ -139,8 +168,13 @@ final class NotificationsViewModel: ObservableObject {
         // This would update the app icon badge count
         // Requires AppDelegate setup with UNUserNotificationCenter
         #if !targetEnvironment(simulator)
-        UNUserNotificationCenter.current().setBadgeCount(unreadCount)
+        UNUserNotificationCenter.current().setBadgeCount(bellNotificationCount)
         #endif
+    }
+    
+    // MARK: - Refresh
+    func refresh() async {
+        await loadNotifications()
     }
     
     // MARK: - Clean Up
@@ -162,4 +196,5 @@ enum NotificationAction {
     case openConversation(String)
     case openReview(String, String) // reviewId, userId
     case openProfile(String)
+    case openReel(String)
 }

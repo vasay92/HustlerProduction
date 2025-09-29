@@ -8,13 +8,13 @@ struct HomeView: View {
     @StateObject private var firebase = FirebaseService.shared
     @StateObject private var viewModel = HomeViewModel()
     @StateObject private var notificationsViewModel = NotificationsViewModel() // NEW
-    @State private var showingFilters = false
     @State private var showingMessages = false
     @State private var showingNotifications = false // NEW
     @State private var showingCategories = false // NEW
     @State private var showingCreatePost = false
     @State private var unreadMessageCount: Int = 0
     @State private var conversationsListener: ListenerRegistration?
+    
     
     var body: some View {
         NavigationView {
@@ -35,29 +35,23 @@ struct HomeView: View {
                         
                         Spacer()
                         
-                        // Top-right buttons - MODIFIED TO ADD NOTIFICATIONS
+                        // Top-right buttons - NOTIFICATIONS AND MESSAGES ONLY
                         HStack(spacing: 12) {
-                            Button(action: { showingFilters = true }) {
-                                Image(systemName: "line.3.horizontal.decrease")
-                                    .font(.title2)
-                                    .foregroundColor(.primary)
-                            }
-                            
-                            // Notifications button with badge - NEW
+                            // Notifications button with badge
                             Button(action: { showingNotifications = true }) {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "bell")
                                         .font(.title2)
                                         .foregroundColor(.primary)
                                     
-                                    // Unread badge for notifications
-                                    if notificationsViewModel.unreadCount > 0 {
-                                        Text("\(min(notificationsViewModel.unreadCount, 99))")
+                                    // Unread badge for notifications (ONLY BELL NOTIFICATIONS)
+                                    if notificationsViewModel.bellNotificationCount > 0 {
+                                        Text("\(min(notificationsViewModel.bellNotificationCount, 99))")
                                             .font(.caption2)
                                             .fontWeight(.bold)
                                             .foregroundColor(.white)
                                             .frame(minWidth: 16, minHeight: 16)
-                                            .padding(.horizontal, notificationsViewModel.unreadCount > 9 ? 4 : 0)
+                                            .padding(.horizontal, notificationsViewModel.bellNotificationCount > 9 ? 4 : 0)
                                             .background(Color.red)
                                             .clipShape(Capsule())
                                             .offset(x: 8, y: -8)
@@ -65,7 +59,7 @@ struct HomeView: View {
                                 }
                             }
                             
-                            // Messages button with badge - MODIFIED (changed color to blue)
+                            // Messages button with badge
                             Button(action: { showingMessages = true }) {
                                 ZStack(alignment: .topTrailing) {
                                     Image(systemName: "message")
@@ -80,7 +74,7 @@ struct HomeView: View {
                                             .foregroundColor(.white)
                                             .frame(minWidth: 16, minHeight: 16)
                                             .padding(.horizontal, unreadMessageCount > 9 ? 4 : 0)
-                                            .background(Color.blue) // CHANGED from red to blue
+                                            .background(Color.blue)
                                             .clipShape(Capsule())
                                             .offset(x: 8, y: -8)
                                     }
@@ -228,9 +222,6 @@ struct HomeView: View {
             .navigationBarHidden(true)
             .refreshable {
                 await viewModel.refresh()
-            }
-            .sheet(isPresented: $showingFilters) {
-                FilterView()
             }
             .sheet(isPresented: $showingCategories) { // NEW
                 CategoriesView()
@@ -545,66 +536,6 @@ struct HomeView: View {
         }
     }
     
-    // MARK: - Filter View - UNCHANGED
-    struct FilterView: View {
-        @Environment(\.dismiss) private var dismiss
-        @State private var selectedCategory: ServiceCategory?
-        @State private var minPrice = ""
-        @State private var maxPrice = ""
-        
-        var body: some View {
-            NavigationView {
-                Form {
-                    Section("Category") {
-                        Picker("Category", selection: $selectedCategory) {
-                            Text("All Categories").tag(nil as ServiceCategory?)
-                            ForEach(ServiceCategory.allCases, id: \.self) { category in
-                                Text(category.displayName).tag(category as ServiceCategory?)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                    }
-                    
-                    Section("Price Range") {
-                        HStack {
-                            TextField("Min", text: $minPrice)
-                                .keyboardType(.numberPad)
-                            
-                            Text("-")
-                            
-                            TextField("Max", text: $maxPrice)
-                                .keyboardType(.numberPad)
-                        }
-                    }
-                    
-                    Section {
-                        Button("Apply Filters") {
-                            dismiss()
-                        }
-                        .frame(maxWidth: .infinity)
-                        
-                        Button("Clear All") {
-                            selectedCategory = nil
-                            minPrice = ""
-                            maxPrice = ""
-                        }
-                        .frame(maxWidth: .infinity)
-                        .foregroundColor(.red)
-                    }
-                }
-                .navigationTitle("Filters")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") { dismiss() }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Fixed CategoriesView - Replace this section in your HomeView.swift
-
     // MARK: - Categories View - FIXED
     struct CategoriesView: View {
         @Environment(\.dismiss) var dismiss
@@ -663,24 +594,21 @@ struct HomeView: View {
             }
         }
         
-        // Helper function to get icon for category
+        // Helper function to get icon for category - FIXED to use actual categories
         private func getCategoryIcon(for category: ServiceCategory) -> String {
             switch category {
+            case .cleaning: return "sparkles"
             case .tutoring: return "book.fill"
-            case .homeServices: return "house.fill"
-            case .tech: return "laptopcomputer"
-            case .beauty: return "sparkles"
-            case .fitness: return "figure.run"
-            case .photography: return "camera.fill"
-            case .music: return "music.note"
-            case .art: return "paintbrush.fill"
-            case .food: return "fork.knife"
-            case .events: return "calendar"
-            case .transportation: return "car.fill"
-            case .petCare: return "pawprint.fill"
-            case .other: return "square.grid.2x2"
+            case .delivery: return "shippingbox.fill"
+            case .electrical: return "bolt.fill"
+            case .plumbing: return "drop.fill"
+            case .carpentry: return "hammer.fill"
+            case .painting: return "paintbrush.fill"
+            case .landscaping: return "leaf.fill"
+            case .moving: return "box.truck.fill"
+            case .technology: return "desktopcomputer"
+            case .other: return "ellipsis.circle.fill"
             }
         }
     }
 }
-
