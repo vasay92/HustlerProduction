@@ -62,6 +62,7 @@ struct ReelsView: View {
     }
     
     // MARK: - Status Section (UPDATED: User's status first)
+    // MARK: - Status Section (UPDATED: User's status first)
     @ViewBuilder
     private var statusSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -69,28 +70,15 @@ struct ReelsView: View {
                 // Show user's own status first (or Add Story button)
                 if let currentUserId = firebase.currentUser?.id {
                     if let myStatus = viewModel.statuses.first(where: { $0.userId == currentUserId }) {
-                        // User has active status - show it first with special styling
+                        // User has active status - show it WITHOUT the plus overlay
                         StatusCircle(
                             status: myStatus,
                             isOwnStatus: true,
                             action: { selectStatus(myStatus) }
                         )
-                        .overlay(
-                            // Add a "+" overlay for adding more to story
-                            VStack {
-                                Spacer()
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.blue)
-                                        .background(Circle().fill(Color.white))
-                                }
-                            }
-                            .offset(x: -5, y: -5)
-                        )
+                        // REMOVED THE .overlay() WITH THE PLUS BUTTON
                     } else {
-                        // Add Story button (no status yet)
+                        // Add Story button (no status yet) - THIS is where the plus belongs
                         Button(action: { showingStatusCreation = true }) {
                             VStack {
                                 ZStack {
