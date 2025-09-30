@@ -151,7 +151,7 @@ struct ChatView: View {
                     onDismiss: {
                         reelToShow = nil
                     },
-                    viewModel: reelsViewModel  // ADD THIS LINE
+                    viewModel: reelsViewModel
                 )
                 
                 VStack {
@@ -200,10 +200,10 @@ struct ChatView: View {
             
             HStack(spacing: 10) {
                 UserAvatar(
-                        imageURL: otherUser?.profileImageURL,
-                        userName: chatTitle,  // This will generate initials from the chat title/name
-                        size: 36
-                    )
+                    imageURL: otherUser?.profileImageURL,
+                    userName: chatTitle,
+                    size: 36
+                )
                 
                 Text(chatTitle)
                     .font(.headline)
@@ -286,6 +286,26 @@ struct ChatView: View {
     
     // MARK: - Helper Functions
     
+    // NEW METHOD: Mark message notifications as read
+    private func markMessageNotificationsAsRead() async {
+        guard let conversationId = currentConversationId,
+              let notificationsVM = NotificationsViewModel.shared else { return }
+        
+        // Find all unread message notifications for this conversation
+        let messageNotifications = notificationsVM.notifications.filter { notification in
+            (notification.type == .newMessage || notification.type == .messageRequest) &&
+            notification.data?["conversationId"] == conversationId &&
+            !notification.isRead
+        }
+        
+        // Mark each notification as read
+        for notification in messageNotifications {
+            await notificationsVM.markAsRead(notification)
+        }
+        
+        print("📬 Marked \(messageNotifications.count) message notifications as read for conversation: \(conversationId)")
+    }
+    
     private func setupChat() async {
         isLoadingMessages = true
         
@@ -310,6 +330,9 @@ struct ChatView: View {
                 await viewModel.loadMessages(for: conversationId)
                 messages = viewModel.messages
                 try await viewModel.markMessagesAsRead(in: conversationId)
+                
+                // ADDED: Mark notifications as read when opening chat
+                await markMessageNotificationsAsRead()
             }
         } catch {
             print("Error setting up chat: \(error)")
@@ -327,6 +350,9 @@ struct ChatView: View {
                 
                 Task {
                     try? await self.viewModel.markMessagesAsRead(in: conversationId)
+                    
+                    // ADDED: Also mark notifications as read for new messages
+                    await self.markMessageNotificationsAsRead()
                 }
             }
         }

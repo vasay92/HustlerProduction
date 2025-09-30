@@ -11,9 +11,7 @@ struct HomeView: View {
     @State private var showingMessages = false
     @State private var showingNotifications = false // NEW
     @State private var showingCategories = false // NEW
-    @State private var showingCreatePost = false
-    @State private var unreadMessageCount: Int = 0
-    @State private var conversationsListener: ListenerRegistration?
+    @State private var showingCreatePost = false;
     
     
     var body: some View {
@@ -263,7 +261,7 @@ struct HomeView: View {
                 }
             }
             .onAppear {
-                startListeningToUnreadCount()
+                
                 notificationsViewModel.startListening() // NEW
             }
             .onDisappear {
@@ -278,22 +276,7 @@ struct HomeView: View {
         viewModel.searchText
     }
     
-    // MARK: - Real-time Unread Count - UNCHANGED
-    private func startListeningToUnreadCount() {
-        Task { @MainActor in
-            // CHANGE FROM: let conversations = await firebase.loadConversations()
-            // TO:
-            let conversations = await MessageRepository.shared.loadConversations()
-            
-            var total = 0
-            if let userId = firebase.currentUser?.id {
-                for conversation in conversations {
-                    total += conversation.unreadCounts[userId] ?? 0
-                }
-            }
-            self.unreadMessageCount = total
-        }
-    }
+    
     
     // Service Post Card - UNCHANGED (keeping all your original code)
     struct ServicePostCard: View {
