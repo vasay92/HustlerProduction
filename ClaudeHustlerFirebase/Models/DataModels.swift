@@ -39,6 +39,7 @@ struct NotificationSettings: Codable {
     var messageRequests: Bool = true  // ADD THIS
     var reelLikes: Bool = true      // ADD THIS
     var commentLikes: Bool = true   // ADD THIS
+    var commentReplies: Bool = true  // ← ADD THIS
 }
 
 struct PortfolioMedia: Codable, Equatable {

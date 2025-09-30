@@ -241,7 +241,7 @@ struct NotificationRow: View {
                 Spacer()
                 
                 // Thumbnail for reel notifications
-                if notification.type == .reelLike || notification.type == .commentLike {
+                if notification.type == .reelLike || notification.type == .commentLike || notification.type == .commentReply {
                     if let thumbnailURL = notification.data?["targetImage"],
                        !thumbnailURL.isEmpty {
                         AsyncImage(url: URL(string: thumbnailURL)) { image in
@@ -312,6 +312,8 @@ struct NotificationRow: View {
             return "liked your reel"
         case .commentLike:
             return "liked your comment"
+        case .commentReply:  // ← ADD THIS CASE
+            return "replied to your comment"
         case .newMessage, .messageRequest:
             // These won't appear here because they're filtered out
             return ""
@@ -326,7 +328,7 @@ struct NotificationRow: View {
             return .green
         case .reelLike:
             return .red
-        case .commentLike:
+        case .commentLike, .commentReply:  // ← UPDATE THIS LINE
             return .blue
         case .newMessage, .messageRequest:
             return .blue

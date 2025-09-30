@@ -26,10 +26,11 @@ struct AppNotification: Codable, Identifiable {
         case reviewEdit = "review_edit"
         case helpfulVote = "helpful_vote"
         
-        // ADD THESE NEW TYPES:
+        // Reel notifications
         case reelLike = "reel_like"
         case commentLike = "comment_like"
-            
+        case commentReply = "comment_reply"  // ← ADD THIS
+        
         // Message notifications
         case newMessage = "new_message"
         case messageRequest = "message_request"
@@ -42,21 +43,21 @@ struct AppNotification: Codable, Identifiable {
                 return "hand.thumbsup.fill"
             case .newMessage, .messageRequest:
                 return "message.fill"
-            case .reelLike:              // ← ADD THIS
+            case .reelLike:
                 return "heart.fill"
-            case .commentLike:           // ← ADD THIS
+            case .commentLike, .commentReply:  // ← UPDATE THIS
                 return "bubble.left.fill"
             }
         }
-        // ADD THIS: Categorize notifications
-            var isBellNotification: Bool {
-                switch self {
-                case .newReview, .helpfulVote, .reelLike, .commentLike:
-                    return true
-                case .reviewReply, .reviewEdit, .newMessage, .messageRequest:
-                    return false
-                }
+        
+        var isBellNotification: Bool {
+            switch self {
+            case .newReview, .helpfulVote, .reelLike, .commentLike, .commentReply:  // ← UPDATE THIS
+                return true
+            case .reviewReply, .reviewEdit, .newMessage, .messageRequest:
+                return false
             }
+        }
     }
 }
 
@@ -240,6 +241,8 @@ final class NotificationRepository {
                 if !(settings.reelLikes ?? true) { return }
             case .commentLike:
                 if !(settings.commentLikes ?? true) { return }
+            case .commentReply:  // ← ADD THIS
+                if !(settings.commentReplies ?? true) { return }
             default:
                 break
             }
@@ -255,6 +258,9 @@ final class NotificationRepository {
         case .commentLike:
             title = "Comment Liked"
             body = "\(fromUser.name) liked your comment"
+        case .commentReply:  // ← ADD THIS
+            title = "New Reply"
+            body = "\(fromUser.name) replied to your comment"
         default:
             return
         }
@@ -292,7 +298,7 @@ final class NotificationRepository {
         } catch {
             print("Error creating reel notification: \(error)")
         }
-    }
+}
     
     // MARK: - Core Notification Operations
     private func createNotification(_ notification: AppNotification) async throws {

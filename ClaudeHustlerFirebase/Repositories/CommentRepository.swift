@@ -41,11 +41,26 @@ final class CommentRepository {
         
         let docRef = try await db.collection("comments").addDocument(from: comment)
         
-        // Update parent comment's reply count if this is a reply
+        // If this is a reply, update parent comment and create notification
         if let parentId = parentCommentId {
-            try await db.collection("comments").document(parentId).updateData([
-                "replyCount": FieldValue.increment(Int64(1))
-            ])
+            // Get parent comment to find its owner
+            let parentDoc = try await db.collection("comments").document(parentId).getDocument()
+            if let parentData = parentDoc.data(),
+               let parentUserId = parentData["userId"] as? String {
+                
+                // Update parent comment's reply count
+                try await db.collection("comments").document(parentId).updateData([
+                    "replyCount": FieldValue.increment(Int64(1))
+                ])
+                
+                // CREATE NOTIFICATION for parent comment owner
+                await notificationRepository.createReelNotification(
+                    for: parentUserId,
+                    reelId: reelId,
+                    type: .commentReply,
+                    fromUserId: userId
+                )
+            }
         }
         
         // Update reel's comment count

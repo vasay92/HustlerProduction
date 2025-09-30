@@ -160,7 +160,7 @@ final class NotificationsViewModel: ObservableObject {
                 return .openReview(reviewId, notification.fromUserId)
             }
             
-        case .reelLike, .commentLike:  // UPDATED
+        case .reelLike, .commentLike, .commentReply:  // ← UPDATE THIS LINE
             if let reelId = notification.data?["reelId"] {
                 return .openReel(reelId)
             }
