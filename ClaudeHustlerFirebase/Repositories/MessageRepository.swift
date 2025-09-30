@@ -96,8 +96,6 @@ final class MessageRepository: RepositoryProtocol {
     }
 
     // MARK: - Create Message with ConversationId
-    // In MessageRepository.swift, update the create method's messageData:
-
     func create(_ message: Message, in conversationId: String) async throws -> String {
         let messageData: [String: Any] = [
             "senderId": message.senderId,
@@ -111,30 +109,44 @@ final class MessageRepository: RepositoryProtocol {
             "isDelivered": false,
             "contextType": message.contextType?.rawValue ?? "",
             "contextId": message.contextId ?? "",
-            "contextTitle": message.contextTitle ?? "",     // ADD THIS
-            "contextImage": message.contextImage ?? "",     // ADD THIS
-            "contextUserId": message.contextUserId ?? ""    // ADD THIS
+            "contextTitle": message.contextTitle ?? "",
+            "contextImage": message.contextImage ?? "",
+            "contextUserId": message.contextUserId ?? ""
         ]
         
         print("DEBUG - Creating message with context: \(message.contextTitle ?? "no title")")
         
-        // Rest of the method stays the same...
+        // Create the message
         let docRef = try await db.collection("messages")
             .addDocument(data: messageData)
         
-        try await updateConversationLastMessage(conversationId, message: message.text, senderId: message.senderId)
+        // MODIFIED: Get the recipientId to update their unread count
+        let conversationDoc = try await db.collection("conversations").document(conversationId).getDocument()
+        if let participantIds = conversationDoc.data()?["participantIds"] as? [String] {
+            let recipientId = participantIds.first(where: { $0 != message.senderId }) ?? ""
+            
+            // Update conversation with last message AND increment unread count
+            try await updateConversationLastMessage(
+                conversationId,
+                message: message.text,
+                senderId: message.senderId,
+                recipientId: recipientId  // ADDED
+            )
+        }
+        
         cache.remove(for: "messages_\(conversationId)")
         
         return docRef.documentID
     }
 
-    // Helper method for updating conversation
-    private func updateConversationLastMessage(_ conversationId: String, message: String, senderId: String) async throws {
+    // MODIFIED: Helper method for updating conversation - now increments unread count
+    private func updateConversationLastMessage(_ conversationId: String, message: String, senderId: String, recipientId: String) async throws {
         try await db.collection("conversations").document(conversationId).updateData([
             "lastMessage": message,
             "lastMessageTimestamp": Date(),
             "lastMessageSenderId": senderId,
-            "updatedAt": Date()
+            "updatedAt": Date(),
+            "unreadCounts.\(recipientId)": FieldValue.increment(Int64(1))  // ADDED - Increment recipient's unread count
         ])
     }
     
@@ -378,6 +390,7 @@ final class MessageRepository: RepositoryProtocol {
         }
     }
 
+    // MODIFIED: sendMessage now properly updates unread counts
     func sendMessage(
         to recipientId: String,
         text: String,
@@ -425,12 +438,13 @@ final class MessageRepository: RepositoryProtocol {
         // Create the message in Firestore
         _ = try await create(message, in: conversationId)
         
+        // Create notification
         await NotificationRepository.shared.createMessageNotification(
             for: recipientId,
-            fromUserId: currentUserId,  // ← Use the correct variable name
+            fromUserId: currentUserId,
             conversationId: conversationId,
             messageText: text,
-            isNewConversation: isNewConversation  // ← Also use the actual variable
+            isNewConversation: isNewConversation
         )
     }
     
@@ -483,7 +497,7 @@ final class MessageRepository: RepositoryProtocol {
         cache.remove(for: "conversation_\(conversationId)")
         cache.remove(for: "messages_\(conversationId)")
     }
-    // Add this method for loading conversations (currently missing the proper implementation)
+    
     func loadConversations() async -> [Conversation] {
         do {
             let result = try await fetchConversations(limit: 50)
@@ -586,7 +600,7 @@ final class MessageRepository: RepositoryProtocol {
         return listener
     }
 
-    // Add the complete markMessagesAsRead implementation (move from FirebaseService)
+    // MODIFIED: markMessagesAsRead now properly resets unread count
     func markMessagesAsRead(conversationId: String) async throws {
         guard let currentUserId = FirebaseService.shared.currentUser?.id else { return }
         
@@ -626,17 +640,15 @@ final class MessageRepository: RepositoryProtocol {
             try await batch.commit()
         }
         
-        // Update conversation unread count
-        do {
-            try await db.collection("conversations")
-                .document(conversationId)
-                .updateData([
-                    "unreadCounts.\(currentUserId)": 0,
-                    "lastReadTimestamps.\(currentUserId)": Date()
-                ])
-        } catch {
-            print("Could not update conversation: \(error)")
-        }
+        // IMPORTANT: Reset the unread count to 0 for current user
+        try await db.collection("conversations")
+            .document(conversationId)
+            .updateData([
+                "unreadCounts.\(currentUserId)": 0,  // Reset to 0
+                "lastReadTimestamps.\(currentUserId)": Date()
+            ])
+        
+        print("DEBUG - Reset unread count for user \(currentUserId) in conversation \(conversationId)")
         
         // Clear cache
         cache.remove(for: "messages_\(conversationId)")
@@ -661,12 +673,9 @@ final class MessageRepository: RepositoryProtocol {
             print("❌ Error refreshing conversation participant info: \(error)")
         }
     }
-    
-    
 }
-// MessageRepository+Notifications.swift
-// Add these methods to your existing MessageRepository.swift
 
+// MessageRepository+Notifications.swift
 extension MessageRepository {
     
     // Update the sendMessage method to create notifications

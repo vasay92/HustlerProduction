@@ -9,7 +9,9 @@ struct ConversationsListView: View {
     @State private var searchText = ""
     @State private var selectedConversation: Conversation?
     @State private var showingNewMessage = false
-    @State private var conversationsListener: ListenerRegistration?
+    @State private var conversationToDelete: Conversation?
+    @State private var showingDeleteAlert = false
+    @Environment(\.dismiss) var dismiss
     
     var filteredConversations: [Conversation] {
         if searchText.isEmpty {
@@ -29,98 +31,144 @@ struct ConversationsListView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Custom Navigation Bar with Back Button
+                HStack {
+                    Button(action: { dismiss() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.title3)
+                                .fontWeight(.medium)
+                            Text("Back")
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.blue)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Messages")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Spacer()
+                    
+                    Button(action: { showingNewMessage = true }) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
+                
                 // Search Bar (only show if there are conversations)
                 if !viewModel.conversations.isEmpty {
-                    searchBar
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                        
+                        TextField("Search conversations", text: $searchText)
+                            .textFieldStyle(PlainTextFieldStyle())
+                        
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                    .padding(.top, 8)      // ADDED - space from nav bar
+                    .padding(.bottom, 10)
                 }
                 
                 // Content
                 if viewModel.isLoading {
-                    // Loading state
                     Spacer()
                     ProgressView("Loading conversations...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     Spacer()
                 } else if viewModel.conversations.isEmpty {
-                    // Empty state
                     emptyStateView
                 } else {
-                    // Conversations List
-                    conversationsList
-                }
-            }
-            .navigationTitle("Messages")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingNewMessage = true }) {
-                        Image(systemName: "square.and.pencil")
-                            .foregroundColor(.blue)
+                    // Conversations List with Swipe Actions
+                    List {
+                        ForEach(filteredConversations) { conversation in
+                            ConversationRow(conversation: conversation)
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                .listRowSeparator(.hidden)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedConversation = conversation
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        conversationToDelete = conversation
+                                        showingDeleteAlert = true
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                .contextMenu {
+                                    Button(action: {
+                                        // Mark as read functionality
+                                    }) {
+                                        Label("Mark as Read", systemImage: "envelope.open")
+                                    }
+                                    
+                                    Button(role: .destructive, action: {
+                                        conversationToDelete = conversation
+                                        showingDeleteAlert = true
+                                    }) {
+                                        Label("Delete Conversation", systemImage: "trash")
+                                    }
+                                }
+                        }
+                    }
+                    .listStyle(PlainListStyle())
+                    .refreshable {
+                        await viewModel.refresh()
                     }
                 }
             }
+            .navigationBarHidden(true)
         }
         .task {
             await viewModel.loadConversations()
-            startListeningToConversations()
-        }
-        .onDisappear {
-            stopListeningToConversations()
         }
         .fullScreenCover(item: $selectedConversation) { conversation in
             ChatView(conversation: conversation)
         }
         .sheet(isPresented: $showingNewMessage) {
-            NewMessageView()
+            // NewMessageView() // You'll need to create this
+            Text("New Message View")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            showingNewMessage = false
+                        }
+                    }
+                }
         }
-    }
-    
-    // MARK: - View Components
-    
-    private var searchBar: some View {
-        HStack {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.gray)
-                
-                TextField("Search conversations", text: $searchText)
-                    .textFieldStyle(PlainTextFieldStyle())
-                
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
+        .alert("Delete Conversation?", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                if let conversation = conversationToDelete {
+                    Task {
+                        await deleteConversation(conversation)
                     }
                 }
             }
-            .padding(10)
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
-        }
-        .padding(.horizontal)
-            .padding(.top, -35)  // ← INCREASED negative padding to pull it much closer
-            .padding(.bottom, 4)  // Reduced bottom padding for tighter spacing
-    }
-    
-    private var conversationsList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(filteredConversations) { conversation in
-                    ConversationRow(conversation: conversation)
-                        .onTapGesture {
-                            selectedConversation = conversation
-                        }
-                    
-                    Divider()
-                        .padding(.leading, 76)
-                }
-            }
-        }
-        .refreshable {
-            await viewModel.loadConversations()
+        } message: {
+            Text("This will permanently delete this conversation and all messages. This cannot be undone.")
         }
     }
     
+    // Empty State View
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Spacer()
@@ -152,22 +200,16 @@ struct ConversationsListView: View {
         }
     }
     
-    // MARK: - Real-time Listeners
-    
-    private func startListeningToConversations() {
-        guard let userId = FirebaseService.shared.currentUser?.id else { return }
+    // Delete Conversation Function
+    private func deleteConversation(_ conversation: Conversation) async {
+        guard let conversationId = conversation.id else { return }
         
-        Task { @MainActor in
-            // CHANGE FROM: let conversations = await FirebaseService.shared.loadConversations()
-            // TO:
+        do {
+            try await MessageRepository.shared.deleteConversation(conversationId)
             await viewModel.loadConversations()
-            let conversations = viewModel.conversations
+        } catch {
+            print("Error deleting conversation: \(error)")
         }
-    }
-    
-    private func stopListeningToConversations() {
-        conversationsListener?.remove()
-        conversationsListener = nil
     }
 }
 
@@ -187,161 +229,98 @@ struct ConversationRow: View {
     
     private var otherParticipantImage: String? {
         guard let userId = currentUserId else { return nil }
-        let imageURL = conversation.otherParticipantImage(currentUserId: userId)
-        
-        // Debug logging
-        if imageURL == nil || imageURL?.isEmpty == true {
-            print("⚠️ No image URL for \(otherParticipantName) in conversation \(conversation.id ?? "unknown")")
-        }
-        
-        return imageURL
+        return conversation.otherParticipantImage(currentUserId: userId)
     }
     
+    // In ConversationRow, replace the unreadCount and hasUnread computed properties:
+
     private var unreadCount: Int {
         guard let userId = currentUserId else { return 0 }
-        return conversation.unreadCounts[userId] ?? 0
+        let count = conversation.unreadCounts[userId] ?? 0  // ADD THIS LINE
+        print("DEBUG: Conversation \(conversation.id ?? "unknown") - unreadCount for user \(userId): \(count)")
+        return count
     }
-    
+
     private var hasUnread: Bool {
-        unreadCount > 0
+        let result = unreadCount > 0  // ADD THIS LINE
+        print("DEBUG: hasUnread = \(result) for conversation \(conversation.id ?? "unknown")")
+        return result
     }
     
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar - Now using UserAvatar with initials fallback!
+            // Avatar
             UserAvatar(
                 imageURL: otherParticipantImage,
                 userName: otherParticipantName,
-                size: 56
+                size: 50
             )
             
-            // Content
+            // Conversation Info
             VStack(alignment: .leading, spacing: 4) {
+                // Name and Time
                 HStack {
                     Text(otherParticipantName)
-                        .font(.headline)
-                        .fontWeight(hasUnread ? .semibold : .regular)
-                        .lineLimit(1)
+                        .font(.subheadline)
+                        .fontWeight(hasUnread ? .semibold : .medium)
+                        .foregroundColor(.primary)
                     
                     Spacer()
                     
-                    // Time
-                    Text(conversation.lastMessageTimestamp.timeAgo())
+                    Text(formatTimestamp(conversation.lastMessageTimestamp))
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(hasUnread ? .primary : .secondary)  // ADDED - darker when unread
                 }
                 
+                // Last Message
                 HStack {
-                    // Last message preview
-                    if let lastMessage = conversation.lastMessage {
-                        Text(lastMessage)
-                            .font(.subheadline)
-                            .foregroundColor(hasUnread ? .primary : .secondary)
-                            .lineLimit(2)
-                    } else {
-                        Text("Start a conversation")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .italic()
-                    }
+                    Text(conversation.lastMessage ?? "No messages yet")
+                        .font(.caption)
+                        .fontWeight(hasUnread ? .semibold : .regular)  // CHANGED - bold when unread
+                        .foregroundColor(hasUnread ? .primary : .secondary)  // CHANGED - darker when unread
+                        .lineLimit(2)
                     
                     Spacer()
                     
-                    // Unread badge
+                    // Unread Badge
                     if hasUnread {
                         Text("\(unreadCount)")
-                            .font(.caption)
+                            .font(.caption2)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .frame(minWidth: 20, minHeight: 20)
                             .background(Color.blue)
-                            .clipShape(Capsule())
+                            .clipShape(Circle())
                     }
                 }
             }
         }
         .padding(.vertical, 8)
-        .padding(.horizontal)
-        .background(hasUnread ? Color.blue.opacity(0.05) : Color.clear)
-        .contentShape(Rectangle())
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(hasUnread ? Color.blue.opacity(0.05) : Color(.systemBackground))
+        )
     }
-}
-
-// MARK: - Date Extension for Time Ago
-extension Date {
-    func timeAgo() -> String {
-        let now = Date()
-        let components = Calendar.current.dateComponents([.year, .month, .weekOfYear, .day, .hour, .minute], from: self, to: now)
-        
-        if let years = components.year, years > 0 {
-            return "\(years)y"
-        } else if let months = components.month, months > 0 {
-            return "\(months)mo"
-        } else if let weeks = components.weekOfYear, weeks > 0 {
-            return "\(weeks)w"
-        } else if let days = components.day, days > 0 {
-            if days == 1 {
-                return "Yesterday"
-            } else {
-                return "\(days)d"
-            }
-        } else if let hours = components.hour, hours > 0 {
-            return "\(hours)h"
-        } else if let minutes = components.minute, minutes > 0 {
-            return "\(minutes)m"
-        } else {
-            return "Now"
-        }
-    }
-}
-
-
-
-
-// MARK: - New Message View (Placeholder)
-// Note: This is a placeholder - you should already have this view in your project
-struct NewMessageView: View {
-    @Environment(\.dismiss) var dismiss
-    @StateObject private var firebase = FirebaseService.shared
-    @State private var searchText = ""
-    @State private var selectedUser: User?
     
-    var body: some View {
-        NavigationView {
-            VStack {
-                // Search bar
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
-                    
-                    TextField("Search users...", text: $searchText)
-                        .textFieldStyle(PlainTextFieldStyle())
-                }
-                .padding(10)
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-                .padding()
-                
-                // Users list would go here
-                ScrollView {
-                    Text("User search functionality to be implemented")
-                        .foregroundColor(.secondary)
-                        .padding()
-                }
-                
-                Spacer()
-            }
-            .navigationTitle("New Message")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
+    private func formatTimestamp(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        if calendar.isDateInToday(date) {
+            let formatter = DateFormatter()
+            formatter.timeStyle = .short
+            return formatter.string(from: date)
+        } else if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        } else if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 7 {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: date)
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            return formatter.string(from: date)
         }
     }
 }
-
