@@ -7,18 +7,17 @@ import FirebaseFirestore
 struct HomeView: View {
     @StateObject private var firebase = FirebaseService.shared
     @StateObject private var viewModel = HomeViewModel()
-    @StateObject private var notificationsViewModel = NotificationsViewModel() // NEW
+    @StateObject private var notificationsViewModel = NotificationsViewModel()
     @State private var showingMessages = false
-    @State private var showingNotifications = false // NEW
-    @State private var showingCategories = false // NEW
-    @State private var showingCreatePost = false;
-    
+    @State private var showingNotifications = false
+    @State private var showingCategories = false
+    @State private var showingCreatePost = false
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Custom Navigation Bar - MODIFIED
+                    // Custom Navigation Bar
                     HStack {
                         Text("Hustler")
                             .font(.largeTitle)
@@ -33,7 +32,7 @@ struct HomeView: View {
                         
                         Spacer()
                         
-                        // Top-right buttons - NOTIFICATIONS AND MESSAGES ONLY
+                        // Top-right buttons
                         HStack(spacing: 12) {
                             // Notifications button with badge
                             Button(action: { showingNotifications = true }) {
@@ -42,7 +41,7 @@ struct HomeView: View {
                                         .font(.title2)
                                         .foregroundColor(.primary)
                                     
-                                    // Unread badge for notifications (ONLY BELL NOTIFICATIONS)
+                                    // Unread badge for BELL notifications only
                                     if notificationsViewModel.bellNotificationCount > 0 {
                                         Text("\(min(notificationsViewModel.bellNotificationCount, 99))")
                                             .font(.caption2)
@@ -64,26 +63,26 @@ struct HomeView: View {
                                         .font(.title2)
                                         .foregroundColor(.primary)
                                     
-                                    // Unread badge
-                                    if notificationsViewModel.messageNotificationCount > 0 {  // ← CORRECT VARIABLE
-                                                Text("\(min(notificationsViewModel.messageNotificationCount, 99))")
-                                                    .font(.caption2)
-                                                    .fontWeight(.bold)
-                                                    .foregroundColor(.white)
-                                                    .frame(minWidth: 16, minHeight: 16)
-                                                    .padding(.horizontal, notificationsViewModel.messageNotificationCount > 9 ? 4 : 0)
-                                                    .background(Color.blue)
-                                                    .clipShape(Capsule())
-                                                    .offset(x: 8, y: -8)
-                                            }
-                                        }
+                                    // Unread badge for MESSAGE notifications
+                                    if notificationsViewModel.messageNotificationCount > 0 {
+                                        Text("\(min(notificationsViewModel.messageNotificationCount, 99))")
+                                            .font(.caption2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                            .frame(minWidth: 16, minHeight: 16)
+                                            .padding(.horizontal, notificationsViewModel.messageNotificationCount > 9 ? 4 : 0)
+                                            .background(Color.blue)
+                                            .clipShape(Capsule())
+                                            .offset(x: 8, y: -8)
+                                    }
+                                }
                             }
                         }
                     }
                     .padding(.horizontal)
                     .padding(.top, 10)
                     
-                    // Search Bar with Categories button - MODIFIED
+                    // Search Bar with Categories button
                     HStack(spacing: 10) {
                         // Search field
                         HStack {
@@ -104,7 +103,7 @@ struct HomeView: View {
                         .background(Color(.systemGray6))
                         .cornerRadius(10)
                         
-                        // Categories button - NEW
+                        // Categories button
                         Button(action: { showingCategories = true }) {
                             HStack(spacing: 4) {
                                 Image(systemName: "square.grid.2x2")
@@ -121,7 +120,7 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 10)
                     
-                    // Content Section with Loading States - UNCHANGED
+                    // Content Section with Loading States
                     if viewModel.isLoading && viewModel.posts.isEmpty {
                         // INITIAL LOADING - Show skeletons
                         VStack(spacing: 15) {
@@ -221,35 +220,17 @@ struct HomeView: View {
             .refreshable {
                 await viewModel.refresh()
             }
-            .sheet(isPresented: $showingCategories) { // NEW
+            .sheet(isPresented: $showingCategories) {
                 CategoriesView()
             }
-            .fullScreenCover(isPresented: $showingNotifications) { // NEW
-                NavigationView {
-                    NotificationsView()
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Close") {
-                                    showingNotifications = false
-                                }
-                            }
-                        }
-                }
+            .fullScreenCover(isPresented: $showingNotifications) {
+                NotificationsView()  // REMOVED NavigationView wrapper
             }
             .fullScreenCover(isPresented: $showingMessages) {
-                NavigationView {
-                    ConversationsListView()
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Close") {
-                                    showingMessages = false
-                                }
-                            }
-                        }
-                }
+                ConversationsListView()  // REMOVED NavigationView wrapper
             }
             .sheet(isPresented: $showingCreatePost) {
-                NavigationView {
+                NavigationView {  // Keep this one as sheets often need the wrapper
                     ServiceFormView()
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
@@ -261,12 +242,10 @@ struct HomeView: View {
                 }
             }
             .onAppear {
-                
-                notificationsViewModel.startListening() // NEW
+                notificationsViewModel.startListening()
             }
             .onDisappear {
-                notificationsViewModel.stopListening() // NEW
-                //conversationsListener?.remove()
+                notificationsViewModel.stopListening()
             }
         }
     }
@@ -276,9 +255,7 @@ struct HomeView: View {
         viewModel.searchText
     }
     
-    
-    
-    // Service Post Card - UNCHANGED (keeping all your original code)
+    // MARK: - Service Post Card
     struct ServicePostCard: View {
         let post: ServicePost
         @StateObject private var firebase = FirebaseService.shared
@@ -312,10 +289,10 @@ struct HomeView: View {
                     // User info
                     HStack(spacing: 10) {
                         UserAvatar(
-                                imageURL: post.userProfileImage,
-                                userName: post.userName,
-                                size: 40
-                            )
+                            imageURL: post.userProfileImage,
+                            userName: post.userName,
+                            size: 40
+                        )
                         
                         VStack(alignment: .leading, spacing: 2) {
                             Text(post.userName ?? "User")
@@ -444,7 +421,7 @@ struct HomeView: View {
         }
     }
     
-    // Mini Service Card (Trending) - UNCHANGED
+    // MARK: - Mini Service Card (Trending)
     struct MiniServiceCard: View {
         let post: ServicePost
         
@@ -519,7 +496,7 @@ struct HomeView: View {
         }
     }
     
-    // MARK: - Categories View - FIXED
+    // MARK: - Categories View
     struct CategoriesView: View {
         @Environment(\.dismiss) var dismiss
         @State private var selectedCategory: ServiceCategory?
@@ -530,7 +507,6 @@ struct HomeView: View {
             GridItem(.flexible())
         ]
         
-        // Create a static array to avoid the ForEach binding issue
         let categories = ServiceCategory.allCases
         
         var body: some View {
@@ -577,7 +553,6 @@ struct HomeView: View {
             }
         }
         
-        // Helper function to get icon for category - FIXED to use actual categories
         private func getCategoryIcon(for category: ServiceCategory) -> String {
             switch category {
             case .cleaning: return "sparkles"
