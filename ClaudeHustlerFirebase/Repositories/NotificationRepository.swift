@@ -79,17 +79,34 @@ final class NotificationRepository {
         messageText: String,
         isNewConversation: Bool = false
     ) async {
+        print("📧 ATTEMPTING TO CREATE MESSAGE NOTIFICATION")
+        print("   For: \(userId)")
+        print("   From: \(fromUserId)")
+        print("   IsNew: \(isNewConversation)")
+        
         // Don't notify yourself
-        guard userId != fromUserId else { return }
+        guard userId != fromUserId else {
+            print("❌ Not creating notification - same user")
+            return
+        }
         
         // Get sender info
-        guard let fromUser = try? await UserRepository.shared.fetchById(fromUserId) else { return }
+        guard let fromUser = try? await UserRepository.shared.fetchById(fromUserId) else {
+            print("❌ Could not fetch sender user info")
+            return
+        }
         
         // Check user's notification settings
         let recipientUser = try? await UserRepository.shared.fetchById(userId)
         if let settings = recipientUser?.notificationSettings {
-            if isNewConversation && !settings.messageRequests { return }
-            if !isNewConversation && !settings.newMessages { return }
+            if isNewConversation && !settings.messageRequests {
+                print("❌ User has disabled message request notifications")
+                return
+            }
+            if !isNewConversation && !settings.newMessages {
+                print("❌ User has disabled new message notifications")
+                return
+            }
         }
         
         let notification = AppNotification(
@@ -109,21 +126,11 @@ final class NotificationRepository {
         
         do {
             try await createNotification(notification)
-            
-            // Send push notification if user has FCM token
-            if let fcmToken = recipientUser?.fcmToken {
-                await sendPushNotification(
-                    to: fcmToken,
-                    title: notification.title,
-                    body: notification.body,
-                    data: notification.data ?? [:]
-                )
-            }
+            print("✅ MESSAGE NOTIFICATION CREATED SUCCESSFULLY")
         } catch {
-            print("Error creating message notification: \(error)")
+            print("❌ Error creating message notification: \(error)")
         }
     }
-    
     // MARK: - Create Review Notification
     func createReviewNotification(
         for userId: String,
@@ -276,6 +283,10 @@ final class NotificationRepository {
     
     // MARK: - Core Notification Operations
     private func createNotification(_ notification: AppNotification) async throws {
+        print("📝 Creating notification in Firestore...")
+        print("   Type: \(notification.type.rawValue)")
+        print("   For user: \(notification.userId)")
+        
         let data: [String: Any] = [
             "userId": notification.userId,
             "type": notification.type.rawValue,
@@ -290,6 +301,7 @@ final class NotificationRepository {
         ]
         
         try await db.collection("notifications").addDocument(data: data)
+        print("✅ Notification saved to Firestore")
     }
     
     // MARK: - Fetch Notifications
@@ -373,27 +385,20 @@ final class NotificationRepository {
     }
     
     // MARK: - Real-time Listening
-    func listenToNotifications(
-        for userId: String? = nil,
-        completion: @escaping ([AppNotification]) -> Void
-    ) -> ListenerRegistration {
-        let targetUserId = userId ?? Auth.auth().currentUser?.uid
-        guard let targetUserId = targetUserId else {
+    // MARK: - Real-time Listener
+    func listenToNotifications(completion: @escaping ([AppNotification]) -> Void) -> ListenerRegistration? {
+        guard let userId = Auth.auth().currentUser?.uid else {
             completion([])
-            return db.collection("notifications").limit(to: 1).addSnapshotListener { _, _ in }
+            return nil
         }
         
-        // Remove existing listener
-        notificationListener?.remove()
-        
         let listener = db.collection("notifications")
-            .whereField("userId", isEqualTo: targetUserId)
-            .whereField("isRead", isEqualTo: false)
+            .whereField("userId", isEqualTo: userId)
             .order(by: "createdAt", descending: true)
-            .limit(to: 20)
+            .limit(to: 100)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
-                    print("Error listening to notifications: \(error)")
+                    print("❌ Error listening to notifications: \(error)")
                     completion([])
                     return
                 }
@@ -404,10 +409,12 @@ final class NotificationRepository {
                     return notification
                 } ?? []
                 
+                print("📬 Received \(notifications.count) notifications from listener")
+                print("   Unread messages: \(notifications.filter { !$0.isRead && ($0.type == .newMessage || $0.type == .messageRequest) }.count)")
+                
                 completion(notifications)
             }
         
-        notificationListener = listener
         return listener
     }
     

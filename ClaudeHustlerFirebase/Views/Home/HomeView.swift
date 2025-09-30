@@ -67,18 +67,18 @@ struct HomeView: View {
                                         .foregroundColor(.primary)
                                     
                                     // Unread badge
-                                    if unreadMessageCount > 0 {
-                                        Text("\(min(unreadMessageCount, 99))\(unreadMessageCount > 99 ? "+" : "")")
-                                            .font(.caption2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                            .frame(minWidth: 16, minHeight: 16)
-                                            .padding(.horizontal, unreadMessageCount > 9 ? 4 : 0)
-                                            .background(Color.blue)
-                                            .clipShape(Capsule())
-                                            .offset(x: 8, y: -8)
-                                    }
-                                }
+                                    if notificationsViewModel.messageNotificationCount > 0 {  // ← CORRECT VARIABLE
+                                                Text("\(min(notificationsViewModel.messageNotificationCount, 99))")
+                                                    .font(.caption2)
+                                                    .fontWeight(.bold)
+                                                    .foregroundColor(.white)
+                                                    .frame(minWidth: 16, minHeight: 16)
+                                                    .padding(.horizontal, notificationsViewModel.messageNotificationCount > 9 ? 4 : 0)
+                                                    .background(Color.blue)
+                                                    .clipShape(Capsule())
+                                                    .offset(x: 8, y: -8)
+                                            }
+                                        }
                             }
                         }
                     }

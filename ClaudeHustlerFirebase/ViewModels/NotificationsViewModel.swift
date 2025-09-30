@@ -80,7 +80,12 @@ final class NotificationsViewModel: ObservableObject {
                 self?.notifications = notifications
                 self?.unreadCount = notifications.filter { !$0.isRead }.count
                 
-                // Update app badge (if you have app delegate set up)
+                print("🔔 NotificationsViewModel updated:")
+                print("   Total: \(notifications.count)")
+                print("   Bell count: \(self?.bellNotificationCount ?? 0)")
+                print("   Message count: \(self?.messageNotificationCount ?? 0)")
+                
+                // Update app badge
                 await self?.updateAppBadge()
             }
         }
