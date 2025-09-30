@@ -143,6 +143,7 @@ final class NotificationsViewModel: ObservableObject {
     }
     
     // MARK: - Handle Notification Tap
+    // Update handleNotificationTap:
     func handleNotificationTap(_ notification: AppNotification) async -> NotificationAction? {
         // Mark as read
         await markAsRead(notification)
@@ -159,7 +160,7 @@ final class NotificationsViewModel: ObservableObject {
                 return .openReview(reviewId, notification.fromUserId)
             }
             
-        case .reelLike, .commentLike:
+        case .reelLike, .commentLike:  // UPDATED
             if let reelId = notification.data?["reelId"] {
                 return .openReel(reelId)
             }

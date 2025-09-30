@@ -8,9 +8,15 @@ struct NotificationsView: View {
     @StateObject private var viewModel = NotificationsViewModel()
     @State private var showingDeleteAlert = false
     @State private var notificationToDelete: AppNotification?
+    @State private var selectedReelId: String?
+    @State private var showingReel = false
+    @State private var selectedConversationId: String?
+    @State private var showingConversation = false
+    @State private var selectedUserId: String?
+    @State private var showingProfile = false
     @Environment(\.dismiss) var dismiss
     
-    // FILTER TO SHOW ONLY BELL NOTIFICATIONS (THIS IS THE KEY CHANGE)
+    // Filter to show only bell notifications
     private var filteredNotifications: [AppNotification] {
         viewModel.getBellNotifications()
     }
@@ -21,7 +27,7 @@ struct NotificationsView: View {
                 if viewModel.isLoading {
                     ProgressView("Loading notifications...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if filteredNotifications.isEmpty {  // USE FILTERED
+                } else if filteredNotifications.isEmpty {
                     emptyStateView
                 } else {
                     notificationsList
@@ -37,7 +43,7 @@ struct NotificationsView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if !filteredNotifications.isEmpty {  // USE FILTERED
+                    if !filteredNotifications.isEmpty {
                         Menu {
                             Button(action: {
                                 Task {
@@ -50,6 +56,36 @@ struct NotificationsView: View {
                             Image(systemName: "ellipsis.circle")
                         }
                     }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showingReel) {
+            if let reelId = selectedReelId {
+                ReelFullScreenPresenter(reelId: reelId)
+            }
+        }
+        .fullScreenCover(isPresented: $showingConversation) {
+            if let conversationId = selectedConversationId {
+                // Load conversation and open ChatView
+                NavigationView {
+                    if let conversation = loadConversation(conversationId) {
+                        ChatView(conversation: conversation)
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showingProfile) {  // ADD THIS FULLSCREENCOVER
+            if let userId = selectedUserId {
+                NavigationView {
+                    UserProfileView(userId: userId)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Close") {
+                                    showingProfile = false
+                                }
+                            }
+                        }
                 }
             }
         }
@@ -107,7 +143,7 @@ struct NotificationsView: View {
                                 }
                             }
                         )
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
                                 notificationToDelete = notification
                                 showingDeleteAlert = true
@@ -115,18 +151,8 @@ struct NotificationsView: View {
                                 Label("Delete", systemImage: "trash")
                             }
                         }
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            if !notification.isRead {
-                                Button {
-                                    Task {
-                                        await viewModel.markAsRead(notification)
-                                    }
-                                } label: {
-                                    Label("Mark as Read", systemImage: "checkmark.circle")
-                                }
-                                .tint(.blue)
-                            }
-                        }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowSeparator(.hidden)
                     }
                 }
             }
@@ -134,13 +160,10 @@ struct NotificationsView: View {
         .listStyle(PlainListStyle())
     }
     
-    // Group notifications by date - NOW USES FILTERED NOTIFICATIONS
     private func groupedNotifications() -> [(Date, [AppNotification])] {
-        let calendar = Calendar.current
         let grouped = Dictionary(grouping: filteredNotifications) { notification in
-            calendar.startOfDay(for: notification.createdAt)
+            Calendar.current.startOfDay(for: notification.createdAt)
         }
-        
         return grouped.sorted { $0.key > $1.key }
     }
     
@@ -158,11 +181,30 @@ struct NotificationsView: View {
     }
     
     private func handleNavigation(_ action: NotificationAction) {
-        dismiss()
-        
-        // Handle navigation based on action type
-        // This would typically be handled by a navigation coordinator
-        // For now, we'll dismiss and let the parent handle navigation
+        switch action {
+        case .openReel(let reelId):
+            selectedReelId = reelId
+            showingReel = true
+            
+        case .openConversation(let conversationId):
+            selectedConversationId = conversationId
+            showingConversation = true
+            
+        case .openReview(_, _):  // FIXED: Using underscores since we don't use these values
+            // Handle review navigation if needed
+            // For now, just dismiss
+            dismiss()
+            
+        case .openProfile(let userId):  // FIXED: Use the parameter from the case
+            selectedUserId = userId
+            showingProfile = true
+        }
+    }
+    
+    private func loadConversation(_ conversationId: String) -> Conversation? {
+        // This would need to be async in reality, but for now return nil
+        // You'd implement proper conversation loading here
+        return nil
     }
 }
 
@@ -198,10 +240,42 @@ struct NotificationRow: View {
                 
                 Spacer()
                 
-                // Type icon
-                Image(systemName: notification.type.icon)
-                    .font(.caption)
-                    .foregroundColor(iconColor)
+                // Thumbnail for reel notifications
+                if notification.type == .reelLike || notification.type == .commentLike {
+                    if let thumbnailURL = notification.data?["targetImage"],
+                       !thumbnailURL.isEmpty {
+                        AsyncImage(url: URL(string: thumbnailURL)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 50, height: 50)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } placeholder: {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 50, height: 50)
+                                .overlay(
+                                    Image(systemName: "play.rectangle.fill")
+                                        .foregroundColor(.gray)
+                                )
+                        }
+                    }
+                } else {
+                    // Type icon for non-reel notifications
+                    Image(systemName: notification.type.icon)
+                        .font(.caption)
+                        .foregroundColor(iconColor)
+                        .frame(width: 30, height: 30)
+                        .background(iconColor.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                
+                // Unread indicator
+                if !notification.isRead {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 8, height: 8)
+                }
             }
             .padding(.vertical, 8)
             .padding(.horizontal)
@@ -232,6 +306,9 @@ struct NotificationRow: View {
         case .helpfulVote:
             return "found your review helpful"
         case .reelLike:
+            if let reelTitle = notification.data?["targetTitle"], !reelTitle.isEmpty {
+                return "liked your reel: \(reelTitle)"
+            }
             return "liked your reel"
         case .commentLike:
             return "liked your comment"
@@ -267,5 +344,55 @@ struct NotificationRow: View {
 struct NotificationsView_Previews: PreviewProvider {
     static var previews: some View {
         NotificationsView()
+    }
+}
+// Add this struct at the bottom of NotificationsView.swift or in a separate file:
+
+struct ReelFullScreenPresenter: View {
+    let reelId: String
+    @StateObject private var viewModel = ReelsViewModel()
+    @State private var reel: Reel?
+    @State private var isLoading = true
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        Group {
+            if let reel = reel {
+                // Use the same viewer as the main app
+                VerticalReelScrollView(
+                    reels: [reel],
+                    initialIndex: 0,
+                    viewModel: viewModel
+                )
+            } else if isLoading {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                }
+            } else {
+                // Error state
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack {
+                        Text("Could not load reel")
+                            .foregroundColor(.white)
+                        Button("Close") {
+                            dismiss()
+                        }
+                        .foregroundColor(.white)
+                    }
+                }
+            }
+        }
+        .task {
+            do {
+                reel = try await ReelRepository.shared.fetchById(reelId)
+                isLoading = false
+            } catch {
+                print("Error loading reel: \(error)")
+                isLoading = false
+            }
+        }
     }
 }

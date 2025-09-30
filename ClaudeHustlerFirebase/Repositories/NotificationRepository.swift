@@ -213,6 +213,8 @@ final class NotificationRepository {
     }
     
     // MARK: - Create Reel Notification
+    // In NotificationRepository.swift, update the createReelNotification method:
+
     func createReelNotification(
         for userId: String,
         reelId: String,
@@ -224,6 +226,11 @@ final class NotificationRepository {
         
         // Get sender info
         guard let fromUser = try? await UserRepository.shared.fetchById(fromUserId) else { return }
+        
+        // Get reel info for better notification
+        let reelDoc = try? await db.collection("reels").document(reelId).getDocument()
+        let reelTitle = reelDoc?.data()?["title"] as? String ?? "your reel"
+        let reelThumbnail = reelDoc?.data()?["thumbnailURL"] as? String
         
         // Check user's notification settings
         let recipientUser = try? await UserRepository.shared.fetchById(userId)
@@ -243,8 +250,8 @@ final class NotificationRepository {
         
         switch type {
         case .reelLike:
-            title = "Reel Liked"
-            body = "\(fromUser.name) liked your reel"
+            title = "New Like"
+            body = "\(fromUser.name) liked \(reelTitle)"
         case .commentLike:
             title = "Comment Liked"
             body = "\(fromUser.name) liked your comment"
@@ -252,6 +259,7 @@ final class NotificationRepository {
             return
         }
         
+        // Include targetId for navigation
         let notification = AppNotification(
             userId: userId,
             type: type,
@@ -260,7 +268,12 @@ final class NotificationRepository {
             fromUserProfileImage: fromUser.profileImageURL,
             title: title,
             body: body,
-            data: ["reelId": reelId],
+            data: [
+                "reelId": reelId,
+                "targetId": reelId,  // For navigation
+                "targetTitle": reelTitle,
+                "targetImage": reelThumbnail ?? ""
+            ],
             isRead: false
         )
         

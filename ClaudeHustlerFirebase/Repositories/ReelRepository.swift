@@ -202,6 +202,8 @@ final class ReelRepository: RepositoryProtocol {
     
     // MARK: - Engagement Methods WITH NOTIFICATIONS
     
+    // In ReelRepository.swift, replace the commented notification section with:
+
     func likeReel(_ reelId: String) async throws {
         guard let userId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
@@ -232,10 +234,7 @@ final class ReelRepository: RepositoryProtocol {
         
         try await batch.commit()
         
-        // CREATE NOTIFICATION for reel owner
-        // NOTE: This will only work if you've updated NotificationRepository with the reelLike type
-        // For now, commenting out to avoid compilation error
-        /*
+        // CREATE NOTIFICATION for reel owner - FIXED
         if userId != reelOwnerId {
             await notificationRepository.createReelNotification(
                 for: reelOwnerId,
@@ -244,7 +243,6 @@ final class ReelRepository: RepositoryProtocol {
                 fromUserId: userId
             )
         }
-        */
         
         // Clear cache for this reel
         cache.remove(for: "reel_\(reelId)")
