@@ -9,11 +9,16 @@ struct NotificationsView: View {
     @State private var showingDeleteAlert = false
     @State private var notificationToDelete: AppNotification?
     @State private var selectedReelId: String?
+    @State private var selectedCommentId: String?
     @State private var showingReel = false
+    @State private var showingReelWithComment = false
     @State private var selectedConversationId: String?
     @State private var showingConversation = false
     @State private var selectedUserId: String?
     @State private var showingProfile = false
+    @State private var selectedReviewId: String?  // ADDED
+    @State private var selectedReviewUserId: String?  // ADDED
+    @State private var showingReview = false  // ADDED
     @Environment(\.dismiss) var dismiss
     
     // Filter to show only bell notifications
@@ -64,9 +69,16 @@ struct NotificationsView: View {
                 ReelFullScreenPresenter(reelId: reelId)
             }
         }
+        .fullScreenCover(isPresented: $showingReelWithComment) {
+            if let reelId = selectedReelId {
+                ReelWithCommentPresenter(
+                    reelId: reelId,
+                    commentId: selectedCommentId
+                )
+            }
+        }
         .fullScreenCover(isPresented: $showingConversation) {
             if let conversationId = selectedConversationId {
-                // Load conversation and open ChatView
                 NavigationView {
                     if let conversation = loadConversation(conversationId) {
                         ChatView(conversation: conversation)
@@ -74,7 +86,7 @@ struct NotificationsView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showingProfile) {  // ADD THIS FULLSCREENCOVER
+        .fullScreenCover(isPresented: $showingProfile) {
             if let userId = selectedUserId {
                 NavigationView {
                     UserProfileView(userId: userId)
@@ -86,6 +98,24 @@ struct NotificationsView: View {
                                 }
                             }
                         }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showingReview) {  // ADDED
+            if let userId = selectedReviewUserId {
+                NavigationView {
+                    EnhancedProfileView(
+                        userId: userId,
+                        highlightReviewId: selectedReviewId  // Pass the review ID to highlight
+                    )
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Close") {
+                                showingReview = false
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -180,22 +210,29 @@ struct NotificationsView: View {
         }
     }
     
+    // UPDATED handleNavigation
     private func handleNavigation(_ action: NotificationAction) {
         switch action {
         case .openReel(let reelId):
             selectedReelId = reelId
+            selectedCommentId = nil
             showingReel = true
+            
+        case .openReelComment(let reelId, let commentId):
+            selectedReelId = reelId
+            selectedCommentId = commentId
+            showingReelWithComment = true
             
         case .openConversation(let conversationId):
             selectedConversationId = conversationId
             showingConversation = true
             
-        case .openReview(_, _):  // FIXED: Using underscores since we don't use these values
-            // Handle review navigation if needed
-            // For now, just dismiss
-            dismiss()
+        case .openReview(let reviewId, let userId):  // UPDATED
+            selectedReviewId = reviewId
+            selectedReviewUserId = userId
+            showingReview = true
             
-        case .openProfile(let userId):  // FIXED: Use the parameter from the case
+        case .openProfile(let userId):
             selectedUserId = userId
             showingProfile = true
         }
@@ -241,7 +278,10 @@ struct NotificationRow: View {
                 Spacer()
                 
                 // Thumbnail for reel notifications
-                if notification.type == .reelLike || notification.type == .commentLike || notification.type == .commentReply {
+                if notification.type == .reelLike ||
+                   notification.type == .reelComment ||
+                   notification.type == .commentLike ||
+                   notification.type == .commentReply {
                     if let thumbnailURL = notification.data?["targetImage"],
                        !thumbnailURL.isEmpty {
                         AsyncImage(url: URL(string: thumbnailURL)) { image in
@@ -310,9 +350,11 @@ struct NotificationRow: View {
                 return "liked your reel: \(reelTitle)"
             }
             return "liked your reel"
+        case .reelComment:
+            return "commented on your reel"
         case .commentLike:
             return "liked your comment"
-        case .commentReply:  // ← ADD THIS CASE
+        case .commentReply:
             return "replied to your comment"
         case .newMessage, .messageRequest:
             // These won't appear here because they're filtered out
@@ -328,7 +370,7 @@ struct NotificationRow: View {
             return .green
         case .reelLike:
             return .red
-        case .commentLike, .commentReply:  // ← UPDATE THIS LINE
+        case .reelComment, .commentLike, .commentReply:
             return .blue
         case .newMessage, .messageRequest:
             return .blue
@@ -348,8 +390,8 @@ struct NotificationsView_Previews: PreviewProvider {
         NotificationsView()
     }
 }
-// Add this struct at the bottom of NotificationsView.swift or in a separate file:
 
+// MARK: - ReelFullScreenPresenter
 struct ReelFullScreenPresenter: View {
     let reelId: String
     @StateObject private var viewModel = ReelsViewModel()
@@ -374,6 +416,90 @@ struct ReelFullScreenPresenter: View {
                 }
             } else {
                 // Error state
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack {
+                        Text("Could not load reel")
+                            .foregroundColor(.white)
+                        Button("Close") {
+                            dismiss()
+                        }
+                        .foregroundColor(.white)
+                    }
+                }
+            }
+        }
+        .task {
+            do {
+                reel = try await ReelRepository.shared.fetchById(reelId)
+                isLoading = false
+            } catch {
+                print("Error loading reel: \(error)")
+                isLoading = false
+            }
+        }
+    }
+}
+
+// MARK: - ReelWithCommentPresenter
+struct ReelWithCommentPresenter: View {
+    let reelId: String
+    let commentId: String?
+    
+    @State private var reel: Reel?
+    @State private var isLoading = true
+    @State private var showComments = false
+    @Environment(\.dismiss) var dismiss
+    @StateObject private var viewModel = ReelsViewModel()
+    
+    var body: some View {
+        Group {
+            if let reel = reel {
+                ZStack {
+                    VerticalReelScrollView(
+                        reels: [reel],
+                        initialIndex: 0,
+                        viewModel: viewModel
+                    )
+                    
+                    VStack {
+                        HStack {
+                            Button(action: { dismiss() }) {
+                                Image(systemName: "xmark")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            }
+                            .padding()
+                            
+                            Spacer()
+                        }
+                        
+                        Spacer()
+                    }
+                }
+                .onAppear {
+                    // Auto-open comments after a brief delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        showComments = true
+                    }
+                }
+                .sheet(isPresented: $showComments) {
+                    CommentsViewWithHighlight(
+                        reelId: reelId,
+                        reelOwnerId: reel.userId,
+                        highlightCommentId: commentId
+                    )
+                }
+            } else if isLoading {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                }
+            } else {
                 ZStack {
                     Color.black.ignoresSafeArea()
                     VStack {

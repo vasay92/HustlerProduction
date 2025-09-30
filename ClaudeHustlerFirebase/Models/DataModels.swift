@@ -30,16 +30,18 @@ struct User: Codable, Identifiable {
 }
 
 // MARK: - Notification Settings
+// In User model (DataModels.swift)
 struct NotificationSettings: Codable {
+    var newMessages: Bool = true
+    var messageRequests: Bool = true
     var newReviews: Bool = true
     var reviewReplies: Bool = true
     var reviewEdits: Bool = true
     var helpfulVotes: Bool = true
-    var newMessages: Bool = true      // ADD THIS
-    var messageRequests: Bool = true  // ADD THIS
-    var reelLikes: Bool = true      // ADD THIS
-    var commentLikes: Bool = true   // ADD THIS
-    var commentReplies: Bool = true  // ← ADD THIS
+    var reelLikes: Bool = true
+    var reelComments: Bool = true  // ADDED
+    var commentLikes: Bool = true
+    var commentReplies: Bool = true
 }
 
 struct PortfolioMedia: Codable, Equatable {

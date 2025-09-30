@@ -19,8 +19,7 @@ final class CommentRepository {
     
     private init() {}
     
-    // MARK: - Create Comment
-    
+    // MARK: - Create Comment (UPDATED)
     func postComment(on reelId: String, text: String, parentCommentId: String? = nil) async throws -> Comment {
         guard let userId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "CommentRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
@@ -40,9 +39,15 @@ final class CommentRepository {
         )
         
         let docRef = try await db.collection("comments").addDocument(from: comment)
+        let newCommentId = docRef.documentID
         
-        // If this is a reply, update parent comment and create notification
+        // Get reel owner info
+        let reelDoc = try await db.collection("reels").document(reelId).getDocument()
+        let reelOwnerId = reelDoc.data()?["userId"] as? String ?? ""
+        
         if let parentId = parentCommentId {
+            // This is a REPLY to an existing comment
+            
             // Get parent comment to find its owner
             let parentDoc = try await db.collection("comments").document(parentId).getDocument()
             if let parentData = parentDoc.data(),
@@ -58,7 +63,23 @@ final class CommentRepository {
                     for: parentUserId,
                     reelId: reelId,
                     type: .commentReply,
-                    fromUserId: userId
+                    fromUserId: userId,
+                    commentId: parentId,  // Pass parent comment ID for navigation
+                    commentText: text
+                )
+            }
+        } else {
+            // This is a NEW TOP-LEVEL COMMENT on the reel
+            
+            // CREATE NOTIFICATION for reel owner (ADDED)
+            if reelOwnerId != userId {  // Don't notify if commenting on own reel
+                await notificationRepository.createReelNotification(
+                    for: reelOwnerId,
+                    reelId: reelId,
+                    type: .reelComment,  // Use the new notification type
+                    fromUserId: userId,
+                    commentId: newCommentId,  // Pass the new comment ID for navigation
+                    commentText: text
                 )
             }
         }
@@ -69,13 +90,12 @@ final class CommentRepository {
         ])
         
         var newComment = comment
-        newComment.id = docRef.documentID
+        newComment.id = newCommentId
         
         return newComment
     }
     
     // MARK: - Delete Comment
-    
     func deleteComment(_ commentId: String, reelId: String) async throws {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         
@@ -112,7 +132,6 @@ final class CommentRepository {
     }
     
     // MARK: - Like/Unlike Comment WITH NOTIFICATIONS
-    
     func likeComment(_ commentId: String) async throws {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         
@@ -132,7 +151,8 @@ final class CommentRepository {
             for: commentOwnerId,
             reelId: reelId,
             type: .commentLike,
-            fromUserId: userId
+            fromUserId: userId,
+            commentId: commentId  // Pass the liked comment ID
         )
     }
     
@@ -145,7 +165,6 @@ final class CommentRepository {
     }
     
     // MARK: - Fetch Comments
-    
     func fetchComments(for reelId: String, limit: Int = 100) async throws -> [Comment] {
         let snapshot = try await db.collection("comments")
             .whereField("reelId", isEqualTo: reelId)
@@ -176,7 +195,6 @@ final class CommentRepository {
     }
     
     // MARK: - Real-time Listening
-    
     func listenToComments(for reelId: String, completion: @escaping ([Comment]) -> Void) -> ListenerRegistration {
         // Remove existing listener
         commentListeners[reelId]?.remove()
@@ -216,8 +234,7 @@ final class CommentRepository {
         commentListeners.removeAll()
     }
     
-    // MARK: - Protocol Compliance Methods (for CommentsView compatibility)
-    
+    // MARK: - Protocol Compliance Methods
     func create(_ comment: Comment) async throws {
         _ = try await postComment(
             on: comment.reelId,

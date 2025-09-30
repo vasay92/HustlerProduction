@@ -28,8 +28,9 @@ struct AppNotification: Codable, Identifiable {
         
         // Reel notifications
         case reelLike = "reel_like"
+        case reelComment = "reel_comment"  // ADDED - for new comments on reels
         case commentLike = "comment_like"
-        case commentReply = "comment_reply"  // ← ADD THIS
+        case commentReply = "comment_reply"
         
         // Message notifications
         case newMessage = "new_message"
@@ -45,14 +46,14 @@ struct AppNotification: Codable, Identifiable {
                 return "message.fill"
             case .reelLike:
                 return "heart.fill"
-            case .commentLike, .commentReply:  // ← UPDATE THIS
+            case .reelComment, .commentLike, .commentReply:  // UPDATED
                 return "bubble.left.fill"
             }
         }
         
         var isBellNotification: Bool {
             switch self {
-            case .newReview, .helpfulVote, .reelLike, .commentLike, .commentReply:  // ← UPDATE THIS
+            case .newReview, .helpfulVote, .reelLike, .reelComment, .commentLike, .commentReply:  // UPDATED
                 return true
             case .reviewReply, .reviewEdit, .newMessage, .messageRequest:
                 return false
@@ -132,6 +133,7 @@ final class NotificationRepository {
             print("❌ Error creating message notification: \(error)")
         }
     }
+    
     // MARK: - Create Review Notification
     func createReviewNotification(
         for userId: String,
@@ -213,14 +215,14 @@ final class NotificationRepository {
         }
     }
     
-    // MARK: - Create Reel Notification
-    // In NotificationRepository.swift, update the createReelNotification method:
-
+    // MARK: - Create Reel Notification (UPDATED)
     func createReelNotification(
         for userId: String,
         reelId: String,
         type: AppNotification.NotificationType,
-        fromUserId: String
+        fromUserId: String,
+        commentId: String? = nil,
+        commentText: String? = nil  // ADDED for showing comment preview
     ) async {
         // Don't notify yourself
         guard userId != fromUserId else { return }
@@ -239,9 +241,11 @@ final class NotificationRepository {
             switch type {
             case .reelLike:
                 if !(settings.reelLikes ?? true) { return }
+            case .reelComment:  // ADDED
+                if !(settings.reelComments ?? true) { return }
             case .commentLike:
                 if !(settings.commentLikes ?? true) { return }
-            case .commentReply:  // ← ADD THIS
+            case .commentReply:
                 if !(settings.commentReplies ?? true) { return }
             default:
                 break
@@ -255,17 +259,33 @@ final class NotificationRepository {
         case .reelLike:
             title = "New Like"
             body = "\(fromUser.name) liked \(reelTitle)"
+        case .reelComment:  // ADDED
+            title = "New Comment"
+            let commentPreview = commentText?.prefix(50) ?? ""
+            body = "\(fromUser.name) commented: \(commentPreview)"
         case .commentLike:
             title = "Comment Liked"
             body = "\(fromUser.name) liked your comment"
-        case .commentReply:  // ← ADD THIS
+        case .commentReply:
             title = "New Reply"
             body = "\(fromUser.name) replied to your comment"
         default:
             return
         }
         
-        // Include targetId for navigation
+        // Build notification data
+        var notificationData = [
+            "reelId": reelId,
+            "targetId": reelId,
+            "targetTitle": reelTitle,
+            "targetImage": reelThumbnail ?? ""
+        ]
+        
+        // Add commentId if provided
+        if let commentId = commentId {
+            notificationData["commentId"] = commentId
+        }
+        
         let notification = AppNotification(
             userId: userId,
             type: type,
@@ -274,12 +294,7 @@ final class NotificationRepository {
             fromUserProfileImage: fromUser.profileImageURL,
             title: title,
             body: body,
-            data: [
-                "reelId": reelId,
-                "targetId": reelId,  // For navigation
-                "targetTitle": reelTitle,
-                "targetImage": reelThumbnail ?? ""
-            ],
+            data: notificationData,
             isRead: false
         )
         
@@ -298,7 +313,7 @@ final class NotificationRepository {
         } catch {
             print("Error creating reel notification: \(error)")
         }
-}
+    }
     
     // MARK: - Core Notification Operations
     private func createNotification(_ notification: AppNotification) async throws {
@@ -403,7 +418,6 @@ final class NotificationRepository {
         }
     }
     
-    // MARK: - Real-time Listening
     // MARK: - Real-time Listener
     func listenToNotifications(completion: @escaping ([AppNotification]) -> Void) -> ListenerRegistration? {
         guard let userId = Auth.auth().currentUser?.uid else {

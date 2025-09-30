@@ -7,6 +7,7 @@ import FirebaseFirestore
 
 struct EnhancedProfileView: View {
     let userId: String
+    let highlightReviewId: String?  // ADDED - optional parameter for highlighting reviews
     
     @StateObject private var viewModel: ProfileViewModel
     @StateObject private var firebase = FirebaseService.shared
@@ -23,10 +24,12 @@ struct EnhancedProfileView: View {
     @State private var selectedStarFilter: Int? = nil
     @State private var showAllReviews = false
     @State private var showingReviewForm = false
+    @State private var hasScrolledToReview = false  // ADDED
     
-    
-    init(userId: String) {
+    // UPDATED init to accept optional highlightReviewId
+    init(userId: String, highlightReviewId: String? = nil) {
         self.userId = userId
+        self.highlightReviewId = highlightReviewId
         self._viewModel = StateObject(wrappedValue: ProfileViewModel(userId: userId))
     }
     
@@ -36,25 +39,38 @@ struct EnhancedProfileView: View {
                 Color(.systemBackground)
                     .ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: 20) {
-                        headerSection
-                        statsSection
-                        actionButtons
-                        
-                        // Tab selection - REORDERED: Portfolio, Services, Saved (if own), Reviews
-                        Picker("Profile Section", selection: $selectedTab) {
-                            Text("Portfolio").tag(0)
-                            Text("Services").tag(1)
-                            if viewModel.isOwnProfile {
-                                Text("Saved").tag(2)
+                ScrollViewReader { scrollProxy in  // ADDED - wrap in ScrollViewReader
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            headerSection
+                            statsSection
+                            actionButtons
+                            
+                            // Tab selection - REORDERED: Portfolio, Services, Saved (if own), Reviews
+                            Picker("Profile Section", selection: $selectedTab) {
+                                Text("Portfolio").tag(0)
+                                Text("Services").tag(1)
+                                if viewModel.isOwnProfile {
+                                    Text("Saved").tag(2)
+                                }
+                                Text("Reviews").tag(viewModel.isOwnProfile ? 3 : 2)
                             }
-                            Text("Reviews").tag(viewModel.isOwnProfile ? 3 : 2)
+                            .pickerStyle(SegmentedPickerStyle())
+                            .padding(.horizontal)
+                            
+                            tabContent(scrollProxy: scrollProxy)  // ADDED parameter
                         }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .padding(.horizontal)
-                        
-                        tabContent
+                    }
+                    .onAppear {
+                        // ADDED - Scroll to review after delay
+                        if let reviewId = highlightReviewId, !hasScrolledToReview {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    scrollProxy.scrollTo(reviewId, anchor: .center)
+                                }
+                                hasScrolledToReview = true
+                            }
+                        }
                     }
                 }
                 
@@ -84,6 +100,12 @@ struct EnhancedProfileView: View {
             .onAppear {
                 Task {
                     await viewModel.loadProfileData()
+                    
+                    // ADDED - Auto-switch to Reviews tab if highlighting
+                    if highlightReviewId != nil {
+                        selectedTab = viewModel.isOwnProfile ? 3 : 2
+                        showAllReviews = true  // Show all reviews to ensure the highlighted one is visible
+                    }
                 }
             }
             .refreshable {
@@ -105,7 +127,6 @@ struct EnhancedProfileView: View {
                 CreatePortfolioCardView()
                     .onDisappear {
                         Task { await viewModel.loadPortfolioCards() }
-                   
                     }
             }
             .sheet(isPresented: $showingReviewForm) {
@@ -181,6 +202,9 @@ struct EnhancedProfileView: View {
                                 .font(.caption)
                                 .foregroundColor(.yellow)
                         }
+                        Text(String(format: "%.1f", rating))
+                            .font(.caption)
+                            .fontWeight(.medium)
                         Text("(\(reviewCount))")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -192,20 +216,8 @@ struct EnhancedProfileView: View {
     
     @ViewBuilder
     private var statsSection: some View {
-        HStack(spacing: 30) {
-            // Posts - Clickable to navigate to Services tab
-            Button(action: { selectedTab = 1 }) {
-                VStack {
-                    Text("\(viewModel.userPosts.count)")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    Text("Posts")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // Followers
+        HStack(spacing: 20) {
+            // Followers - Clickable
             Button(action: { showingFollowers = true }) {
                 VStack {
                     Text("\(viewModel.user?.followers.count ?? 0)")
@@ -217,7 +229,7 @@ struct EnhancedProfileView: View {
                 }
             }
             
-            // Following
+            // Following - Clickable
             Button(action: { showingFollowing = true }) {
                 VStack {
                     Text("\(viewModel.user?.following.count ?? 0)")
@@ -280,15 +292,14 @@ struct EnhancedProfileView: View {
                         .foregroundColor(.primary)
                         .cornerRadius(8)
                 }
-                
-                // Removed the star review button - reviews are now accessed via the Reviews tab
             }
         }
         .padding(.horizontal)
     }
     
+    // UPDATED - Added scrollProxy parameter
     @ViewBuilder
-    private var tabContent: some View {
+    private func tabContent(scrollProxy: ScrollViewProxy) -> some View {
         switch selectedTab {
         case 0:
             // Portfolio Tab - First tab now
@@ -345,214 +356,194 @@ struct EnhancedProfileView: View {
                     savedReels: viewModel.savedReels
                 )
             } else {
-                LazyVStack(spacing: 12) {
-                    ForEach(viewModel.reviews) { review in
-                        ReviewCard(review: review, isProfileOwner: viewModel.isOwnProfile)
-                    }
-                }
-                .padding()
-                if firebase.currentUser != nil {
-                                Button(action: { showingReviewForm = true }) {
-                                    Label("Write a Review", systemImage: "pencil")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 12)
-                                        .background(Color.blue)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(10)
-                                }
-                                .padding(.horizontal)
-                                .padding(.bottom)
-                            }
-                        }
-            
+                // Reviews Tab for other profiles
+                reviewsSection(scrollProxy: scrollProxy)
+            }
             
         case 3:
-            // Reviews Tab
-            VStack(spacing: 16) {
-                // Star filter buttons
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        // All button
-                        Button(action: {
-                            selectedStarFilter = nil
-                            showAllReviews = false
-                        }) {
-                            Text("All (\(viewModel.reviews.count))")
-                                .font(.subheadline)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(selectedStarFilter == nil ? Color.blue : Color(.systemGray5))
-                                .foregroundColor(selectedStarFilter == nil ? .white : .primary)
-                                .cornerRadius(20)
-                        }
-                        
-                        // 5-1 star buttons
-                        ForEach((1...5).reversed(), id: \.self) { rating in
-                            let count = viewModel.reviews.filter { $0.rating == rating }.count
-                            if count > 0 {
-                                Button(action: {
-                                    selectedStarFilter = rating
-                                    showAllReviews = false
-                                }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "star.fill")
-                                            .font(.caption)
-                                        Text("\(rating) (\(count))")
-                                    }
-                                    .font(.subheadline)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(selectedStarFilter == rating ? Color.blue : Color(.systemGray5))
-                                    .foregroundColor(selectedStarFilter == rating ? .white : .primary)
-                                    .cornerRadius(20)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                
-                // Filtered reviews
-                let filteredReviews = selectedStarFilter == nil ?
-                    viewModel.reviews :
-                    viewModel.reviews.filter { $0.rating == selectedStarFilter }
-                
-                let displayedReviews = showAllReviews ?
-                    filteredReviews :
-                    Array(filteredReviews.prefix(2))
-                
-                if filteredReviews.isEmpty {
-                    EmptyStateView(
-                        icon: "star",
-                        title: "No Reviews",
-                        message: selectedStarFilter != nil ?
-                            "No \(selectedStarFilter!) star reviews" :
-                            "No reviews yet"
-                    )
-                    .padding(.top, 40)
-                } else {
-                    LazyVStack(spacing: 12) {
-                        ForEach(displayedReviews) { review in
-                            ReviewCard(review: review, isProfileOwner: viewModel.isOwnProfile)
-                        }
-                        
-                        // Show more/less button
-                        if filteredReviews.count > 2 {
-                            Button(action: { showAllReviews.toggle() }) {
-                                Text(showAllReviews ?
-                                    "Show less" :
-                                    "Show \(filteredReviews.count - 2) more reviews")
-                                    .font(.subheadline)
-                                    .foregroundColor(.blue)
-                            }
-                            .padding(.vertical, 8)
-                        }
-                    }
-                    .padding()
-                }
-                
-                // Write Review button (only for non-owners)
-//                if !viewModel.isOwnProfile && firebase.currentUser != nil {
-//                    Button(action: { showingReviewForm = true }) {
-//                        Label("Write a Review", systemImage: "pencil")
-//                            .font(.subheadline)
-//                            .fontWeight(.semibold)
-//                            .frame(maxWidth: .infinity)
-//                            .padding(.vertical, 12)
-//                            .background(Color.blue)
-//                            .foregroundColor(.white)
-//                            .cornerRadius(10)
-//                    }
-//                    .padding(.horizontal)
-//                    .padding(.bottom)
-//                }
-                
-            }
+            // Reviews Tab for own profile
+            reviewsSection(scrollProxy: scrollProxy)
             
         default:
             EmptyView()
         }
     }
+    
+    // ADDED - Separate reviews section with scroll proxy
+    @ViewBuilder
+    private func reviewsSection(scrollProxy: ScrollViewProxy) -> some View {
+        VStack(spacing: 16) {
+            // Star filter buttons
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    // All button
+                    Button(action: {
+                        selectedStarFilter = nil
+                        showAllReviews = false
+                    }) {
+                        Text("All (\(viewModel.reviews.count))")
+                            .font(.subheadline)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(selectedStarFilter == nil ? Color.blue : Color(.systemGray5))
+                            .foregroundColor(selectedStarFilter == nil ? .white : .primary)
+                            .cornerRadius(20)
+                    }
+                    
+                    // 5-1 star buttons
+                    ForEach((1...5).reversed(), id: \.self) { rating in
+                        let count = viewModel.reviews.filter { $0.rating == rating }.count
+                        if count > 0 {
+                            Button(action: {
+                                selectedStarFilter = rating
+                                showAllReviews = false
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "star.fill")
+                                        .font(.caption)
+                                    Text("\(rating) (\(count))")
+                                }
+                                .font(.subheadline)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(selectedStarFilter == rating ? Color.blue : Color(.systemGray5))
+                                .foregroundColor(selectedStarFilter == rating ? .white : .primary)
+                                .cornerRadius(20)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+            
+            // Filtered reviews
+            let filteredReviews = selectedStarFilter == nil ?
+                viewModel.reviews :
+                viewModel.reviews.filter { $0.rating == selectedStarFilter }
+            
+            let displayedReviews = showAllReviews ?
+                filteredReviews :
+                Array(filteredReviews.prefix(2))
+            
+            if filteredReviews.isEmpty {
+                EmptyStateView(
+                    icon: "star",
+                    title: "No Reviews",
+                    message: selectedStarFilter != nil ?
+                        "No \(selectedStarFilter!) star reviews" :
+                        "No reviews yet"
+                )
+                .padding(.top, 40)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(displayedReviews) { review in
+                        ReviewCardWithHighlight(
+                            review: review,
+                            isProfileOwner: viewModel.isOwnProfile,
+                            isHighlighted: review.id == highlightReviewId  // ADDED
+                        )
+                        .id(review.id)  // ADDED - for ScrollViewReader
+                    }
+                    
+                    // Show more/less button
+                    if filteredReviews.count > 2 {
+                        Button(action: { showAllReviews.toggle() }) {
+                            Text(showAllReviews ? "Show Less" : "Show More (\(filteredReviews.count - 2) more)")
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                                .padding(.vertical, 8)
+                        }
+                    }
+                }
+                .padding()
+                
+                if firebase.currentUser != nil && !viewModel.isOwnProfile {
+                    Button(action: { showingReviewForm = true }) {
+                        Label("Write a Review", systemImage: "pencil")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom)
+                }
+            }
+        }
+    }
 }
 
-// MARK: - Supporting Views
-
+// MARK: - User Post Card
 struct UserPostCard: View {
     let post: ServicePost
     
     var body: some View {
         HStack(spacing: 12) {
-            // Image or placeholder
-            if !post.imageURLs.isEmpty, let firstImageURL = post.imageURLs.first {
-                AsyncImage(url: URL(string: firstImageURL)) { image in
+            // Thumbnail
+            if let firstImage = post.imageURLs.first {
+                AsyncImage(url: URL(string: firstImage)) { image in
                     image
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 80, height: 80)
+                        .frame(width: 60, height: 60)
                         .clipped()
-                        .cornerRadius(10)
+                        .cornerRadius(8)
                 } placeholder: {
                     Rectangle()
-                        .fill(Color(.systemGray5))
-                        .frame(width: 80, height: 80)
-                        .cornerRadius(10)
-                        .overlay(ProgressView())
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                        .overlay(
+                            Image(systemName: post.isRequest ? "magnifyingglass" : "briefcase")
+                                .foregroundColor(.gray)
+                        )
                 }
             } else {
                 Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: post.isRequest ?
-                                [Color.purple.opacity(0.3), Color.blue.opacity(0.3)] :
-                                [Color.green.opacity(0.3), Color.blue.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-                    .cornerRadius(10)
+                    .fill(post.isRequest ? Color.orange.opacity(0.1) : Color.blue.opacity(0.1))
+                    .frame(width: 60, height: 60)
+                    .cornerRadius(8)
                     .overlay(
-                        Image(systemName: post.isRequest ? "magnifyingglass" : "briefcase.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
+                        Image(systemName: post.isRequest ? "magnifyingglass" : "briefcase")
+                            .foregroundColor(post.isRequest ? .orange : .blue)
                     )
             }
             
-            // Post details
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(post.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                
+                Text(post.description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                
                 HStack {
-                    Text(post.isRequest ? "Looking for:" : "Offering:")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(post.isRequest ? .purple : .green)
+                    if let price = post.price {
+                        Text(post.isRequest ? "Budget: $\(Int(price))" : "$\(Int(price))")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(post.isRequest ? .orange : .blue)
+                    }
                     
                     Spacer()
                     
-                    Text(post.updatedAt, style: .relative)
+                    Text(post.createdAt, style: .relative)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                
-                Text(post.title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .lineLimit(2)
-                
-                if let price = post.price {
-                    Text("$\(price, specifier: "%.0f")")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.blue)
-                } else {
-                    Text("Price negotiable")
-                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
             
             Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
         .padding()
         .background(Color(.systemGray6))
@@ -560,7 +551,42 @@ struct UserPostCard: View {
     }
 }
 
-// MARK: - SavedItemsView with Posts and Reels tabs
+// ADDED - Review Card with Highlight wrapper
+struct ReviewCardWithHighlight: View {
+    let review: Review
+    let isProfileOwner: Bool
+    let isHighlighted: Bool
+    
+    @State private var highlightAnimation = false
+    
+    var body: some View {
+        ReviewCard(review: review, isProfileOwner: isProfileOwner)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isHighlighted && highlightAnimation ? Color.blue.opacity(0.1) : Color.clear)
+                    .animation(.easeInOut(duration: 0.5), value: highlightAnimation)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isHighlighted && highlightAnimation ? Color.blue.opacity(0.5) : Color.clear, lineWidth: 2)
+                    .animation(.easeInOut(duration: 0.5), value: highlightAnimation)
+            )
+            .onAppear {
+                if isHighlighted {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        highlightAnimation = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation(.easeOut(duration: 1)) {
+                                highlightAnimation = false
+                            }
+                        }
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - Saved Items View
 struct SavedItemsView: View {
     let savedPosts: [ServicePost]
     let savedReels: [Reel]
@@ -593,6 +619,7 @@ struct SavedItemsView: View {
                                 }
                             }
                         }
+                        .padding()
                     }
                 }
             } else {
@@ -622,4 +649,8 @@ struct SavedItemsView: View {
     }
 }
 
-
+// NOTE: SavedPostCard and SavedReelThumbnail are already in ProfileSupportingViews.swift
+// NOTE: ProfileImageView, EmptyStateView, and PortfolioCardView are imported from their respective files:
+// - ProfileImageView is in CachedAsyncImage.swift
+// - EmptyStateView is in Components/EmptyStateView.swift
+// - PortfolioCardView is in ProfileSupportingViews.swift
