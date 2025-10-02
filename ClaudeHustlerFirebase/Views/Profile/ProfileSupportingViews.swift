@@ -104,6 +104,9 @@ struct PortfolioCardView: View {
     }
 }
 
+// ProfileSupportingViews.swift - UPDATED ReviewCard
+// Replace the existing ReviewCard struct with this updated version:
+
 // MARK: - Review Card
 struct ReviewCard: View {
     let review: Review
@@ -113,6 +116,8 @@ struct ReviewCard: View {
     @State private var helpfulCount: Int
     @State private var isHelpful: Bool
     @State private var isUpdating = false
+    @State private var selectedImageIndex: Int? = nil  // ADDED for image viewer
+    @State private var showingImageViewer = false  // ADDED for full screen images
     @StateObject private var firebase = FirebaseService.shared
     
     init(review: Review, isProfileOwner: Bool) {
@@ -134,7 +139,7 @@ struct ReviewCard: View {
             // Review Text
             reviewTextSection
             
-            // Review Images
+            // Review Images - UPDATED
             if !review.mediaURLs.isEmpty {
                 reviewImagesSection
             }
@@ -157,6 +162,14 @@ struct ReviewCard: View {
         .sheet(isPresented: $showingEditForm) {
             EditReviewView(review: review)
         }
+        .fullScreenCover(isPresented: $showingImageViewer) {  // ADDED - Full screen image viewer
+            if let index = selectedImageIndex {
+                ReviewImageViewer(
+                    imageURLs: review.mediaURLs,
+                    selectedIndex: index
+                )
+            }
+        }
         .onAppear {
             isHelpful = review.helpfulVotes.contains(firebase.currentUser?.id ?? "")
         }
@@ -165,34 +178,63 @@ struct ReviewCard: View {
     @ViewBuilder
     private var reviewerSection: some View {
         HStack {
-            Circle()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text(String(review.reviewerName?.first ?? "U"))
-                        .foregroundColor(.white)
-                )
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(review.reviewerName ?? "Anonymous")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                HStack(spacing: 2) {
-                    ForEach(0..<5) { index in
-                        Image(systemName: index < review.rating ? "star.fill" : "star")
-                            .font(.caption2)
-                            .foregroundColor(.yellow)
+            // Wrap reviewer info in NavigationLink to their profile
+            NavigationLink(destination: EnhancedProfileView(userId: review.reviewerId)) {
+                HStack {
+                    // Profile Image
+                    if let profileImageURL = review.reviewerProfileImage,
+                       !profileImageURL.isEmpty,
+                       let url = URL(string: profileImageURL) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 40, height: 40)
+                                .clipShape(Circle())
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.5)
+                                )
+                        }
+                    } else {
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Text(String(review.reviewerName?.first ?? "U"))
+                                    .foregroundColor(.white)
+                            )
                     }
                     
-                    Text("• \(review.createdAt, style: .date)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(review.reviewerName ?? "Anonymous")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        HStack(spacing: 2) {
+                            ForEach(0..<5) { index in
+                                Image(systemName: index < review.rating ? "star.fill" : "star")
+                                    .font(.caption2)
+                                    .foregroundColor(.yellow)
+                            }
+                            
+                            Text("• \(review.createdAt, style: .date)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
             }
+            .buttonStyle(PlainButtonStyle())
             
             Spacer()
             
+            // Menu for own reviews
             if isOwnReview {
                 Menu {
                     Button("Edit", action: { showingEditForm = true })
@@ -218,25 +260,59 @@ struct ReviewCard: View {
         }
     }
     
+    // UPDATED - Images section with tap to enlarge
     @ViewBuilder
     private var reviewImagesSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(review.mediaURLs, id: \.self) { url in
-                    AsyncImage(url: URL(string: url)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 80, height: 80)
-                            .clipped()
-                            .cornerRadius(8)
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 80, height: 80)
-                            .cornerRadius(8)
-                            .overlay(ProgressView())
+                ForEach(Array(review.mediaURLs.enumerated()), id: \.offset) { index, url in
+                    Button(action: {
+                        selectedImageIndex = index
+                        showingImageViewer = true
+                    }) {
+                        AsyncImage(url: URL(string: url)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 80, height: 80)
+                                .clipped()
+                                .cornerRadius(8)
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 80, height: 80)
+                                .cornerRadius(8)
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                )
+                        }
                     }
+                    .overlay(
+                        // Photo count indicator for multiple images
+                        Group {
+                            if index == 0 && review.mediaURLs.count > 1 {
+                                VStack {
+                                    HStack {
+                                        Spacer()
+                                        HStack(spacing: 2) {
+                                            Image(systemName: "photo")
+                                                .font(.caption2)
+                                            Text("\(review.mediaURLs.count)")
+                                                .font(.caption2)
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 2)
+                                        .background(Color.black.opacity(0.6))
+                                        .cornerRadius(4)
+                                        .padding(4)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -293,13 +369,160 @@ struct ReviewCard: View {
     }
     
     private func toggleHelpful() {
-        // Implementation for toggling helpful
+        guard !isOwnReview else { return }
+        
+        isUpdating = true
+        Task {
+            do {
+                let (isVoted, count) = try await ReviewRepository.shared.toggleHelpfulVote(for: review.id ?? "")
+                await MainActor.run {
+                    isHelpful = isVoted
+                    helpfulCount = count
+                    isUpdating = false
+                }
+            } catch {
+                print("Error toggling helpful: \(error)")
+                isUpdating = false
+            }
+        }
     }
     
     private func deleteReview() {
-        // Implementation for deleting review
+        Task {
+            do {
+                try await ReviewRepository.shared.delete(review.id ?? "")
+            } catch {
+                print("Error deleting review: \(error)")
+            }
+        }
     }
 }
+
+// MARK: - Review Image Viewer (NEW)
+struct ReviewImageViewer: View {
+    let imageURLs: [String]
+    let selectedIndex: Int
+    
+    @State private var currentIndex: Int
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastStoredOffset: CGSize = .zero
+    @Environment(\.dismiss) var dismiss
+    
+    init(imageURLs: [String], selectedIndex: Int) {
+        self.imageURLs = imageURLs
+        self.selectedIndex = selectedIndex
+        _currentIndex = State(initialValue: selectedIndex)
+    }
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            TabView(selection: $currentIndex) {
+                ForEach(Array(imageURLs.enumerated()), id: \.offset) { index, url in
+                    GeometryReader { geometry in
+                        AsyncImage(url: URL(string: url)) { image in
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                                .scaleEffect(scale)
+                                .offset(offset)
+                                .gesture(
+                                    MagnificationGesture()
+                                        .onChanged { value in
+                                            let delta = value / lastScale
+                                            lastScale = value
+                                            scale = min(max(scale * delta, 1), 4)
+                                        }
+                                        .onEnded { _ in
+                                            lastScale = 1.0
+                                            withAnimation(.spring()) {
+                                                if scale < 1 {
+                                                    scale = 1
+                                                    offset = .zero
+                                                }
+                                            }
+                                        }
+                                )
+                                .simultaneousGesture(
+                                    DragGesture()
+                                        .onChanged { value in
+                                            if scale > 1 {
+                                                offset = CGSize(
+                                                    width: lastStoredOffset.width + value.translation.width,
+                                                    height: lastStoredOffset.height + value.translation.height
+                                                )
+                                            }
+                                        }
+                                        .onEnded { _ in
+                                            lastStoredOffset = offset
+                                        }
+                                )
+                                .onTapGesture(count: 2) {
+                                    withAnimation {
+                                        if scale > 1 {
+                                            scale = 1
+                                            offset = .zero
+                                            lastStoredOffset = .zero
+                                        } else {
+                                            scale = 2
+                                        }
+                                    }
+                                }
+                        } placeholder: {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                        }
+                    }
+                    .tag(index)
+                }
+            }
+            .tabViewStyle(PageTabViewStyle())
+            .indexViewStyle(PageIndexViewStyle(backgroundDisplayMode: .always))
+            
+            // Close button
+            VStack {
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .padding()
+                    
+                    Spacer()
+                    
+                    // Image counter
+                    if imageURLs.count > 1 {
+                        Text("\(currentIndex + 1) / \(imageURLs.count)")
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(20)
+                            .padding()
+                    }
+                }
+                
+                Spacer()
+            }
+        }
+        .onAppear {
+            // Reset any zoom when appearing
+            scale = 1.0
+            offset = .zero
+            lastStoredOffset = .zero
+        }
+    }
+}
+
 
 // MARK: - Create Review View
 struct CreateReviewView: View {
@@ -475,31 +698,59 @@ struct CreateReviewView: View {
     }
     
     private func submitReview() async {
-        isSubmitting = true
-        submitProgress = 0.2
-        
-        do {
-            try await Task.sleep(nanoseconds: 200_000_000)
-            submitProgress = 0.5
+            isSubmitting = true
+            submitProgress = 0.2
             
-            _ = try await ReviewRepository.shared.createReview(
-                for: userId,
-                rating: rating,
-                text: reviewText,
-                images: reviewImages
-            )
+            print("📸 Starting review submission with \(reviewImages.count) images")
             
-            submitProgress = 1.0
-            try await Task.sleep(nanoseconds: 300_000_000)
-            
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-            showingError = true
-            isSubmitting = false
-            submitProgress = 0
+            do {
+                // Add a small delay for UI feedback
+                try await Task.sleep(nanoseconds: 200_000_000)
+                submitProgress = 0.5
+                
+                // Debug: Check if we have images
+                if !reviewImages.isEmpty {
+                    print("📸 Images to upload: \(reviewImages.count)")
+                    for (index, image) in reviewImages.enumerated() {
+                        let size = image.size
+                        print("  Image \(index + 1): \(size.width)x\(size.height)")
+                    }
+                } else {
+                    print("📸 No images to upload")
+                }
+                
+                // Create the review with images
+                let createdReview = try await ReviewRepository.shared.createReview(
+                    for: userId,
+                    rating: rating,
+                    text: reviewText,
+                    images: reviewImages
+                )
+                
+                print("✅ Review created successfully")
+                print("  Review ID: \(createdReview.id ?? "no-id")")
+                print("  Media URLs count: \(createdReview.mediaURLs.count)")
+                if !createdReview.mediaURLs.isEmpty {
+                    print("  Media URLs:")
+                    for (index, url) in createdReview.mediaURLs.enumerated() {
+                        print("    \(index + 1): \(url)")
+                    }
+                }
+                
+                submitProgress = 1.0
+                try await Task.sleep(nanoseconds: 300_000_000)
+                
+                dismiss()
+            } catch {
+                print("❌ Error submitting review: \(error)")
+                print("  Error details: \(error.localizedDescription)")
+                
+                errorMessage = "Failed to submit review: \(error.localizedDescription)"
+                showingError = true
+                isSubmitting = false
+                submitProgress = 0
+            }
         }
-    }
 }
 
 // MARK: - Other supporting views

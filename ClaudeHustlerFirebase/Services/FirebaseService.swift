@@ -133,36 +133,43 @@ class FirebaseService: ObservableObject {
     // MARK: - Image Upload
     
     func uploadImage(_ image: UIImage, path: String) async throws -> String {
-        
-        
-        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
-            throw NSError(domain: "ImageError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])
+            print("🖼️ FirebaseService.uploadImage called")
+            print("  Path: \(path)")
+            
+            guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+                print("❌ Failed to convert image to JPEG data")
+                throw NSError(domain: "ImageError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])
+            }
+            
+            print("  Image data size: \(imageData.count) bytes (\(imageData.count / 1024)KB)")
+            
+            // Create a fresh reference each time
+            let storageRef = Storage.storage().reference().child(path)
+            
+            // Use metadata
+            let metadata = StorageMetadata()
+            metadata.contentType = "image/jpeg"
+            
+            do {
+                print("  📤 Uploading to Firebase Storage...")
+                // Upload the data
+                let uploadTask = try await storageRef.putDataAsync(imageData, metadata: metadata)
+                print("  ✅ Upload successful")
+                
+                print("  Getting download URL...")
+                // Get the download URL
+                let downloadURL = try await storageRef.downloadURL()
+                let urlString = downloadURL.absoluteString
+                
+                print("  ✅ Got download URL: \(urlString)")
+                return urlString
+            } catch {
+                print("  ❌ Upload failed: \(error)")
+                print("  Error details: \(error.localizedDescription)")
+                throw error
+            }
         }
-        
-        // Create a fresh reference each time
-        let storageRef = Storage.storage().reference().child(path)
-        
-        
-        
-        // Use metadata
-        let metadata = StorageMetadata()
-        metadata.contentType = "image/jpeg"
-        
-        do {
-            // Upload the data
-            let uploadTask = try await storageRef.putDataAsync(imageData, metadata: metadata)
-            
-            
-            // Get the download URL
-            let downloadURL = try await storageRef.downloadURL()
-            
-            
-            return downloadURL.absoluteString
-        } catch {
-            
-            throw error
-        }
-    }
+
     // MARK: - Following System
     
     // SIMPLIFIED VERSION - Keep in FirebaseService:

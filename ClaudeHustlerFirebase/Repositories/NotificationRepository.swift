@@ -135,85 +135,93 @@ final class NotificationRepository {
     }
     
     // MARK: - Create Review Notification
-    func createReviewNotification(
-        for userId: String,
-        reviewId: String,
-        type: AppNotification.NotificationType,
-        fromUserId: String,
-        reviewText: String? = nil
-    ) async {
-        // Don't notify yourself
-        guard userId != fromUserId else { return }
-        
-        // Get sender info
-        guard let fromUser = try? await UserRepository.shared.fetchById(fromUserId) else { return }
-        
-        // Check user's notification settings
-        let recipientUser = try? await UserRepository.shared.fetchById(userId)
-        if let settings = recipientUser?.notificationSettings {
+    // NotificationRepository.swift - UPDATED createReviewNotification method
+    // Replace the existing createReviewNotification method with this:
+
+        // MARK: - Create Review Notification (FIXED)
+        func createReviewNotification(
+            for userId: String,
+            reviewId: String,
+            type: AppNotification.NotificationType,
+            fromUserId: String,
+            profileUserId: String,  // ADDED - The ID of the user whose profile has the review
+            reviewText: String? = nil
+        ) async {
+            // Don't notify yourself
+            guard userId != fromUserId else { return }
+            
+            // Get sender info
+            guard let fromUser = try? await UserRepository.shared.fetchById(fromUserId) else { return }
+            
+            // Check user's notification settings
+            let recipientUser = try? await UserRepository.shared.fetchById(userId)
+            if let settings = recipientUser?.notificationSettings {
+                switch type {
+                case .newReview:
+                    if !settings.newReviews { return }
+                case .reviewReply:
+                    if !settings.reviewReplies { return }
+                case .reviewEdit:
+                    if !settings.reviewEdits { return }
+                case .helpfulVote:
+                    if !settings.helpfulVotes { return }
+                default:
+                    break
+                }
+            }
+            
+            let title: String
+            let body: String
+            
             switch type {
             case .newReview:
-                if !settings.newReviews { return }
+                title = "New Review"
+                body = "\(fromUser.name) left you a review"
             case .reviewReply:
-                if !settings.reviewReplies { return }
+                title = "Review Reply"
+                body = "\(fromUser.name) replied to your review"
             case .reviewEdit:
-                if !settings.reviewEdits { return }
+                title = "Review Updated"
+                body = "\(fromUser.name) edited their review"
             case .helpfulVote:
-                if !settings.helpfulVotes { return }
+                title = "Review Appreciated"
+                body = "\(fromUser.name) found your review helpful"
             default:
-                break
+                title = "Notification"
+                body = "You have a new notification"
             }
-        }
-        
-        let title: String
-        let body: String
-        
-        switch type {
-        case .newReview:
-            title = "New Review"
-            body = "\(fromUser.name) left you a review"
-        case .reviewReply:
-            title = "Review Reply"
-            body = "\(fromUser.name) replied to your review"
-        case .reviewEdit:
-            title = "Review Updated"
-            body = "\(fromUser.name) edited their review"
-        case .helpfulVote:
-            title = "Review Appreciated"
-            body = "\(fromUser.name) found your review helpful"
-        default:
-            title = "Notification"
-            body = "You have a new notification"
-        }
-        
-        let notification = AppNotification(
-            userId: userId,
-            type: type,
-            fromUserId: fromUserId,
-            fromUserName: fromUser.name,
-            fromUserProfileImage: fromUser.profileImageURL,
-            title: title,
-            body: body,
-            data: ["reviewId": reviewId],
-            isRead: false
-        )
-        
-        do {
-            try await createNotification(notification)
             
-            // Send push notification if user has FCM token
-            if let fcmToken = recipientUser?.fcmToken {
-                await sendPushNotification(
-                    to: fcmToken,
-                    title: notification.title,
-                    body: notification.body,
-                    data: notification.data ?? [:]
-                )
+            let notification = AppNotification(
+                userId: userId,
+                type: type,
+                fromUserId: fromUserId,
+                fromUserName: fromUser.name,
+                fromUserProfileImage: fromUser.profileImageURL,
+                title: title,
+                body: body,
+                data: [
+                    "reviewId": reviewId,
+                    "profileUserId": profileUserId  // ADDED - Store which profile has this review
+                ],
+                isRead: false
+            )
+            
+            do {
+                try await createNotification(notification)
+                
+                // Send push notification if user has FCM token
+                if let fcmToken = recipientUser?.fcmToken {
+                    await sendPushNotification(
+                        to: fcmToken,
+                        title: notification.title,
+                        body: notification.body,
+                        data: notification.data ?? [:]
+                    )
+                }
+            } catch {
+                print("Error creating review notification: \(error)")
             }
-        } catch {
-            print("Error creating review notification: \(error)")
         }
-    }
     
     // MARK: - Create Reel Notification (UPDATED)
     func createReelNotification(

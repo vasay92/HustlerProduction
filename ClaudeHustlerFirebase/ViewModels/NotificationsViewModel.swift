@@ -142,40 +142,80 @@ final class NotificationsViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Handle Notification Tap (UPDATED)
-    func handleNotificationTap(_ notification: AppNotification) async -> NotificationAction? {
-        // Mark as read
-        await markAsRead(notification)
-        
-        // Determine navigation action based on type
-        switch notification.type {
-        case .newMessage, .messageRequest:
-            if let conversationId = notification.data?["conversationId"] {
-                return .openConversation(conversationId)
+    // NotificationsViewModel.swift - FIXED SECTION
+    // Replace the handleNotificationTap method's review handling section with this:
+
+        // MARK: - Handle Notification Tap (FIXED)
+        func handleNotificationTap(_ notification: AppNotification) async -> NotificationAction? {
+            // Mark as read
+            await markAsRead(notification)
+            
+            // Determine navigation action based on type
+            switch notification.type {
+            case .newMessage, .messageRequest:
+                if let conversationId = notification.data?["conversationId"] {
+                    return .openConversation(conversationId)
+                }
+                
+            case .newReview, .reviewReply, .reviewEdit, .helpfulVote:
+                if let reviewId = notification.data?["reviewId"] {
+                    // FIXED: Navigate to the correct profile
+                    // For review notifications, we need to navigate to the profile that HAS the review
+                    
+                    let targetUserId: String
+                    
+                    if notification.type == .newReview {
+                        // For new reviews: The notification recipient (YOU) received a review on YOUR profile
+                        // So navigate to YOUR profile to see the review someone left for you
+                        targetUserId = notification.userId  // The person receiving the notification
+                    } else if notification.type == .reviewReply || notification.type == .reviewEdit {
+                        // For replies/edits: The review exists on the profile being reviewed
+                        // Check if we stored the profile owner's ID in the notification data
+                        if let profileUserId = notification.data?["profileUserId"] as? String {
+                            targetUserId = profileUserId
+                        } else {
+                            // Fallback: assume it's on the notification recipient's profile
+                            targetUserId = notification.userId
+                        }
+                    } else if notification.type == .helpfulVote {
+                        // For helpful votes: The person who wrote the review gets notified
+                        // The review exists on some profile (not necessarily theirs)
+                        // We need to store and retrieve which profile has this review
+                        if let profileUserId = notification.data?["profileUserId"] as? String {
+                            targetUserId = profileUserId
+                        } else {
+                            // Fallback: check if it's the recipient's own profile
+                            targetUserId = notification.userId
+                        }
+                    } else {
+                        // Default fallback
+                        targetUserId = notification.userId
+                    }
+                    
+                    return .openReview(reviewId, targetUserId)
+                }
+                
+            case .reelLike:
+                if let reelId = notification.data?["reelId"] {
+                    return .openReel(reelId)
+                }
+                
+            case .reelComment, .commentLike, .commentReply:
+                if let reelId = notification.data?["reelId"],
+                   let commentId = notification.data?["commentId"] {
+                    return .openReelComment(reelId, commentId)
+                } else if let reelId = notification.data?["reelId"] {
+                    // Fallback if no comment ID
+                    return .openReel(reelId)
+                }
             }
             
-        case .newReview, .reviewReply, .reviewEdit, .helpfulVote:
-            if let reviewId = notification.data?["reviewId"] {
-                return .openReview(reviewId, notification.fromUserId)
-            }
-            
-        case .reelLike:
-            if let reelId = notification.data?["reelId"] {
-                return .openReel(reelId)
-            }
-            
-        case .reelComment, .commentLike, .commentReply:  // UPDATED - all comment-related notifications
-            if let reelId = notification.data?["reelId"],
-               let commentId = notification.data?["commentId"] {
-                return .openReelComment(reelId, commentId)
-            } else if let reelId = notification.data?["reelId"] {
-                // Fallback if no comment ID
-                return .openReel(reelId)
-            }
+            return nil
         }
-        
-        return nil
-    }
+
+    // IMPORTANT: Also update the notification creation to include profileUserId
+    // When creating review-related notifications, make sure to add:
+    // "profileUserId": profileOwnerId  // The ID of the user whose profile has the review
     
     // MARK: - Update App Badge
     private func updateAppBadge() async {

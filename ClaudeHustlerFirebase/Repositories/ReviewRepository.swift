@@ -155,12 +155,12 @@ final class ReviewRepository: RepositoryProtocol {
         
         let docRef = try await db.collection("reviews").addDocument(data: reviewData)
         
-        await userRepository.updateUserRating(userId: review.reviewedUserId)
         await notificationRepository.createReviewNotification(
             for: review.reviewedUserId,
             reviewId: docRef.documentID,
             type: .newReview,
             fromUserId: reviewerId,
+            profileUserId: review.reviewedUserId,  // ADDED - The review is on this person's profile
             reviewText: review.text
         )
         
@@ -200,6 +200,7 @@ final class ReviewRepository: RepositoryProtocol {
                 reviewId: reviewId,
                 type: .reviewEdit,
                 fromUserId: currentUserId,
+                profileUserId: reviewedUserId,  // ADDED - The review is on this person's profile
                 reviewText: review.text
             )
             cache.remove(for: "reviews_user_\(reviewedUserId)")
@@ -263,6 +264,7 @@ final class ReviewRepository: RepositoryProtocol {
             reviewId: reviewId,
             type: .reviewReply,
             fromUserId: currentUserId,
+            profileUserId: currentUserId,  // ADDED - The review is on the replier's profile
             reviewText: replyText
         )
         
@@ -290,11 +292,15 @@ final class ReviewRepository: RepositoryProtocol {
             ])
             
             if userId != reviewerId {
+                // ADDED: Get the reviewedUserId (whose profile has this review)
+                let reviewedUserId = data["reviewedUserId"] as? String ?? ""
+                
                 await notificationRepository.createReviewNotification(
                     for: reviewerId,
                     reviewId: reviewId,
                     type: .helpfulVote,
-                    fromUserId: userId
+                    fromUserId: userId,
+                    profileUserId: reviewedUserId  // ADDED - The profile that has the review
                 )
             }
         }
@@ -321,11 +327,15 @@ final class ReviewRepository: RepositoryProtocol {
         } else {
             helpfulVotes.append(userId)
             if let reviewerId = data["reviewerId"] as? String, reviewerId != userId {
+                // ADDED: Get the reviewedUserId (whose profile has this review)
+                let reviewedUserId = data["reviewedUserId"] as? String ?? ""
+                
                 await notificationRepository.createReviewNotification(
                     for: reviewerId,
                     reviewId: reviewId,
                     type: .helpfulVote,
-                    fromUserId: userId
+                    fromUserId: userId,
+                    profileUserId: reviewedUserId  // ADDED - The profile that has the review
                 )
             }
         }
@@ -362,39 +372,72 @@ final class ReviewRepository: RepositoryProtocol {
     }
     
     // MARK: - Create with Images
-    func createReview(for userId: String, rating: Int, text: String, images: [UIImage] = []) async throws -> Review {
-        guard let reviewerId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        if reviewerId == userId {
-            throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Cannot review yourself"])
-        }
-        
-        var mediaURLs: [String] = []
-        for (index, image) in images.enumerated() {
-            let path = "reviews/\(reviewerId)/\(UUID().uuidString)_\(index).jpg"
-            let url = try await FirebaseService.shared.uploadImage(image, path: path)
-            mediaURLs.append(url)
-        }
-        
-        let userDoc = try await db.collection("users").document(reviewerId).getDocument()
-        let userData = try? userDoc.data(as: User.self)
-        
-        let review = Review(
-            reviewerId: reviewerId,
-            reviewedUserId: userId,
-            reviewerName: userData?.name,
-            reviewerProfileImage: userData?.profileImageURL,
-            rating: rating,
-            text: text,
-            mediaURLs: mediaURLs
-        )
-        
-        let reviewId = try await create(review)
-        var newReview = review
-        newReview.id = reviewId
-        return newReview
-    }
+    // MARK: - Create with Images (FIXED WITH LOGGING)
+       func createReview(for userId: String, rating: Int, text: String, images: [UIImage] = []) async throws -> Review {
+           print("📝 ReviewRepository.createReview called")
+           print("  For user: \(userId)")
+           print("  Rating: \(rating)")
+           print("  Text length: \(text.count)")
+           print("  Images count: \(images.count)")
+           
+           guard let reviewerId = Auth.auth().currentUser?.uid else {
+               throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+           }
+           
+           if reviewerId == userId {
+               throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Cannot review yourself"])
+           }
+           
+           var mediaURLs: [String] = []
+           
+           // Upload images if provided
+           if !images.isEmpty {
+               print("📤 Starting image uploads...")
+               for (index, image) in images.enumerated() {
+                   print("  Uploading image \(index + 1) of \(images.count)...")
+                   
+                   let path = "reviews/\(reviewerId)/\(UUID().uuidString)_\(index).jpg"
+                   print("  Path: \(path)")
+                   
+                   do {
+                       let url = try await FirebaseService.shared.uploadImage(image, path: path)
+                       mediaURLs.append(url)
+                       print("  ✅ Uploaded: \(url)")
+                   } catch {
+                       print("  ❌ Failed to upload image \(index + 1): \(error)")
+                       throw error
+                   }
+               }
+               print("✅ All images uploaded successfully")
+           }
+           
+           // Get reviewer info
+           let userDoc = try await db.collection("users").document(reviewerId).getDocument()
+           let userData = try? userDoc.data(as: User.self)
+           
+           // Create review object
+           let review = Review(
+               reviewerId: reviewerId,
+               reviewedUserId: userId,
+               reviewerName: userData?.name,
+               reviewerProfileImage: userData?.profileImageURL,
+               rating: rating,
+               text: text,
+               mediaURLs: mediaURLs  // This should now contain the uploaded URLs
+           )
+           
+           print("📝 Creating review document in Firestore...")
+           print("  Media URLs in review: \(review.mediaURLs.count)")
+           
+           let reviewId = try await create(review)
+           var newReview = review
+           newReview.id = reviewId
+           
+           print("✅ Review created with ID: \(reviewId)")
+           print("  Final media URLs count: \(newReview.mediaURLs.count)")
+           
+           return newReview
+       }
     
     // MARK: - Real-time Listeners
     func listenToUserReviews(userId: String, completion: @escaping ([Review]) -> Void) -> ListenerRegistration {
