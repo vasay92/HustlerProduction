@@ -116,8 +116,7 @@ struct ReviewCard: View {
     @State private var helpfulCount: Int
     @State private var isHelpful: Bool
     @State private var isUpdating = false
-    @State private var selectedImageIndex: Int? = nil  // ADDED for image viewer
-    @State private var showingImageViewer = false  // ADDED for full screen images
+    @State private var selectedImageURL: String? = nil  // CHANGED from selectedImageIndex
     @StateObject private var firebase = FirebaseService.shared
     
     init(review: Review, isProfileOwner: Bool) {
@@ -139,7 +138,7 @@ struct ReviewCard: View {
             // Review Text
             reviewTextSection
             
-            // Review Images - UPDATED
+            // Review Images
             if !review.mediaURLs.isEmpty {
                 reviewImagesSection
             }
@@ -162,13 +161,12 @@ struct ReviewCard: View {
         .sheet(isPresented: $showingEditForm) {
             EditReviewView(review: review)
         }
-        .fullScreenCover(isPresented: $showingImageViewer) {  // ADDED - Full screen image viewer
-            if let index = selectedImageIndex {
-                ReviewImageViewer(
-                    imageURLs: review.mediaURLs,
-                    selectedIndex: index
-                )
-            }
+        // CHANGED: Using sheet with item binding instead of fullScreenCover
+        .sheet(item: $selectedImageURL) { imageURL in
+            SimpleImageViewer(
+                imageURL: imageURL,
+                allImageURLs: review.mediaURLs
+            )
         }
         .onAppear {
             isHelpful = review.helpfulVotes.contains(firebase.currentUser?.id ?? "")
@@ -260,17 +258,14 @@ struct ReviewCard: View {
         }
     }
     
-    // UPDATED - Images section with tap to enlarge
+    // CHANGED: Simplified image section with direct URL tap
     @ViewBuilder
     private var reviewImagesSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(Array(review.mediaURLs.enumerated()), id: \.offset) { index, url in
-                    Button(action: {
-                        selectedImageIndex = index
-                        showingImageViewer = true
-                    }) {
-                        AsyncImage(url: URL(string: url)) { image in
+                ForEach(review.mediaURLs, id: \.self) { urlString in
+                    if let url = URL(string: urlString) {
+                        AsyncImage(url: url) { image in
                             image
                                 .resizable()
                                 .scaledToFill()
@@ -287,32 +282,35 @@ struct ReviewCard: View {
                                         .scaleEffect(0.7)
                                 )
                         }
-                    }
-                    .overlay(
-                        // Photo count indicator for multiple images
-                        Group {
-                            if index == 0 && review.mediaURLs.count > 1 {
-                                VStack {
-                                    HStack {
-                                        Spacer()
-                                        HStack(spacing: 2) {
-                                            Image(systemName: "photo")
-                                                .font(.caption2)
-                                            Text("\(review.mediaURLs.count)")
-                                                .font(.caption2)
+                        .onTapGesture {
+                            selectedImageURL = urlString
+                        }
+                        .overlay(
+                            // Photo count indicator for first image
+                            Group {
+                                if review.mediaURLs.first == urlString && review.mediaURLs.count > 1 {
+                                    VStack {
+                                        HStack {
+                                            Spacer()
+                                            HStack(spacing: 2) {
+                                                Image(systemName: "photo")
+                                                    .font(.caption2)
+                                                Text("\(review.mediaURLs.count)")
+                                                    .font(.caption2)
+                                            }
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 2)
+                                            .background(Color.black.opacity(0.6))
+                                            .cornerRadius(4)
+                                            .padding(4)
                                         }
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 2)
-                                        .background(Color.black.opacity(0.6))
-                                        .cornerRadius(4)
-                                        .padding(4)
+                                        Spacer()
                                     }
-                                    Spacer()
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -398,7 +396,119 @@ struct ReviewCard: View {
     }
 }
 
-// MARK: - Review Image Viewer (NEW)
+// Add this extension to make String Identifiable for sheet(item:)
+extension String: Identifiable {
+    public var id: String { self }
+}
+
+// Add this simple image viewer that actually works
+struct SimpleImageViewer: View {
+    let imageURL: String
+    let allImageURLs: [String]
+    @State private var currentImageURL: String
+    @Environment(\.dismiss) var dismiss
+    
+    init(imageURL: String, allImageURLs: [String]) {
+        self.imageURL = imageURL
+        self.allImageURLs = allImageURLs
+        _currentImageURL = State(initialValue: imageURL)
+    }
+    
+    var currentIndex: Int {
+        allImageURLs.firstIndex(of: currentImageURL) ?? 0
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                VStack {
+                    // Image display
+                    if let url = URL(string: currentImageURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            case .failure(_):
+                                VStack(spacing: 16) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .font(.system(size: 60))
+                                        .foregroundColor(.yellow)
+                                    
+                                    Text("Failed to load image")
+                                        .foregroundColor(.white)
+                                        .font(.headline)
+                                }
+                            case .empty:
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(2)
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                    }
+                    
+                    // Navigation controls if multiple images
+                    if allImageURLs.count > 1 {
+                        HStack(spacing: 40) {
+                            Button(action: previousImage) {
+                                Image(systemName: "chevron.left.circle.fill")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.white)
+                            }
+                            .disabled(currentIndex == 0)
+                            .opacity(currentIndex == 0 ? 0.3 : 1)
+                            
+                            Text("\(currentIndex + 1) / \(allImageURLs.count)")
+                                .foregroundColor(.white)
+                                .font(.headline)
+                            
+                            Button(action: nextImage) {
+                                Image(systemName: "chevron.right.circle.fill")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.white)
+                            }
+                            .disabled(currentIndex == allImageURLs.count - 1)
+                            .opacity(currentIndex == allImageURLs.count - 1 ? 0.3 : 1)
+                        }
+                        .padding(.bottom, 40)
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+    
+    private func previousImage() {
+        if currentIndex > 0 {
+            currentImageURL = allImageURLs[currentIndex - 1]
+        }
+    }
+    
+    private func nextImage() {
+        if currentIndex < allImageURLs.count - 1 {
+            currentImageURL = allImageURLs[currentIndex + 1]
+        }
+    }
+}
+
+// ReviewImageViewer_Fixed.swift
+// Replace the ReviewImageViewer struct in ProfileSupportingViews.swift with this fixed version
+
 struct ReviewImageViewer: View {
     let imageURLs: [String]
     let selectedIndex: Int
@@ -420,87 +530,143 @@ struct ReviewImageViewer: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
+            // Close button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .foregroundColor(.white)
+                            .background(Circle().fill(Color.black.opacity(0.5)))
+                    }
+                    .padding()
+                }
+                Spacer()
+            }
+            .zIndex(1)
+            
+            // Image viewer
             TabView(selection: $currentIndex) {
                 ForEach(Array(imageURLs.enumerated()), id: \.offset) { index, url in
                     GeometryReader { geometry in
-                        AsyncImage(url: URL(string: url)) { image in
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: geometry.size.width, height: geometry.size.height)
-                                .scaleEffect(scale)
-                                .offset(offset)
-                                .gesture(
-                                    MagnificationGesture()
-                                        .onChanged { value in
-                                            let delta = value / lastScale
-                                            lastScale = value
-                                            scale = min(max(scale * delta, 1), 4)
-                                        }
-                                        .onEnded { _ in
-                                            lastScale = 1.0
-                                            withAnimation(.spring()) {
+                        AsyncImage(url: URL(string: url)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: geometry.size.width, height: geometry.size.height)
+                                    .scaleEffect(scale)
+                                    .offset(offset)
+                                    .gesture(
+                                        MagnificationGesture()
+                                            .onChanged { value in
+                                                scale = value * lastScale
+                                            }
+                                            .onEnded { value in
                                                 if scale < 1 {
-                                                    scale = 1
-                                                    offset = .zero
+                                                    withAnimation(.spring()) {
+                                                        scale = 1
+                                                        lastScale = 1
+                                                    }
+                                                } else {
+                                                    lastScale = scale
                                                 }
                                             }
-                                        }
-                                )
-                                .simultaneousGesture(
-                                    DragGesture()
-                                        .onChanged { value in
+                                    )
+                                    .simultaneousGesture(
+                                        DragGesture()
+                                            .onChanged { value in
+                                                if scale > 1 {
+                                                    offset = CGSize(
+                                                        width: lastStoredOffset.width + value.translation.width,
+                                                        height: lastStoredOffset.height + value.translation.height
+                                                    )
+                                                }
+                                            }
+                                            .onEnded { value in
+                                                if scale > 1 {
+                                                    lastStoredOffset = offset
+                                                } else {
+                                                    withAnimation(.spring()) {
+                                                        offset = .zero
+                                                        lastStoredOffset = .zero
+                                                    }
+                                                }
+                                            }
+                                    )
+                                    .onTapGesture(count: 2) {
+                                        withAnimation(.spring()) {
                                             if scale > 1 {
-                                                offset = CGSize(
-                                                    width: lastStoredOffset.width + value.translation.width,
-                                                    height: lastStoredOffset.height + value.translation.height
-                                                )
+                                                scale = 1
+                                                lastScale = 1
+                                                offset = .zero
+                                                lastStoredOffset = .zero
+                                            } else {
+                                                scale = 2
+                                                lastScale = 2
                                             }
                                         }
-                                        .onEnded { _ in
-                                            lastStoredOffset = offset
-                                        }
-                                )
-                                .onTapGesture(count: 2) {
-                                    withAnimation {
-                                        if scale > 1 {
-                                            scale = 1
-                                            offset = .zero
-                                            lastStoredOffset = .zero
-                                        } else {
-                                            scale = 2
+                                    }
+                            case .failure(let error):
+                                VStack(spacing: 16) {
+                                    Image(systemName: "photo.fill")
+                                        .font(.system(size: 60))
+                                        .foregroundColor(.gray)
+                                    
+                                    Text("Failed to load image")
+                                        .foregroundColor(.white)
+                                        .font(.headline)
+                                    
+                                    Text(error.localizedDescription)
+                                        .foregroundColor(.gray)
+                                        .font(.caption)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal)
+                                    
+                                    Button("Try Again") {
+                                        // Force refresh by changing the URL slightly
+                                        currentIndex = -1
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                            currentIndex = index
                                         }
                                     }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(Color.blue)
+                                    .cornerRadius(8)
                                 }
-                        } placeholder: {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .frame(width: geometry.size.width, height: geometry.size.height)
+                            case .empty:
+                                VStack {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(1.5)
+                                    Text("Loading...")
+                                        .foregroundColor(.white)
+                                        .font(.caption)
+                                        .padding(.top, 8)
+                                }
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                            @unknown default:
+                                EmptyView()
+                            }
                         }
                     }
                     .tag(index)
                 }
             }
-            .tabViewStyle(PageTabViewStyle())
+            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
             .indexViewStyle(PageIndexViewStyle(backgroundDisplayMode: .always))
             
-            // Close button
-            VStack {
-                HStack {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-                    .padding()
-                    
+            // Image counter
+            if imageURLs.count > 1 {
+                VStack {
                     Spacer()
-                    
-                    // Image counter
-                    if imageURLs.count > 1 {
+                    HStack {
+                        Spacer()
                         Text("\(currentIndex + 1) / \(imageURLs.count)")
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
@@ -510,8 +676,6 @@ struct ReviewImageViewer: View {
                             .padding()
                     }
                 }
-                
-                Spacer()
             }
         }
         .onAppear {
@@ -523,8 +687,69 @@ struct ReviewImageViewer: View {
     }
 }
 
+// Alternative simpler version if the above still has issues:
+struct SimpleReviewImageViewer: View {
+    let imageURLs: [String]
+    let selectedIndex: Int
+    @Environment(\.dismiss) var dismiss
+    @State private var currentIndex: Int
+    
+    init(imageURLs: [String], selectedIndex: Int) {
+        self.imageURLs = imageURLs
+        self.selectedIndex = selectedIndex
+        _currentIndex = State(initialValue: selectedIndex)
+    }
+    
+    var body: some View {
+        NavigationView {
+            TabView(selection: $currentIndex) {
+                ForEach(Array(imageURLs.enumerated()), id: \.offset) { index, urlString in
+                    ZStack {
+                        Color.black.ignoresSafeArea()
+                        
+                        if let url = URL(string: urlString) {
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                            } placeholder: {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(2)
+                            }
+                        } else {
+                            VStack {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.yellow)
+                                Text("Invalid image URL")
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
+                    .tag(index)
+                }
+            }
+            .tabViewStyle(PageTabViewStyle())
+            .navigationBarHidden(false)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+            .background(Color.black.ignoresSafeArea())
+        }
+    }
+}
 
-// MARK: - Create Review View
+
+// CreateReviewView_Fixed.swift
+// Replace the CreateReviewView struct in ProfileSupportingViews.swift with this fixed version
+
 struct CreateReviewView: View {
     let userId: String
     @Environment(\.dismiss) var dismiss
@@ -618,7 +843,8 @@ struct CreateReviewView: View {
                 }
             }
             .sheet(isPresented: $showingImagePicker) {
-                ImagePicker(images: $reviewImages, singleImage: .constant(nil))
+                // Use MultiImagePicker for reviews instead
+                MultiImagePickerForReviews(images: $reviewImages)
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK") { }
@@ -627,6 +853,8 @@ struct CreateReviewView: View {
             }
         }
     }
+    
+    // ... rest of the methods remain the same ...
     
     @ViewBuilder
     private func photoThumbnail(image: UIImage, index: Int) -> some View {
@@ -698,59 +926,115 @@ struct CreateReviewView: View {
     }
     
     private func submitReview() async {
-            isSubmitting = true
-            submitProgress = 0.2
+        isSubmitting = true
+        submitProgress = 0.2
+        
+        print("📸 Starting review submission with \(reviewImages.count) images")
+        
+        do {
+            // Add a small delay for UI feedback
+            try await Task.sleep(nanoseconds: 200_000_000)
+            submitProgress = 0.5
             
-            print("📸 Starting review submission with \(reviewImages.count) images")
+            // Debug: Check if we have images
+            if !reviewImages.isEmpty {
+                print("📸 Images to upload: \(reviewImages.count)")
+                for (index, image) in reviewImages.enumerated() {
+                    let size = image.size
+                    print("  Image \(index + 1): \(size.width)x\(size.height)")
+                }
+            } else {
+                print("📸 No images to upload")
+            }
             
-            do {
-                // Add a small delay for UI feedback
-                try await Task.sleep(nanoseconds: 200_000_000)
-                submitProgress = 0.5
-                
-                // Debug: Check if we have images
-                if !reviewImages.isEmpty {
-                    print("📸 Images to upload: \(reviewImages.count)")
-                    for (index, image) in reviewImages.enumerated() {
-                        let size = image.size
-                        print("  Image \(index + 1): \(size.width)x\(size.height)")
-                    }
-                } else {
-                    print("📸 No images to upload")
+            // Create the review with images
+            let createdReview = try await ReviewRepository.shared.createReview(
+                for: userId,
+                rating: rating,
+                text: reviewText,
+                images: reviewImages
+            )
+            
+            print("✅ Review created successfully")
+            print("  Review ID: \(createdReview.id ?? "no-id")")
+            print("  Media URLs count: \(createdReview.mediaURLs.count)")
+            if !createdReview.mediaURLs.isEmpty {
+                print("  Media URLs:")
+                for (index, url) in createdReview.mediaURLs.enumerated() {
+                    print("    \(index + 1): \(url)")
                 }
-                
-                // Create the review with images
-                let createdReview = try await ReviewRepository.shared.createReview(
-                    for: userId,
-                    rating: rating,
-                    text: reviewText,
-                    images: reviewImages
-                )
-                
-                print("✅ Review created successfully")
-                print("  Review ID: \(createdReview.id ?? "no-id")")
-                print("  Media URLs count: \(createdReview.mediaURLs.count)")
-                if !createdReview.mediaURLs.isEmpty {
-                    print("  Media URLs:")
-                    for (index, url) in createdReview.mediaURLs.enumerated() {
-                        print("    \(index + 1): \(url)")
+            }
+            
+            submitProgress = 1.0
+            try await Task.sleep(nanoseconds: 300_000_000)
+            
+            dismiss()
+        } catch {
+            print("❌ Error submitting review: \(error)")
+            print("  Error details: \(error.localizedDescription)")
+            
+            errorMessage = "Failed to submit review: \(error.localizedDescription)"
+            showingError = true
+            isSubmitting = false
+            submitProgress = 0
+        }
+    }
+}
+
+// Add this new MultiImagePicker specifically for reviews
+struct MultiImagePickerForReviews: UIViewControllerRepresentable {
+    @Binding var images: [UIImage]
+    @Environment(\.dismiss) var dismiss
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 5  // Allow up to 5 images for reviews
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: MultiImagePickerForReviews
+        private var loadCount = 0
+        
+        init(_ parent: MultiImagePickerForReviews) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            
+            // Clear previous selections
+            parent.images = []
+            loadCount = 0
+            
+            // If no results, just return
+            guard !results.isEmpty else { return }
+            
+            for result in results {
+                if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                        if let image = image as? UIImage {
+                            DispatchQueue.main.async {
+                                self.parent.images.append(image)
+                                self.loadCount += 1
+                                print("Preloaded \(self.loadCount) of \(results.count) images")
+                            }
+                        }
                     }
                 }
-                
-                submitProgress = 1.0
-                try await Task.sleep(nanoseconds: 300_000_000)
-                
-                dismiss()
-            } catch {
-                print("❌ Error submitting review: \(error)")
-                print("  Error details: \(error.localizedDescription)")
-                
-                errorMessage = "Failed to submit review: \(error.localizedDescription)"
-                showingError = true
-                isSubmitting = false
-                submitProgress = 0
             }
         }
+    }
 }
 
 // MARK: - Other supporting views
