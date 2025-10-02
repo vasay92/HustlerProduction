@@ -1,6 +1,5 @@
-// ReviewRepository.swift - PROPERLY FIXED VERSION
+// ReviewRepository.swift - PROPERLY FIXED VERSION (Unlimited Reviews)
 // Path: ClaudeHustlerFirebase/Repositories/ReviewRepository.swift
-// Fixed the deinit actor isolation issue correctly
 
 import Foundation
 import FirebaseFirestore
@@ -51,23 +50,18 @@ final class ReviewRepository: RepositoryProtocol {
     func fetchById(_ id: String) async throws -> Review? {
         let cacheKey = "review_\(id)"
         
-        // Check cache first
         if !cache.isExpired(for: cacheKey, maxAge: cacheMaxAge),
            let cachedReview: Review = cache.retrieve(Review.self, for: cacheKey) {
             return cachedReview
         }
         
-        // Fetch from Firestore
         let document = try await db.collection("reviews").document(id).getDocument()
-        
         guard document.exists else { return nil }
         
         var review = try document.data(as: Review.self)
         review.id = document.documentID
         
-        // Cache the review
         cache.store(review, for: cacheKey)
-        
         return review
     }
     
@@ -79,7 +73,6 @@ final class ReviewRepository: RepositoryProtocol {
     ) async throws -> (items: [Review], lastDoc: DocumentSnapshot?) {
         let cacheKey = "reviews_user_\(userId)"
         
-        // Check cache if no pagination
         if lastDocument == nil,
            !cache.isExpired(for: cacheKey, maxAge: cacheMaxAge),
            let cachedReviews: [Review] = cache.retrieve([Review].self, for: cacheKey) {
@@ -103,7 +96,6 @@ final class ReviewRepository: RepositoryProtocol {
             return review
         }
         
-        // Cache if first page
         if lastDocument == nil {
             cache.store(reviews, for: cacheKey)
         }
@@ -143,22 +135,10 @@ final class ReviewRepository: RepositoryProtocol {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Prevent self-reviews
         if reviewerId == review.reviewedUserId {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Cannot review yourself"])
         }
         
-        // Check for duplicate review
-        let existingReviews = try await db.collection("reviews")
-            .whereField("reviewerId", isEqualTo: reviewerId)
-            .whereField("reviewedUserId", isEqualTo: review.reviewedUserId)
-            .getDocuments()
-        
-        if existingReviews.documents.count >= 3 {
-            throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Maximum 3 reviews per user allowed"])
-        }
-        
-        // Create review data dictionary
         let reviewData: [String: Any] = [
             "reviewerId": reviewerId,
             "reviewedUserId": review.reviewedUserId,
@@ -170,16 +150,12 @@ final class ReviewRepository: RepositoryProtocol {
             "createdAt": Date(),
             "updatedAt": Date(),
             "isEdited": false,
-            "helpfulVotes": [],
-            "reviewNumber": existingReviews.documents.count + 1
+            "helpfulVotes": []
         ]
         
         let docRef = try await db.collection("reviews").addDocument(data: reviewData)
         
-        // Update user rating
         await userRepository.updateUserRating(userId: review.reviewedUserId)
-        
-        // Create notification using unified system
         await notificationRepository.createReviewNotification(
             for: review.reviewedUserId,
             reviewId: docRef.documentID,
@@ -188,9 +164,7 @@ final class ReviewRepository: RepositoryProtocol {
             reviewText: review.text
         )
         
-        // Clear cache
         cache.remove(for: "reviews_user_\(review.reviewedUserId)")
-        
         return docRef.documentID
     }
     
@@ -204,14 +178,12 @@ final class ReviewRepository: RepositoryProtocol {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Verify ownership
         let document = try await db.collection("reviews").document(reviewId).getDocument()
         guard let data = document.data(),
               data["reviewerId"] as? String == currentUserId else {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to edit this review"])
         }
         
-        // Update review
         let updates: [String: Any] = [
             "rating": review.rating,
             "text": review.text,
@@ -221,11 +193,8 @@ final class ReviewRepository: RepositoryProtocol {
         
         try await db.collection("reviews").document(reviewId).updateData(updates)
         
-        // Update user rating if rating changed
         if let reviewedUserId = data["reviewedUserId"] as? String {
             await userRepository.updateUserRating(userId: reviewedUserId)
-            
-            // Create notification using unified system
             await notificationRepository.createReviewNotification(
                 for: reviewedUserId,
                 reviewId: reviewId,
@@ -233,13 +202,10 @@ final class ReviewRepository: RepositoryProtocol {
                 fromUserId: currentUserId,
                 reviewText: review.text
             )
-        }
-        
-        // Clear cache
-        cache.remove(for: "review_\(reviewId)")
-        if let reviewedUserId = data["reviewedUserId"] as? String {
             cache.remove(for: "reviews_user_\(reviewedUserId)")
         }
+        
+        cache.remove(for: "review_\(reviewId)")
     }
     
     // MARK: - Delete Review
@@ -248,7 +214,6 @@ final class ReviewRepository: RepositoryProtocol {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Get review to verify ownership and get reviewedUserId
         let document = try await db.collection("reviews").document(id).getDocument()
         guard let data = document.data() else {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Review not found"])
@@ -257,18 +222,13 @@ final class ReviewRepository: RepositoryProtocol {
         let reviewerId = data["reviewerId"] as? String ?? ""
         let reviewedUserId = data["reviewedUserId"] as? String ?? ""
         
-        // Check if user can delete (own review or reviewed user can delete)
         guard currentUserId == reviewerId || currentUserId == reviewedUserId else {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to delete this review"])
         }
         
-        // Delete review
         try await db.collection("reviews").document(id).delete()
-        
-        // Update user rating
         await userRepository.updateUserRating(userId: reviewedUserId)
         
-        // Clear cache
         cache.remove(for: "review_\(id)")
         cache.remove(for: "reviews_user_\(reviewedUserId)")
     }
@@ -279,7 +239,6 @@ final class ReviewRepository: RepositoryProtocol {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Get review
         let document = try await db.collection("reviews").document(reviewId).getDocument()
         guard let data = document.data(),
               data["reviewedUserId"] as? String == currentUserId else {
@@ -288,7 +247,6 @@ final class ReviewRepository: RepositoryProtocol {
         
         let reviewerId = data["reviewerId"] as? String ?? ""
         
-        // Add reply
         let reply: [String: Any] = [
             "userId": currentUserId,
             "text": replyText,
@@ -300,7 +258,6 @@ final class ReviewRepository: RepositoryProtocol {
             "updatedAt": Date()
         ])
         
-        // Create notification using unified system
         await notificationRepository.createReviewNotification(
             for: reviewerId,
             reviewId: reviewId,
@@ -309,19 +266,14 @@ final class ReviewRepository: RepositoryProtocol {
             reviewText: replyText
         )
         
-        // Clear cache
         cache.remove(for: "review_\(reviewId)")
     }
     
-    // MARK: - Vote Helpful
+    // MARK: - Helpful Votes
     func voteHelpful(_ reviewId: String) async throws {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
+        guard let userId = Auth.auth().currentUser?.uid else { return }
         
         let reviewRef = db.collection("reviews").document(reviewId)
-        
-        // Get current review
         let document = try await reviewRef.getDocument()
         guard let data = document.data() else { return }
         
@@ -329,17 +281,14 @@ final class ReviewRepository: RepositoryProtocol {
         let reviewerId = data["reviewerId"] as? String ?? ""
         
         if helpfulVotes.contains(userId) {
-            // Remove vote
             try await reviewRef.updateData([
                 "helpfulVotes": FieldValue.arrayRemove([userId])
             ])
         } else {
-            // Add vote
             try await reviewRef.updateData([
                 "helpfulVotes": FieldValue.arrayUnion([userId])
             ])
             
-            // Create notification only for new votes using unified system
             if userId != reviewerId {
                 await notificationRepository.createReviewNotification(
                     for: reviewerId,
@@ -350,11 +299,9 @@ final class ReviewRepository: RepositoryProtocol {
             }
         }
         
-        // Clear cache
         cache.remove(for: "review_\(reviewId)")
     }
     
-    // MARK: - Toggle Helpful Vote (returns new state)
     func toggleHelpfulVote(for reviewId: String) async throws -> (isVoted: Bool, count: Int) {
         guard let userId = Auth.auth().currentUser?.uid else {
             return (false, 0)
@@ -362,7 +309,6 @@ final class ReviewRepository: RepositoryProtocol {
         
         let reviewRef = db.collection("reviews").document(reviewId)
         let review = try await reviewRef.getDocument()
-        
         guard let data = review.data() else {
             return (false, 0)
         }
@@ -374,8 +320,6 @@ final class ReviewRepository: RepositoryProtocol {
             helpfulVotes.removeAll { $0 == userId }
         } else {
             helpfulVotes.append(userId)
-            
-            // Create notification for helpful vote (only on adding) using unified system
             if let reviewerId = data["reviewerId"] as? String, reviewerId != userId {
                 await notificationRepository.createReviewNotification(
                     for: reviewerId,
@@ -386,79 +330,46 @@ final class ReviewRepository: RepositoryProtocol {
             }
         }
         
-        try await reviewRef.updateData([
-            "helpfulVotes": helpfulVotes
-        ])
-        
-        // Clear cache
+        try await reviewRef.updateData(["helpfulVotes": helpfulVotes])
         cache.remove(for: "review_\(reviewId)")
         
         return (!wasVoted, helpfulVotes.count)
     }
     
-    // MARK: - Get Review Stats
+    // MARK: - Stats
     func getReviewStats(for userId: String) async -> (average: Double, count: Int, breakdown: [Int: Int]) {
         do {
             let snapshot = try await db.collection("reviews")
                 .whereField("reviewedUserId", isEqualTo: userId)
                 .getDocuments()
             
-            let reviews = snapshot.documents.compactMap { doc -> Review? in
-                var review = try? doc.data(as: Review.self)
-                review?.id = doc.documentID
-                return review
-            }
-            
-            guard !reviews.isEmpty else {
-                return (0.0, 0, [:])
-            }
+            let reviews = snapshot.documents.compactMap { try? $0.data(as: Review.self) }
+            guard !reviews.isEmpty else { return (0.0, 0, [:]) }
             
             var breakdown: [Int: Int] = [:]
             for rating in 1...5 {
                 let count = reviews.filter { $0.rating == rating }.count
-                if count > 0 {
-                    breakdown[rating] = count
-                }
+                if count > 0 { breakdown[rating] = count }
             }
             
             let totalRating = reviews.reduce(0) { $0 + $1.rating }
             let average = Double(totalRating) / Double(reviews.count)
-            
             return (average, reviews.count, breakdown)
-            
         } catch {
             print("Error getting review stats: \(error)")
             return (0.0, 0, [:])
         }
     }
     
-    // MARK: - Create Review with Images
-    func createReview(
-        for userId: String,
-        rating: Int,
-        text: String,
-        images: [UIImage] = []
-    ) async throws -> Review {
+    // MARK: - Create with Images
+    func createReview(for userId: String, rating: Int, text: String, images: [UIImage] = []) async throws -> Review {
         guard let reviewerId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
-        
-        // Prevent self-reviews
         if reviewerId == userId {
             throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Cannot review yourself"])
         }
         
-        // Check for existing reviews
-        let existingReviews = try await db.collection("reviews")
-            .whereField("reviewerId", isEqualTo: reviewerId)
-            .whereField("reviewedUserId", isEqualTo: userId)
-            .getDocuments()
-        
-        if existingReviews.documents.count >= 3 {
-            throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Maximum 3 reviews per user allowed"])
-        }
-        
-        // Upload images
         var mediaURLs: [String] = []
         for (index, image) in images.enumerated() {
             let path = "reviews/\(reviewerId)/\(UUID().uuidString)_\(index).jpg"
@@ -466,11 +377,9 @@ final class ReviewRepository: RepositoryProtocol {
             mediaURLs.append(url)
         }
         
-        // Get reviewer info
         let userDoc = try await db.collection("users").document(reviewerId).getDocument()
         let userData = try? userDoc.data(as: User.self)
         
-        // Create review
         let review = Review(
             reviewerId: reviewerId,
             reviewedUserId: userId,
@@ -478,83 +387,17 @@ final class ReviewRepository: RepositoryProtocol {
             reviewerProfileImage: userData?.profileImageURL,
             rating: rating,
             text: text,
-            mediaURLs: mediaURLs,
-            reviewNumber: existingReviews.documents.count + 1
+            mediaURLs: mediaURLs
         )
         
         let reviewId = try await create(review)
-        
         var newReview = review
         newReview.id = reviewId
-        
         return newReview
     }
     
-    // MARK: - Update Review (with optional parameters)
-    func updateReview(
-        _ reviewId: String,
-        rating: Int? = nil,
-        text: String? = nil
-    ) async throws -> Review? {
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        // Get existing review
-        let document = try await db.collection("reviews").document(reviewId).getDocument()
-        guard let data = document.data(),
-              data["reviewerId"] as? String == currentUserId else {
-            throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
-        }
-        
-        // Build updates
-        var updates: [String: Any] = [
-            "updatedAt": Date(),
-            "isEdited": true
-        ]
-        
-        if let rating = rating {
-            updates["rating"] = rating
-        }
-        
-        if let text = text {
-            updates["text"] = text
-        }
-        
-        // Update document
-        try await db.collection("reviews").document(reviewId).updateData(updates)
-        
-        // Get updated review
-        let updatedDoc = try await db.collection("reviews").document(reviewId).getDocument()
-        var updatedReview = try? updatedDoc.data(as: Review.self)
-        updatedReview?.id = updatedDoc.documentID
-        
-        // Update user rating if rating changed
-        if rating != nil, let reviewedUserId = data["reviewedUserId"] as? String {
-            await userRepository.updateUserRating(userId: reviewedUserId)
-            
-            // Create notification using unified system
-            await notificationRepository.createReviewNotification(
-                for: reviewedUserId,
-                reviewId: reviewId,
-                type: .reviewEdit,
-                fromUserId: currentUserId,
-                reviewText: text
-            )
-        }
-        
-        // Clear cache
-        cache.remove(for: "review_\(reviewId)")
-        if let reviewedUserId = data["reviewedUserId"] as? String {
-            cache.remove(for: "reviews_user_\(reviewedUserId)")
-        }
-        
-        return updatedReview
-    }
-    
-    // MARK: - Real-time Listening
+    // MARK: - Real-time Listeners
     func listenToUserReviews(userId: String, completion: @escaping ([Review]) -> Void) -> ListenerRegistration {
-        // Remove existing listener
         reviewListeners[userId]?.remove()
         
         let listener = db.collection("reviews")
@@ -590,9 +433,7 @@ final class ReviewRepository: RepositoryProtocol {
         reviewListeners.removeAll()
     }
     
-
-    
-    // MARK: - Mark Notification as Read (Deprecated - use NotificationRepository instead)
+    // MARK: - Deprecated
     func markReviewNotificationAsRead(_ notificationId: String) async {
         do {
             try await notificationRepository.markAsRead(notificationId)
@@ -603,10 +444,6 @@ final class ReviewRepository: RepositoryProtocol {
     
     // MARK: - Cleanup
     deinit {
-        // Option 1: Simply don't clean up - Firebase auto-cleans listeners when the object is deallocated
-        // The listeners will be automatically removed when the repository is deallocated
-        
-        // Option 2: If you really need explicit cleanup, use Task.detached (fire-and-forget)
         let listenersToClean = reviewListeners
         Task.detached {
             listenersToClean.values.forEach { $0.remove() }
