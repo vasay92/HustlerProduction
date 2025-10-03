@@ -1,4 +1,4 @@
-// HomeMapView.swift
+// HomeMapView.swift - Fixed with bottom preview card
 // Path: ClaudeHustlerFirebase/Views/Home/HomeMapView.swift
 
 import SwiftUI
@@ -31,6 +31,7 @@ struct HomeMapView: View {
                         .onTapGesture {
                             viewModel.selectPost(post)
                         }
+                        .zIndex(1)
                     }
                 }
                 .ignoresSafeArea(edges: .top)
@@ -155,53 +156,72 @@ struct HomeMapView: View {
                     
                     Spacer()
                     
-                    // Bottom Filter Chips (horizontal)
-                    HStack(spacing: 12) {
-                        FilterChip(
-                            title: "Offers",
-                            isSelected: viewModel.showOnlyOffers,
-                            color: .blue,
-                            action: viewModel.toggleOfferFilter
-                        )
-                        
-                        FilterChip(
-                            title: "Requests",
-                            isSelected: viewModel.showOnlyRequests,
-                            color: .orange,
-                            action: viewModel.toggleRequestFilter
-                        )
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
-                    
-                    // Post Preview Card
-                    if viewModel.showingPostPreview, let post = viewModel.selectedPost {
-                        PostPreviewCard(post: post) {
-                            viewModel.dismissPostPreview()
+                    // Bottom section
+                    VStack(spacing: 0) {
+                        // Filter Chips
+                        HStack(spacing: 12) {
+                            FilterChip(
+                                title: "Offers",
+                                isSelected: viewModel.showOnlyOffers,
+                                color: .blue,
+                                action: viewModel.toggleOfferFilter
+                            )
+                            
+                            FilterChip(
+                                title: "Requests",
+                                isSelected: viewModel.showOnlyRequests,
+                                color: .orange,
+                                action: viewModel.toggleRequestFilter
+                            )
+                            
+                            Spacer()
                         }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .animation(.spring(), value: viewModel.showingPostPreview)
+                        .padding(.horizontal)
+                        .padding(.bottom, viewModel.showingPostPreview ? 8 : 20)
+                        
+                        // Post Preview Card - Now at the very bottom
+                        if viewModel.showingPostPreview, let post = viewModel.selectedPost {
+                            PostPreviewCard(post: post) {
+                                viewModel.dismissPostPreview()
+                            }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .animation(.spring(), value: viewModel.showingPostPreview)
+                        }
                     }
                 }
                 
-                // FAB for creating posts
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Button(action: { showingCreatePost = true }) {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 56, height: 56)
-                                .background(Color.blue)
-                                .clipShape(Circle())
-                                .shadow(radius: 4)
+                // Invisible overlay for dismissing preview
+                if viewModel.showingPostPreview {
+                    Color.clear
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            viewModel.dismissPostPreview()
                         }
-                        .padding()
+                        .allowsHitTesting(true)
+                        .zIndex(-1)
+                }
+                
+                // FAB for creating posts
+                if !viewModel.showingPostPreview {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: { showingCreatePost = true }) {
+                                Image(systemName: "plus")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .frame(width: 56, height: 56)
+                                    .background(Color.blue)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 4)
+                            }
+                            .padding()
+                        }
                     }
+                    .transition(.scale.combined(with: .opacity))
+                    .animation(.spring(), value: viewModel.showingPostPreview)
                 }
             }
             .navigationBarHidden(true)
@@ -230,47 +250,7 @@ struct HomeMapView: View {
     }
 }
 
-// MARK: - Post Map Annotation View
-struct PostMapAnnotation: View {
-    let post: ServicePost
-    let isSelected: Bool
-    
-    var body: some View {
-        ZStack {
-            // Background circle
-            Circle()
-                .fill(post.isRequest ? Color.orange : Color.blue)
-                .frame(width: isSelected ? 50 : 40, height: isSelected ? 50 : 40)
-            
-            // Icon
-            Image(systemName: getIcon())
-                .foregroundColor(.white)
-                .font(.system(size: isSelected ? 22 : 18))
-        }
-        .scaleEffect(isSelected ? 1.2 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
-        .shadow(radius: isSelected ? 8 : 4)
-    }
-    
-    private func getIcon() -> String {
-        switch post.category {
-        case .cleaning: return "sparkles"
-        case .tutoring: return "book.fill"
-        case .delivery: return "shippingbox.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .carpentry: return "hammer.fill"
-        case .painting: return "paintbrush.fill"
-        case .landscaping: return "leaf.fill"
-        case .moving: return "box.truck.fill"
-        case .technology: return "desktopcomputer"
-        case .other: return "ellipsis.circle.fill"
-        }
-    }
-}
-
-
-// PostPreviewCard - With action buttons matching PostDetailView
+// PostPreviewCard - Fixed compact version at bottom
 struct PostPreviewCard: View {
     let post: ServicePost
     let onDismiss: () -> Void
@@ -284,14 +264,11 @@ struct PostPreviewCard: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Handle bar - minimal padding
+            // Handle bar
             Capsule()
                 .fill(Color.gray.opacity(0.5))
                 .frame(width: 40, height: 5)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
+                .padding(.vertical, 8)
                 .gesture(
                     DragGesture()
                         .onChanged { value in
@@ -308,241 +285,174 @@ struct PostPreviewCard: View {
                         }
                 )
             
-            // Make entire card content tappable
-            Button(action: { showingFullDetail = true }) {
-                VStack(alignment: .leading, spacing: 8) {
-                    // 1. Title and Badge Row - NO TOP PADDING
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(post.title)
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        
-                        // Type Badge (OFFER/REQUEST)
-                        Text(post.isRequest ? "REQUEST" : "OFFER")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(post.isRequest ? Color.orange : Color.blue)
-                            .cornerRadius(4)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 0)
-                    
-                    // 2. User Info with Rating
-                    HStack(spacing: 8) {
-                        // User profile photo or initial
-                        if let profileImageURL = posterInfo?.profileImageURL, !profileImageURL.isEmpty {
-                            AsyncImage(url: URL(string: profileImageURL)) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 32, height: 32)
-                                        .clipShape(Circle())
-                                case .failure(_):
-                                    profileInitialCircle
-                                case .empty:
-                                    Circle()
-                                        .fill(Color.gray.opacity(0.3))
-                                        .frame(width: 32, height: 32)
-                                        .overlay(
-                                            ProgressView()
-                                                .scaleEffect(0.5)
-                                        )
-                                @unknown default:
-                                    profileInitialCircle
-                                }
-                            }
-                        } else {
-                            profileInitialCircle
-                        }
-                        
-                        // User name
-                        Text(posterInfo?.name ?? post.userName ?? "Unknown User")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        
-                        // Rating stars with actual data
-                        if let rating = posterInfo?.rating, let reviewCount = posterInfo?.reviewCount {
-                            HStack(spacing: 2) {
-                                ForEach(0..<5) { index in
-                                    Image(systemName: getRatingIcon(for: Double(index), rating: rating))
-                                        .font(.caption2)
-                                        .foregroundColor(.orange)
-                                }
-                                if reviewCount > 0 {
-                                    Text("(\(reviewCount))")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    
-                    // 3. Description
-                    Text(post.description)
-                        .font(.subheadline)
-                        .foregroundColor(.primary.opacity(0.8))
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
+            // Content - NO SCROLLVIEW, compact layout
+            VStack(alignment: .leading, spacing: 8) {
+                // Title and Badge Row
+                HStack(alignment: .top, spacing: 8) {
+                    Text(post.title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
                     
-                    // 4. Photos Section
-                    if !post.imageURLs.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(Array(post.imageURLs.prefix(4).enumerated()), id: \.offset) { index, imageURL in
-                                    ZStack(alignment: .center) {
-                                        AsyncImage(url: URL(string: imageURL)) { phase in
-                                            switch phase {
-                                            case .success(let image):
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 100, height: 100)
-                                                    .clipped()
-                                                    .cornerRadius(10)
-                                            case .failure(_):
-                                                imagePlaceholder(for: index)
-                                            case .empty:
-                                                ZStack {
-                                                    imagePlaceholder(for: index)
-                                                    ProgressView()
-                                                        .progressViewStyle(CircularProgressViewStyle())
-                                                        .scaleEffect(0.7)
-                                                }
-                                            @unknown default:
-                                                imagePlaceholder(for: index)
-                                            }
-                                        }
-                                        
-                                        // Show "+X" overlay on last image if more than 4 photos
-                                        if index == 3 && post.imageURLs.count > 4 {
+                    Text(post.isRequest ? "REQUEST" : "OFFER")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(post.isRequest ? Color.orange : Color.blue)
+                        .cornerRadius(4)
+                }
+                .padding(.horizontal)
+                
+                // User Info - compact
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 28, height: 28)
+                        .overlay(
+                            Text(String(posterInfo?.name.first ?? post.userName?.first ?? "U"))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                        )
+                    
+                    Text(posterInfo?.name ?? post.userName ?? "Unknown")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    
+                    if let rating = posterInfo?.rating, posterInfo?.reviewCount ?? 0 > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                            Text(String(format: "%.1f", rating))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal)
+                
+                // Description - 2 lines max
+                Text(post.description)
+                    .font(.subheadline)
+                    .foregroundColor(.primary.opacity(0.8))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                
+                // Photos - smaller
+                if !post.imageURLs.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(post.imageURLs.prefix(3).enumerated()), id: \.offset) { index, imageURL in
+                                AsyncImage(url: URL(string: imageURL)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 80, height: 80)
+                                            .clipped()
+                                            .cornerRadius(8)
+                                    default:
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 80, height: 80)
+                                            .cornerRadius(8)
+                                    }
+                                }
+                                .overlay(
+                                    Group {
+                                        if index == 2 && post.imageURLs.count > 3 {
                                             Rectangle()
                                                 .fill(Color.black.opacity(0.6))
-                                                .frame(width: 100, height: 100)
-                                                .cornerRadius(10)
+                                                .cornerRadius(8)
                                                 .overlay(
-                                                    Text("+\(post.imageURLs.count - 4)")
-                                                        .font(.title2)
+                                                    Text("+\(post.imageURLs.count - 3)")
+                                                        .font(.headline)
                                                         .fontWeight(.bold)
                                                         .foregroundColor(.white)
                                                 )
                                         }
                                     }
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                        .frame(height: 100)
-                    } else {
-                        // No images placeholder
-                        Rectangle()
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        post.isRequest ? Color.orange.opacity(0.1) : Color.blue.opacity(0.1),
-                                        post.isRequest ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2)
-                                    ]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
                                 )
-                            )
-                            .frame(height: 100)
-                            .cornerRadius(10)
-                            .overlay(
-                                VStack(spacing: 4) {
-                                    Image(systemName: getIcon())
-                                        .font(.title)
-                                        .foregroundColor(post.isRequest ? .orange : .blue).opacity(0.5)
-                                    Text("No photos")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            )
-                            .padding(.horizontal)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .frame(height: 80)
+                }
+                
+                Spacer(minLength: 12)
+                
+                // Action Buttons
+                HStack(spacing: 10) {
+                    Button(action: {
+                        if post.userId != firebase.currentUser?.id {
+                            showingMessageView = true
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 14))
+                            Text("Message")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .background(post.userId == firebase.currentUser?.id ? Color.gray : Color.blue)
+                        .cornerRadius(8)
+                    }
+                    .disabled(post.userId == firebase.currentUser?.id)
+                    
+                    HStack(spacing: 6) {
+                        Button(action: { toggleSave() }) {
+                            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                                .font(.system(size: 16))
+                                .foregroundColor(isSaved ? .blue : .gray)
+                                .frame(width: 40, height: 40)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                        }
+                        
+                        Button(action: { showingShareSheet = true }) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16))
+                                .foregroundColor(.gray)
+                                .frame(width: 40, height: 40)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                        }
+                        
+                        Button(action: {}) {
+                            Image(systemName: "flag")
+                                .font(.system(size: 16))
+                                .foregroundColor(.gray)
+                                .frame(width: 40, height: 40)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.clear)
-                .contentShape(Rectangle())
+                .padding(.horizontal)
+                .padding(.bottom, 8)
             }
-            .buttonStyle(PlainButtonStyle())
-            
-            // 5. Action Buttons Section (Same as PostDetailView)
-            HStack(spacing: 0) {
-                // Message Button
-                Button(action: {
-                    if post.userId != firebase.currentUser?.id {
-                        showingMessageView = true
-                    }
-                }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "message")
-                            .font(.title3)
-                        Text("Message")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(post.userId == firebase.currentUser?.id ? .gray : .primary)
-                    .frame(maxWidth: .infinity)
-                }
-                .disabled(post.userId == firebase.currentUser?.id)
-                
-                // Save Button
-                Button(action: { toggleSave() }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-                            .font(.title3)
-                        Text(isSaved ? "Saved" : "Save")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(isSaved ? .blue : .primary)
-                    .frame(maxWidth: .infinity)
-                }
-                
-                // Share Button
-                Button(action: { showingShareSheet = true }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.title3)
-                        Text("Share")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity)
-                }
-                
-                // Report Button
-                Button(action: {
-                    // TODO: Implement report functionality (same as PostDetailView)
-                }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "flag")
-                            .font(.title3)
-                        Text("Report")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity)
-                }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                showingFullDetail = true
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6))
         }
         .background(Color(.systemBackground))
         .cornerRadius(20, corners: [.topLeft, .topRight])
         .shadow(radius: 10)
-        .frame(maxHeight: 380) // Increased to accommodate buttons
+        .frame(height: 300) // Fixed compact height
         .offset(y: dragOffset.height)
         .task {
             await loadPosterInfo()
@@ -579,32 +489,7 @@ struct PostPreviewCard: View {
         }
     }
     
-    // MARK: - Helper Views and Functions
-    
-    @ViewBuilder
-    private var profileInitialCircle: some View {
-        Circle()
-            .fill(Color.gray.opacity(0.3))
-            .frame(width: 32, height: 32)
-            .overlay(
-                Text(String(posterInfo?.name.first ?? post.userName?.first ?? "U"))
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-            )
-    }
-    
-    private func imagePlaceholder(for index: Int) -> some View {
-        Rectangle()
-            .fill(Color.gray.opacity(0.2))
-            .frame(width: 100, height: 100)
-            .cornerRadius(10)
-            .overlay(
-                Image(systemName: "photo")
-                    .foregroundColor(.gray.opacity(0.5))
-            )
-    }
-    
+    // Helper functions...
     private func loadPosterInfo() async {
         do {
             let document = try await Firestore.firestore()
@@ -643,15 +528,26 @@ struct PostPreviewCard: View {
             }
         }
     }
+}
+
+// Keep your existing PostMapAnnotation and other structs...
+struct PostMapAnnotation: View {
+    let post: ServicePost
+    let isSelected: Bool
     
-    private func getRatingIcon(for index: Double, rating: Double) -> String {
-        if rating >= index + 1 {
-            return "star.fill"
-        } else if rating >= index + 0.5 {
-            return "star.leadinghalf.filled"
-        } else {
-            return "star"
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(post.isRequest ? Color.orange : Color.blue)
+                .frame(width: isSelected ? 50 : 40, height: isSelected ? 50 : 40)
+            
+            Image(systemName: getIcon())
+                .foregroundColor(.white)
+                .font(.system(size: isSelected ? 22 : 18))
         }
+        .scaleEffect(isSelected ? 1.2 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
+        .shadow(radius: isSelected ? 8 : 4)
     }
     
     private func getIcon() -> String {
@@ -671,14 +567,6 @@ struct PostPreviewCard: View {
     }
 }
 
-
-
-
-
-
-
-
-// MARK: - Filter Chip View
 struct FilterChip: View {
     let title: String
     let isSelected: Bool
@@ -704,7 +592,6 @@ struct FilterChip: View {
     }
 }
 
-// MARK: - Helper Extensions
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
         clipShape(RoundedCorner(radius: radius, corners: corners))
@@ -725,7 +612,6 @@ struct RoundedCorner: Shape {
     }
 }
 
-// MARK: - ServicePost Extension for Map
 extension ServicePost {
     var coordinate: CLLocationCoordinate2D {
         guard let geoPoint = coordinates else {
