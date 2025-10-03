@@ -268,7 +268,10 @@ struct PostMapAnnotation: View {
     }
 }
 
-// MARK: - Post Preview Card
+
+// Updated PostPreviewCard for HomeMapView.swift
+// Now the entire card is tappable and includes a photo preview
+
 struct PostPreviewCard: View {
     let post: ServicePost
     let onDismiss: () -> Void
@@ -282,93 +285,146 @@ struct PostPreviewCard: View {
                 .frame(width: 40, height: 5)
                 .padding(.top, 8)
             
-            // Card Content
-            VStack(alignment: .leading, spacing: 12) {
-                // Header
-                HStack {
-                    // Category Badge
-                    Label(post.category.displayName, systemImage: getIcon())
+            // Make entire card content tappable
+            Button(action: { showingFullDetail = true }) {
+                VStack(alignment: .leading, spacing: 12) {
+                    // Header with image preview
+                    HStack(alignment: .top, spacing: 12) {
+                        // Photo preview (if available)
+                        if let firstImageURL = post.imageURLs.first {
+                            AsyncImage(url: URL(string: firstImageURL)) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 80, height: 80)
+                                        .clipped()
+                                        .cornerRadius(10)
+                                case .failure(_):
+                                    imagePreviewPlaceholder
+                                case .empty:
+                                    ZStack {
+                                        imagePreviewPlaceholder
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle())
+                                            .scaleEffect(0.7)
+                                    }
+                                @unknown default:
+                                    imagePreviewPlaceholder
+                                }
+                            }
+                        } else {
+                            imagePreviewPlaceholder
+                        }
+                        
+                        // Right side content
+                        VStack(alignment: .leading, spacing: 6) {
+                            // Badges
+                            HStack {
+                                // Category Badge
+                                HStack(spacing: 4) {
+                                    Image(systemName: getIcon())
+                                        .font(.caption2)
+                                    Text(post.category.displayName)
+                                        .font(.caption)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(post.isRequest ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2))
+                                .foregroundColor(post.isRequest ? .orange : .blue)
+                                .cornerRadius(12)
+                                
+                                // Type Badge
+                                Text(post.isRequest ? "REQUEST" : "OFFER")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(post.isRequest ? Color.orange : Color.blue)
+                                    .cornerRadius(4)
+                                
+                                Spacer()
+                            }
+                            
+                            // Title
+                            Text(post.title)
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                            
+                            // Price
+                            if let price = post.price {
+                                Text(post.isRequest ? "Budget: $\(Int(price))" : "$\(Int(price))")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(post.isRequest ? .orange : .green)
+                            } else {
+                                Text(post.isRequest ? "Budget: Flexible" : "Contact for price")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    
+                    // Description Preview
+                    Text(post.description)
                         .font(.caption)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(post.isRequest ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2))
-                        .foregroundColor(post.isRequest ? .orange : .blue)
-                        .cornerRadius(15)
-                    
-                    Spacer()
-                    
-                    // Type Badge
-                    Text(post.isRequest ? "REQUEST" : "OFFER")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(post.isRequest ? Color.orange : Color.blue)
-                        .cornerRadius(4)
-                }
-                
-                // Title
-                Text(post.title)
-                    .font(.headline)
-                    .lineLimit(2)
-                
-                // Description
-                Text(post.description)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(3)
-                
-                // Price and Location
-                HStack {
-                    if let price = post.price {
-                        Label("$\(Int(price))", systemImage: "dollarsign.circle.fill")
-                            .font(.subheadline)
-                            .foregroundColor(.green)
-                    }
-                    
-                    Spacer()
-                    
-                    if let location = post.location {
-                        Label(location, systemImage: "location.circle.fill")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                }
-                
-                // User Info
-                HStack {
-                    // Avatar
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Text(String(post.userName?.first ?? "U"))
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        )
-                    
-                    Text(post.userName ?? "Unknown User")
-                        .font(.subheadline)
                         .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                     
-                    Spacer()
+                    Divider()
                     
-                    // View Details Button
-                    Button(action: { showingFullDetail = true }) {
-                        Text("View Details")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.blue)
+                    // Bottom section: Location & User
+                    HStack {
+                        // User info
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 24, height: 24)
+                                .overlay(
+                                    Text(String(post.userName?.first ?? "U"))
+                                        .font(.caption2)
+                                        .foregroundColor(.white)
+                                )
+                            
+                            Text(post.userName ?? "Unknown User")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        
+                        Spacer()
+                        
+                        // Location
+                        if let location = post.location {
+                            HStack(spacing: 4) {
+                                Image(systemName: "location.fill")
+                                    .font(.caption2)
+                                Text(location)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                            }
+                            .foregroundColor(.gray)
+                        }
+                        
+                        // Chevron to indicate tappable
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.gray.opacity(0.5))
                     }
                 }
+                .padding()
             }
-            .padding()
+            .buttonStyle(PlainButtonStyle()) // Remove default button styling
         }
         .background(Color(.systemBackground))
         .cornerRadius(20, corners: [.topLeft, .topRight])
         .shadow(radius: 10)
-        .frame(maxHeight: 300)
+        .frame(maxHeight: 350)
         .gesture(
             DragGesture()
                 .onEnded { value in
@@ -378,8 +434,46 @@ struct PostPreviewCard: View {
                 }
         )
         .fullScreenCover(isPresented: $showingFullDetail) {
-            PostDetailView(post: post)
+            NavigationView {
+                PostDetailView(post: post)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Done") {
+                                showingFullDetail = false
+                            }
+                            .fontWeight(.medium)
+                        }
+                    }
+            }
         }
+    }
+    
+    @ViewBuilder
+    private var imagePreviewPlaceholder: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        post.isRequest ? Color.orange.opacity(0.3) : Color.blue.opacity(0.3),
+                        post.isRequest ? Color.red.opacity(0.3) : Color.purple.opacity(0.3)
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 80, height: 80)
+            .cornerRadius(10)
+            .overlay(
+                VStack(spacing: 4) {
+                    Image(systemName: getIcon())
+                        .font(.title2)
+                        .foregroundColor(.white.opacity(0.8))
+                    Text(post.isRequest ? "REQUEST" : "OFFER")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            )
     }
     
     private func getIcon() -> String {
@@ -398,6 +492,8 @@ struct PostPreviewCard: View {
         }
     }
 }
+
+
 
 // MARK: - Filter Chip View
 struct FilterChip: View {

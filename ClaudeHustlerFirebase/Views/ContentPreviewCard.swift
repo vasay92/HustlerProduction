@@ -10,11 +10,12 @@ struct PostDetailViewWithClose: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        // Just show PostDetailView without any additional buttons
-        PostDetailView(post: post)
-            .onDisappear {
-                // This ensures the view can still be dismissed programmatically if needed
-            }
+        NavigationView {
+            PostDetailView(post: post)
+                .onDisappear {
+                    // This ensures the view can still be dismissed programmatically if needed
+                }
+        }
     }
 }
 

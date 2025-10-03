@@ -1,5 +1,10 @@
 // PostDetailView.swift
 // Path: ClaudeHustlerFirebase/Views/Post/PostDetailView.swift
+//
+// CHANGES MADE TO FIX NAVIGATION ISSUES:
+// 1. Removed NavigationView wrapper from body
+// 2. Removed .navigationBarHidden(false) modifier
+// 3. Removed custom back button from toolbar (SwiftUI provides one automatically)
 
 import SwiftUI
 import Firebase
@@ -19,77 +24,65 @@ struct PostDetailView: View {
     @State private var isDeleting = false
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        VStack {
-                                            Text("DEBUG: Post loaded - \(post.title)")
-                                                .foregroundColor(.red)
-                                                .padding()
-                                        }
-                                        .onAppear {
-                                            print("DEBUG: PostDetailView body rendered with post: \(post.title)")
-                                        }
-                        // Photo Gallery
-                        photoGallerySection
-                        
-                        // Post Details
-                        postDetailsSection
-                        
-                        // User Info
-                        userInfoSection
-                        
-                        // Action Buttons
-                        actionButtonsSection
-                        
-                        Spacer(minLength: 100)
-                    }
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack {
+                                        Text("DEBUG: Post loaded - \(post.title)")
+                                            .foregroundColor(.red)
+                                            .padding()
+                                    }
+                                    .onAppear {
+                                        print("DEBUG: PostDetailView body rendered with post: \(post.title)")
+                                    }
+                    // Photo Gallery
+                    photoGallerySection
+                    
+                    // Post Details
+                    postDetailsSection
+                    
+                    // User Info
+                    userInfoSection
+                    
+                    // Action Buttons
+                    actionButtonsSection
+                    
+                    Spacer(minLength: 100)
                 }
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: { dismiss() }) {
-                            HStack {
-                                Image(systemName: "chevron.left")
-                                Text("Back")
-                            }
-                            .foregroundColor(.primary)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack {
+                        Button(action: { showingShareSheet = true }) {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(.primary)
                         }
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        HStack {
-                            Button(action: { showingShareSheet = true }) {
-                                Image(systemName: "square.and.arrow.up")
+                        
+                        // Options menu for post owner
+                        if post.userId == firebase.currentUser?.id {
+                            Menu {
+                                Button(action: { showingEditView = true }) {
+                                    Label("Edit Post", systemImage: "pencil")
+                                }
+                                
+                                Divider()
+                                
+                                Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
+                                    Label("Delete Post", systemImage: "trash")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
                                     .foregroundColor(.primary)
                             }
-                            
-                            // Options menu for post owner
-                            if post.userId == firebase.currentUser?.id {
-                                Menu {
-                                    Button(action: { showingEditView = true }) {
-                                        Label("Edit Post", systemImage: "pencil")
-                                    }
-                                    
-                                    Divider()
-                                    
-                                    Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
-                                        Label("Delete Post", systemImage: "trash")
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .foregroundColor(.primary)
-                                }
-                            }
                         }
                     }
                 }
-                
-                // Bottom Action Buttons
-                bottomActionButtons
             }
+            
+            // Bottom Action Buttons
+            bottomActionButtons
         }
-        .navigationBarHidden(false)
         .task {
             await loadPosterInfo()
             await checkSaveStatus()
