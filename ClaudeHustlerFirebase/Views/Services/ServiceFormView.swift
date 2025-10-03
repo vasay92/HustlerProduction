@@ -1,12 +1,12 @@
-
-
 // ServiceFormView.swift
 // Path: ClaudeHustlerFirebase/Views/Services/ServiceFormView.swift
 
 import SwiftUI
 import PhotosUI
 import FirebaseAuth
-
+import MapKit
+import CoreLocation
+import FirebaseFirestore
 
 struct ServiceFormView: View {
     @Environment(\.dismiss) var dismiss
@@ -20,6 +20,17 @@ struct ServiceFormView: View {
     @State private var location = ""
     @State private var isRequest = false
     @State private var selectedImages: [UIImage] = []
+    
+    // Location properties
+    @State private var locationInput = ""
+    @State private var locationPrivacy: LocationPrivacyOption = .exact
+    @State private var validatedCoordinates: CLLocationCoordinate2D?
+    @State private var hasValidatedLocation = false
+    @State private var isValidatingLocation = false
+    @State private var locationError: String?
+    @State private var displayLocation = ""
+    @State private var approximateRadius: Double = 1000 // 1km default
+    @StateObject private var locationService = LocationService.shared
     
     // UI State
     @State private var showingImagePicker = false
@@ -39,7 +50,13 @@ struct ServiceFormView: View {
         _selectedCategory = State(initialValue: post?.category ?? .other)
         _price = State(initialValue: post?.price != nil ? String(Int(post!.price!)) : "")
         _location = State(initialValue: post?.location ?? "")
+        _locationInput = State(initialValue: post?.location ?? "")
         _isRequest = State(initialValue: post?.isRequest ?? isRequest)
+        
+        // Initialize location privacy from existing post
+        if let post = post {
+            _locationPrivacy = State(initialValue: LocationPrivacyOption(rawValue: post.locationPrivacy.rawValue) ?? .exact)
+        }
     }
     
     var isEditMode: Bool { existingPost != nil }
@@ -72,7 +89,7 @@ struct ServiceFormView: View {
                     descriptionSection
                     categorySection
                     priceSection
-                    locationSection
+                    enhancedLocationSection
                     imagesSection
                     submitSection
                 }
@@ -86,7 +103,7 @@ struct ServiceFormView: View {
                 }
             }
             .sheet(isPresented: $showingImagePicker) {
-                MultiImagePicker(images: $selectedImages)  // Use the new picker
+                MultiImagePicker(images: $selectedImages)
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK") { }
@@ -96,7 +113,7 @@ struct ServiceFormView: View {
         }
     }
     
-    // MARK: - View Sections (Breaking up complex view)
+    // MARK: - View Sections
     
     @ViewBuilder
     private var typeToggleSection: some View {
@@ -239,22 +256,95 @@ struct ServiceFormView: View {
     }
     
     @ViewBuilder
-    private var locationSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    var enhancedLocationSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section Header
             HStack {
                 Text("Location")
                     .font(.headline)
-                Text("(Optional)")
+                Text("(Required)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.red)
             }
             
-            TextField("City or area", text: $location)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
+            // Location Privacy Options
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Privacy Setting")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                ForEach(LocationPrivacyOption.allCases, id: \.self) { option in
+                    LocationPrivacyRow(
+                        option: option,
+                        isSelected: locationPrivacy == option,
+                        onSelect: { locationPrivacy = option }
+                    )
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
             
-            RequirementHintView(requirements: [
-                "Add if location is relevant to your service"
-            ])
+            // Location Input
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "location.circle.fill")
+                        .foregroundColor(.blue)
+                    
+                    TextField("Enter address or area", text: $locationInput)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .onSubmit {
+                            validateLocation()
+                        }
+                    
+                    if isValidatingLocation {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else if hasValidatedLocation {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                
+                if let error = locationError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+            }
+            
+            // Use Current Location Button
+            Button(action: useCurrentLocation) {
+                HStack {
+                    Image(systemName: "location.fill")
+                    Text("Use My Current Location")
+                }
+                .foregroundColor(.blue)
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(8)
+            }
+            .disabled(locationService.authorizationStatus != .authorizedWhenInUse &&
+                     locationService.authorizationStatus != .authorizedAlways)
+            
+            // Show Map Preview if location is validated
+            if hasValidatedLocation, let coords = validatedCoordinates {
+                MapPreview(
+                    coordinate: coords,
+                    privacy: locationPrivacy,
+                    approximateRadius: approximateRadius
+                )
+                .frame(height: 200)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+            }
         }
         .padding(.horizontal)
     }
@@ -397,6 +487,58 @@ struct ServiceFormView: View {
         .cornerRadius(8)
     }
     
+    // MARK: - Location Methods
+    
+    func validateLocation() {
+        guard !locationInput.isEmpty else { return }
+        
+        isValidatingLocation = true
+        locationError = nil
+        
+        Task {
+            do {
+                let coordinates = try await locationService.geocodeAddress(locationInput)
+                validatedCoordinates = coordinates
+                hasValidatedLocation = true
+                
+                // If city only, get the city name
+                if locationPrivacy == .cityOnly {
+                    displayLocation = try await locationService.reverseGeocode(coordinate: coordinates)
+                } else {
+                    displayLocation = locationInput
+                }
+            } catch {
+                locationError = "Could not find this location. Please try again."
+                hasValidatedLocation = false
+            }
+            
+            isValidatingLocation = false
+        }
+    }
+    
+    func useCurrentLocation() {
+        guard let userLocation = locationService.userLocation else {
+            locationError = "Unable to get current location"
+            return
+        }
+        
+        isValidatingLocation = true
+        
+        Task {
+            do {
+                let address = try await locationService.reverseGeocode(coordinate: userLocation)
+                locationInput = address
+                validatedCoordinates = userLocation
+                hasValidatedLocation = true
+                displayLocation = address
+            } catch {
+                locationError = "Could not determine address for current location"
+            }
+            
+            isValidatingLocation = false
+        }
+    }
+    
     // MARK: - Actions
     
     private func savePost() {
@@ -427,20 +569,34 @@ struct ServiceFormView: View {
                 
                 if isEditMode {
                     var updatedPost = existingPost!
-                        updatedPost.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        updatedPost.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-                        updatedPost.category = selectedCategory
-                        updatedPost.price = priceValidation.price
-                        updatedPost.location = location.isEmpty ? nil : location
-                        // Only update images if new ones were selected, otherwise keep existing
-                        updatedPost.imageURLs = imageURLs.isEmpty ? (existingPost?.imageURLs ?? []) : imageURLs  // ✅ Preserves existing images!
+                    updatedPost.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    updatedPost.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+                    updatedPost.category = selectedCategory
+                    updatedPost.price = priceValidation.price
+                    updatedPost.location = displayLocation.isEmpty ? location : displayLocation
+                    updatedPost.imageURLs = imageURLs.isEmpty ? (existingPost?.imageURLs ?? []) : imageURLs
+                    
+                    // Add location data
+                    if let coords = validatedCoordinates {
+                        updatedPost.coordinates = GeoPoint(
+                            latitude: coords.latitude,
+                            longitude: coords.longitude
+                        )
+                        updatedPost.locationPrivacy = ServicePost.LocationPrivacy(
+                            rawValue: locationPrivacy.rawValue
+                        ) ?? .exact
+                        updatedPost.approximateRadius = approximateRadius
+                    }
+                    
                     try await servicesViewModel.updatePost(updatedPost)
+                    
                     // Trigger refresh
                     await HomeViewModel.shared?.refresh()
+                    await HomeMapViewModel.shared?.refresh()
                     await ServicesViewModel.shared?.refresh(type: updatedPost.isRequest ? .requests : .offers)
                     
                 } else {
-                    // CREATE NEW POST using PostRepository
+                    // CREATE NEW POST
                     let newPost = ServicePost(
                         id: nil,
                         userId: firebase.currentUser?.id ?? "",
@@ -450,16 +606,26 @@ struct ServiceFormView: View {
                         description: description.trimmingCharacters(in: .whitespacesAndNewlines),
                         category: selectedCategory,
                         price: priceValidation.price,
-                        location: location.isEmpty ? nil : location,
+                        location: displayLocation.isEmpty ? nil : displayLocation,
                         imageURLs: imageURLs,
                         isRequest: isRequest,
                         status: .active,
-                        updatedAt: Date()
+                        updatedAt: Date(),
+                        coordinates: validatedCoordinates != nil ? GeoPoint(
+                            latitude: validatedCoordinates!.latitude,
+                            longitude: validatedCoordinates!.longitude
+                        ) : nil,
+                        locationPrivacy: ServicePost.LocationPrivacy(
+                            rawValue: locationPrivacy.rawValue
+                        ) ?? .exact,
+                        approximateRadius: approximateRadius,
+                        
                     )
                     _ = try await servicesViewModel.createPost(newPost)
                     
                     // Trigger refresh in ViewModels
                     await HomeViewModel.shared?.refresh()
+                    await HomeMapViewModel.shared?.refresh()
                     await ServicesViewModel.shared?.refresh(type: isRequest ? .requests : .offers)
                 }
                 
@@ -467,7 +633,7 @@ struct ServiceFormView: View {
             } catch {
                 errorMessage = "Update failed: \(error.localizedDescription)"
                 showingError = true
-                print("❌ Update Error: \(error)")  // This will help debug
+                print("❌ Update Error: \(error)")
             }
             
             isSaving = false
@@ -475,11 +641,146 @@ struct ServiceFormView: View {
     }
 }
 
-#Preview {
-    ServiceFormView()
+// MARK: - Supporting Types and Views
+
+enum LocationPrivacyOption: String, CaseIterable {
+    case exact = "exact"
+    case approximate = "approximate"
+    case cityOnly = "city_only"
+    
+    var title: String {
+        switch self {
+        case .exact:
+            return "Show Exact Location"
+        case .approximate:
+            return "Show Approximate Area"
+        case .cityOnly:
+            return "Show City Only"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .exact:
+            return "Your exact address will be visible on the map"
+        case .approximate:
+            return "Location will be shown within a 1km radius"
+        case .cityOnly:
+            return "Only your city name will be shown"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .exact:
+            return "location.fill"
+        case .approximate:
+            return "location.circle"
+        case .cityOnly:
+            return "building.2.crop.circle"
+        }
+    }
 }
 
-// Add this ENTIRE struct at the BOTTOM of ServiceFormView.swift
+struct LocationPrivacyRow: View {
+    let option: LocationPrivacyOption
+    let isSelected: Bool
+    let onSelect: () -> Void
+    
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 12) {
+                Image(systemName: option.icon)
+                    .foregroundColor(isSelected ? .blue : .gray)
+                    .frame(width: 30)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.title)
+                        .font(.subheadline)
+                        .fontWeight(isSelected ? .semibold : .regular)
+                        .foregroundColor(.primary)
+                    
+                    Text(option.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.blue)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct MapPreview: View {
+    let coordinate: CLLocationCoordinate2D
+    let privacy: LocationPrivacyOption
+    let approximateRadius: Double
+    
+    @State private var cameraPosition: MapCameraPosition
+    
+    init(coordinate: CLLocationCoordinate2D, privacy: LocationPrivacyOption, approximateRadius: Double) {
+        self.coordinate = coordinate
+        self.privacy = privacy
+        self.approximateRadius = approximateRadius
+        
+        let span = privacy == .exact ?
+            MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01) :
+            MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        
+        self._cameraPosition = State(initialValue: .region(MKCoordinateRegion(center: coordinate, span: span)))
+    }
+    
+    var body: some View {
+        Map(position: $cameraPosition) {
+            if privacy == .approximate {
+                // Show radius circle for approximate location
+                MapCircle(center: coordinate, radius: approximateRadius)
+                    .foregroundStyle(Color.blue.opacity(0.2))
+                    .stroke(Color.blue, lineWidth: 2)
+            }
+            
+            Annotation("", coordinate: coordinate) {
+                Image(systemName: "mappin.circle.fill")
+                    .foregroundColor(.blue)
+                    .font(.title)
+            }
+        }
+        .disabled(true) // Make it non-interactive
+        .overlay(
+            VStack {
+                HStack {
+                    Spacer()
+                    Label(
+                        privacy == .exact ? "Exact Location" :
+                        privacy == .approximate ? "Approximate Area" : "City Area",
+                        systemImage: privacy == .exact ? "lock.open" : "lock"
+                    )
+                    .font(.caption)
+                    .padding(6)
+                    .background(Color(.systemBackground).opacity(0.9))
+                    .cornerRadius(6)
+                    .padding(8)
+                }
+                Spacer()
+            }
+        )
+    }
+}
+
+struct MapPin: Identifiable {
+    let id = UUID()
+    let coordinate: CLLocationCoordinate2D
+}
+
+// MARK: - Multi Image Picker
+
 struct MultiImagePicker: UIViewControllerRepresentable {
     @Binding var images: [UIImage]
     @Environment(\.dismiss) var dismiss
@@ -526,4 +827,8 @@ struct MultiImagePicker: UIViewControllerRepresentable {
             }
         }
     }
+}
+
+#Preview {
+    ServiceFormView()
 }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		EB0A08FF2E8B2A000002D40C /* NotificationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A08FE2E8B29FF0002D40C /* NotificationRepository.swift */; };
 		EB0A09052E8B2B530002D40C /* NotificationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */; };
+		EB0A09422E8F4C790002D40C /* HomeMapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A09412E8F4C790002D40C /* HomeMapViewModel.swift */; };
 		EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */; };
 		EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA492E68F52F006DB468 /* ContentView.swift */; };
 		EB6BBA762E68F6BB006DB468 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = EB6BBA752E68F6BB006DB468 /* FirebaseAuth */; };
@@ -65,6 +66,7 @@
 /* Begin PBXFileReference section */
 		EB0A08FE2E8B29FF0002D40C /* NotificationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRepository.swift; sourceTree = "<group>"; };
 		EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsViewModel.swift; sourceTree = "<group>"; };
+		EB0A09412E8F4C790002D40C /* HomeMapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMapViewModel.swift; sourceTree = "<group>"; };
 		EB6BBA442E68F52F006DB468 /* ClaudeHustlerFirebase.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeHustlerFirebase.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeHustlerFirebaseApp.swift; sourceTree = "<group>"; };
 		EB6BBA492E68F52F006DB468 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -309,6 +311,7 @@
 		EB6E08A32E7C9641004B253C /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				EB0A09412E8F4C790002D40C /* HomeMapViewModel.swift */,
 				EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */,
 				EBD039672E81CE93004E0CBD /* ProfileViewModel.swift */,
 				EBD038E32E7D06DE004E0CBD /* MessagesViewModel.swift */,
@@ -520,6 +523,7 @@
 				EBD038E22E7D06C4004E0CBD /* ReelsViewModel.swift in Sources */,
 				EBD038E42E7D06DE004E0CBD /* MessagesViewModel.swift in Sources */,
 				EB0A08FF2E8B2A000002D40C /* NotificationRepository.swift in Sources */,
+				EB0A09422E8F4C790002D40C /* HomeMapViewModel.swift in Sources */,
 				EBD038D42E7CF9AB004E0CBD /* ListenerManageable.swift in Sources */,
 				EB6E086D2E7C8B42004B253C /* AuthenticationService.swift in Sources */,
 			);

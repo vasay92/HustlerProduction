@@ -138,8 +138,19 @@ struct ServicePost: Codable, Identifiable {
     let createdAt: Date = Date()
     var updatedAt: Date = Date()
     
+    // New location fields
+    var coordinates: GeoPoint? // Firebase GeoPoint for exact location
+    var locationPrivacy: LocationPrivacy = .exact
+    var approximateRadius: Double? // Radius in meters for approximate location
+    
     enum PostStatus: String, Codable {
         case active, completed, cancelled
+    }
+    
+    enum LocationPrivacy: String, Codable {
+        case exact = "exact"
+        case approximate = "approximate"
+        case cityOnly = "city_only"
     }
 }
 
