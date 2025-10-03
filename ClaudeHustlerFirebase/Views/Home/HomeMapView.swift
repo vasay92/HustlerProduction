@@ -3,6 +3,7 @@
 
 import SwiftUI
 import MapKit
+import FirebaseFirestore
 
 struct HomeMapView: View {
     @StateObject private var viewModel = HomeMapViewModel()
@@ -269,170 +270,284 @@ struct PostMapAnnotation: View {
 }
 
 
-// Updated PostPreviewCard for HomeMapView.swift
-// Now the entire card is tappable and includes a photo preview
-
+// PostPreviewCard - With action buttons matching PostDetailView
 struct PostPreviewCard: View {
     let post: ServicePost
     let onDismiss: () -> Void
     @State private var showingFullDetail = false
+    @State private var dragOffset: CGSize = .zero
+    @State private var posterInfo: User?
+    @State private var isSaved = false
+    @State private var showingMessageView = false
+    @State private var showingShareSheet = false
+    @StateObject private var firebase = FirebaseService.shared
     
     var body: some View {
         VStack(spacing: 0) {
-            // Handle bar
+            // Handle bar - minimal padding
             Capsule()
                 .fill(Color.gray.opacity(0.5))
                 .frame(width: 40, height: 5)
                 .padding(.top, 8)
+                .padding(.bottom, 4)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            dragOffset = value.translation
+                        }
+                        .onEnded { value in
+                            if value.translation.height > 50 {
+                                onDismiss()
+                            } else {
+                                withAnimation {
+                                    dragOffset = .zero
+                                }
+                            }
+                        }
+                )
             
             // Make entire card content tappable
             Button(action: { showingFullDetail = true }) {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Header with image preview
-                    HStack(alignment: .top, spacing: 12) {
-                        // Photo preview (if available)
-                        if let firstImageURL = post.imageURLs.first {
-                            AsyncImage(url: URL(string: firstImageURL)) { phase in
+                VStack(alignment: .leading, spacing: 8) {
+                    // 1. Title and Badge Row - NO TOP PADDING
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(post.title)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        // Type Badge (OFFER/REQUEST)
+                        Text(post.isRequest ? "REQUEST" : "OFFER")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(post.isRequest ? Color.orange : Color.blue)
+                            .cornerRadius(4)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 0)
+                    
+                    // 2. User Info with Rating
+                    HStack(spacing: 8) {
+                        // User profile photo or initial
+                        if let profileImageURL = posterInfo?.profileImageURL, !profileImageURL.isEmpty {
+                            AsyncImage(url: URL(string: profileImageURL)) { phase in
                                 switch phase {
                                 case .success(let image):
                                     image
                                         .resizable()
                                         .scaledToFill()
-                                        .frame(width: 80, height: 80)
-                                        .clipped()
-                                        .cornerRadius(10)
+                                        .frame(width: 32, height: 32)
+                                        .clipShape(Circle())
                                 case .failure(_):
-                                    imagePreviewPlaceholder
+                                    profileInitialCircle
                                 case .empty:
-                                    ZStack {
-                                        imagePreviewPlaceholder
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle())
-                                            .scaleEffect(0.7)
-                                    }
+                                    Circle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: 32, height: 32)
+                                        .overlay(
+                                            ProgressView()
+                                                .scaleEffect(0.5)
+                                        )
                                 @unknown default:
-                                    imagePreviewPlaceholder
+                                    profileInitialCircle
                                 }
                             }
                         } else {
-                            imagePreviewPlaceholder
+                            profileInitialCircle
                         }
                         
-                        // Right side content
-                        VStack(alignment: .leading, spacing: 6) {
-                            // Badges
-                            HStack {
-                                // Category Badge
-                                HStack(spacing: 4) {
-                                    Image(systemName: getIcon())
+                        // User name
+                        Text(posterInfo?.name ?? post.userName ?? "Unknown User")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        // Rating stars with actual data
+                        if let rating = posterInfo?.rating, let reviewCount = posterInfo?.reviewCount {
+                            HStack(spacing: 2) {
+                                ForEach(0..<5) { index in
+                                    Image(systemName: getRatingIcon(for: Double(index), rating: rating))
                                         .font(.caption2)
-                                    Text(post.category.displayName)
-                                        .font(.caption)
+                                        .foregroundColor(.orange)
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(post.isRequest ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2))
-                                .foregroundColor(post.isRequest ? .orange : .blue)
-                                .cornerRadius(12)
-                                
-                                // Type Badge
-                                Text(post.isRequest ? "REQUEST" : "OFFER")
-                                    .font(.caption2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
-                                    .background(post.isRequest ? Color.orange : Color.blue)
-                                    .cornerRadius(4)
-                                
-                                Spacer()
-                            }
-                            
-                            // Title
-                            Text(post.title)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                            
-                            // Price
-                            if let price = post.price {
-                                Text(post.isRequest ? "Budget: $\(Int(price))" : "$\(Int(price))")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(post.isRequest ? .orange : .green)
-                            } else {
-                                Text(post.isRequest ? "Budget: Flexible" : "Contact for price")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                    }
-                    
-                    // Description Preview
-                    Text(post.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    
-                    Divider()
-                    
-                    // Bottom section: Location & User
-                    HStack {
-                        // User info
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 24, height: 24)
-                                .overlay(
-                                    Text(String(post.userName?.first ?? "U"))
+                                if reviewCount > 0 {
+                                    Text("(\(reviewCount))")
                                         .font(.caption2)
-                                        .foregroundColor(.white)
-                                )
-                            
-                            Text(post.userName ?? "Unknown User")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
                         
                         Spacer()
-                        
-                        // Location
-                        if let location = post.location {
-                            HStack(spacing: 4) {
-                                Image(systemName: "location.fill")
-                                    .font(.caption2)
-                                Text(location)
-                                    .font(.caption)
-                                    .lineLimit(1)
+                    }
+                    .padding(.horizontal)
+                    
+                    // 3. Description
+                    Text(post.description)
+                        .font(.subheadline)
+                        .foregroundColor(.primary.opacity(0.8))
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                    
+                    // 4. Photos Section
+                    if !post.imageURLs.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(post.imageURLs.prefix(4).enumerated()), id: \.offset) { index, imageURL in
+                                    ZStack(alignment: .center) {
+                                        AsyncImage(url: URL(string: imageURL)) { phase in
+                                            switch phase {
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 100, height: 100)
+                                                    .clipped()
+                                                    .cornerRadius(10)
+                                            case .failure(_):
+                                                imagePlaceholder(for: index)
+                                            case .empty:
+                                                ZStack {
+                                                    imagePlaceholder(for: index)
+                                                    ProgressView()
+                                                        .progressViewStyle(CircularProgressViewStyle())
+                                                        .scaleEffect(0.7)
+                                                }
+                                            @unknown default:
+                                                imagePlaceholder(for: index)
+                                            }
+                                        }
+                                        
+                                        // Show "+X" overlay on last image if more than 4 photos
+                                        if index == 3 && post.imageURLs.count > 4 {
+                                            Rectangle()
+                                                .fill(Color.black.opacity(0.6))
+                                                .frame(width: 100, height: 100)
+                                                .cornerRadius(10)
+                                                .overlay(
+                                                    Text("+\(post.imageURLs.count - 4)")
+                                                        .font(.title2)
+                                                        .fontWeight(.bold)
+                                                        .foregroundColor(.white)
+                                                )
+                                        }
+                                    }
+                                }
                             }
-                            .foregroundColor(.gray)
+                            .padding(.horizontal)
                         }
-                        
-                        // Chevron to indicate tappable
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.gray.opacity(0.5))
+                        .frame(height: 100)
+                    } else {
+                        // No images placeholder
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        post.isRequest ? Color.orange.opacity(0.1) : Color.blue.opacity(0.1),
+                                        post.isRequest ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2)
+                                    ]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(height: 100)
+                            .cornerRadius(10)
+                            .overlay(
+                                VStack(spacing: 4) {
+                                    Image(systemName: getIcon())
+                                        .font(.title)
+                                        .foregroundColor(post.isRequest ? .orange : .blue).opacity(0.5)
+                                    Text("No photos")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            )
+                            .padding(.horizontal)
                     }
                 }
-                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.clear)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(PlainButtonStyle()) // Remove default button styling
+            .buttonStyle(PlainButtonStyle())
+            
+            // 5. Action Buttons Section (Same as PostDetailView)
+            HStack(spacing: 0) {
+                // Message Button
+                Button(action: {
+                    if post.userId != firebase.currentUser?.id {
+                        showingMessageView = true
+                    }
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "message")
+                            .font(.title3)
+                        Text("Message")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(post.userId == firebase.currentUser?.id ? .gray : .primary)
+                    .frame(maxWidth: .infinity)
+                }
+                .disabled(post.userId == firebase.currentUser?.id)
+                
+                // Save Button
+                Button(action: { toggleSave() }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                            .font(.title3)
+                        Text(isSaved ? "Saved" : "Save")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(isSaved ? .blue : .primary)
+                    .frame(maxWidth: .infinity)
+                }
+                
+                // Share Button
+                Button(action: { showingShareSheet = true }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title3)
+                        Text("Share")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity)
+                }
+                
+                // Report Button
+                Button(action: {
+                    // TODO: Implement report functionality (same as PostDetailView)
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "flag")
+                            .font(.title3)
+                        Text("Report")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.systemGray6))
         }
         .background(Color(.systemBackground))
         .cornerRadius(20, corners: [.topLeft, .topRight])
         .shadow(radius: 10)
-        .frame(maxHeight: 350)
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.height > 50 {
-                        onDismiss()
-                    }
-                }
-        )
+        .frame(maxHeight: 380) // Increased to accommodate buttons
+        .offset(y: dragOffset.height)
+        .task {
+            await loadPosterInfo()
+            await checkSaveStatus()
+        }
         .fullScreenCover(isPresented: $showingFullDetail) {
             NavigationView {
                 PostDetailView(post: post)
@@ -446,34 +561,97 @@ struct PostPreviewCard: View {
                     }
             }
         }
+        .fullScreenCover(isPresented: $showingMessageView) {
+            ChatView(
+                recipientId: post.userId,
+                contextType: .post,
+                contextId: post.id,
+                contextData: (
+                    title: post.title,
+                    image: post.imageURLs.first,
+                    userId: post.userId
+                ),
+                isFromContentView: true
+            )
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            ShareSheet(items: [post.title, post.description])
+        }
     }
     
+    // MARK: - Helper Views and Functions
+    
     @ViewBuilder
-    private var imagePreviewPlaceholder: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        post.isRequest ? Color.orange.opacity(0.3) : Color.blue.opacity(0.3),
-                        post.isRequest ? Color.red.opacity(0.3) : Color.purple.opacity(0.3)
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+    private var profileInitialCircle: some View {
+        Circle()
+            .fill(Color.gray.opacity(0.3))
+            .frame(width: 32, height: 32)
+            .overlay(
+                Text(String(posterInfo?.name.first ?? post.userName?.first ?? "U"))
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
             )
-            .frame(width: 80, height: 80)
+    }
+    
+    private func imagePlaceholder(for index: Int) -> some View {
+        Rectangle()
+            .fill(Color.gray.opacity(0.2))
+            .frame(width: 100, height: 100)
             .cornerRadius(10)
             .overlay(
-                VStack(spacing: 4) {
-                    Image(systemName: getIcon())
-                        .font(.title2)
-                        .foregroundColor(.white.opacity(0.8))
-                    Text(post.isRequest ? "REQUEST" : "OFFER")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white.opacity(0.8))
-                }
+                Image(systemName: "photo")
+                    .foregroundColor(.gray.opacity(0.5))
             )
+    }
+    
+    private func loadPosterInfo() async {
+        do {
+            let document = try await Firestore.firestore()
+                .collection("users")
+                .document(post.userId)
+                .getDocument()
+            
+            if document.exists {
+                posterInfo = try? document.data(as: User.self)
+            }
+        } catch {
+            print("Error loading poster info: \(error)")
+        }
+    }
+    
+    private func checkSaveStatus() async {
+        if let postId = post.id {
+            isSaved = await SavedItemsRepository.shared.isItemSaved(
+                itemId: postId,
+                type: .post
+            )
+        }
+    }
+    
+    private func toggleSave() {
+        guard let postId = post.id else { return }
+        
+        Task {
+            do {
+                isSaved = try await SavedItemsRepository.shared.toggleSave(
+                    itemId: postId,
+                    type: .post
+                )
+            } catch {
+                print("Error toggling save: \(error)")
+            }
+        }
+    }
+    
+    private func getRatingIcon(for index: Double, rating: Double) -> String {
+        if rating >= index + 1 {
+            return "star.fill"
+        } else if rating >= index + 0.5 {
+            return "star.leadinghalf.filled"
+        } else {
+            return "star"
+        }
     }
     
     private func getIcon() -> String {
@@ -492,6 +670,11 @@ struct PostPreviewCard: View {
         }
     }
 }
+
+
+
+
+
 
 
 
