@@ -89,7 +89,7 @@ struct PostDetailView: View {
                 bottomActionButtons
             }
         }
-        .navigationBarHidden(true)
+        .navigationBarHidden(false)
         .task {
             await loadPosterInfo()
             await checkSaveStatus()

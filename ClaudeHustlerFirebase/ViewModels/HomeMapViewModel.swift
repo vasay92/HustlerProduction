@@ -56,8 +56,26 @@ final class HomeMapViewModel: ObservableObject {
         isLoading = true
         
         do {
-            // Fetch posts with location data
+            // First, check ALL posts to see what we have
+            let allPostsResult = try await repository.fetch(limit: 100)
+            print("📊 Total posts in database: \(allPostsResult.items.count)")
+            
+            // Check how many have coordinates
+            let postsWithCoords = allPostsResult.items.filter { $0.coordinates != nil }
+            print("📍 Posts with coordinates: \(postsWithCoords.count)")
+            
+            // Log posts without coordinates for debugging
+            let postsWithoutCoords = allPostsResult.items.filter { $0.coordinates == nil }
+            if !postsWithoutCoords.isEmpty {
+                print("⚠️ Posts WITHOUT coordinates:")
+                postsWithoutCoords.forEach { post in
+                    print("  - \(post.title) (location: \(post.location ?? "none"))")
+                }
+            }
+            
+            // Now fetch posts with location data
             let fetchedPosts = try await repository.fetchAllPostsWithLocation(limit: 500)
+            print("🗺️ fetchAllPostsWithLocation returned: \(fetchedPosts.count) posts")
             
             // Handle location privacy
             posts = fetchedPosts.map { post in
@@ -82,14 +100,18 @@ final class HomeMapViewModel: ObservableObject {
                 return modifiedPost
             }
             
+            print("✅ Final posts array has: \(posts.count) posts")
             filterPosts()
+            print("✅ After filtering: \(filteredPosts.count) posts")
+            
         } catch {
-            print("Error loading posts for map: \(error)")
+            print("❌ Error loading posts for map: \(error)")
+            print("❌ Error details: \(error.localizedDescription)")
         }
         
         isLoading = false
     }
-    
+
     func refresh() async {
         posts = []
         filteredPosts = []
@@ -202,6 +224,29 @@ final class HomeMapViewModel: ObservableObject {
         case .other: return "ellipsis.circle.fill"
         }
     }
+    
+    // MARK: - Zoom Methods
+    func zoomIn() {
+        let newSpan = MKCoordinateSpan(
+            latitudeDelta: mapRegion.span.latitudeDelta * 0.5,
+            longitudeDelta: mapRegion.span.longitudeDelta * 0.5
+        )
+        // Limit maximum zoom
+        if newSpan.latitudeDelta > 0.001 {
+            updateMapRegion(center: mapRegion.center, span: newSpan)
+        }
+    }
+
+    func zoomOut() {
+        let newSpan = MKCoordinateSpan(
+            latitudeDelta: mapRegion.span.latitudeDelta * 2.0,
+            longitudeDelta: mapRegion.span.longitudeDelta * 2.0
+        )
+        // Limit minimum zoom
+        if newSpan.latitudeDelta < 10.0 {
+            updateMapRegion(center: mapRegion.center, span: newSpan)
+        }
+    }
 }
 
 // MARK: - Map Annotation Model
@@ -219,3 +264,5 @@ struct MapAnnotationItem: Identifiable {
         )
     }
 }
+
+

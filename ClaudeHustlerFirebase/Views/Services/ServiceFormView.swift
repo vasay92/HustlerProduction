@@ -296,6 +296,25 @@ struct ServiceFormView: View {
                         .onSubmit {
                             validateLocation()
                         }
+                        .onChange(of: locationInput) { newValue in
+                            // Cancel any pending validation
+                            NSObject.cancelPreviousPerformRequests(withTarget: self)
+                            
+                            // Auto-validate after user stops typing for 1 second
+                            if !newValue.isEmpty {
+                                Task {
+                                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                                    if locationInput == newValue { // Check if text hasn't changed
+                                        validateLocation()
+                                    }
+                                }
+                            } else {
+                                // Clear validation if text is empty
+                                hasValidatedLocation = false
+                                validatedCoordinates = nil
+                                locationError = nil
+                            }
+                        }
                     
                     if isValidatingLocation {
                         ProgressView()
@@ -314,6 +333,17 @@ struct ServiceFormView: View {
                         .font(.caption)
                         .foregroundColor(.red)
                 }
+                // Show validated address
+                if hasValidatedLocation && !displayLocation.isEmpty {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                        Text("✓ Valid address: \(displayLocation)")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                    }
+                }
             }
             
             // Use Current Location Button
@@ -330,6 +360,17 @@ struct ServiceFormView: View {
             }
             .disabled(locationService.authorizationStatus != .authorizedWhenInUse &&
                      locationService.authorizationStatus != .authorizedAlways)
+            
+            // Map Preview
+            if let coordinates = validatedCoordinates {
+                MapPreview(
+                    coordinate: coordinates,
+                    privacy: locationPrivacy,
+                    approximateRadius: approximateRadius
+                )
+                .frame(height: 200)
+                .cornerRadius(12)
+            }
             
             // Show Map Preview if location is validated
             if hasValidatedLocation, let coords = validatedCoordinates {
@@ -556,7 +597,7 @@ struct ServiceFormView: View {
                 var imageURLs: [String] = []
                 if !selectedImages.isEmpty {
                     
-                    for (index, image) in selectedImages.enumerated() {
+                    for (_, image) in selectedImages.enumerated() {
                         let imageName = "\(UUID().uuidString).jpg"
                         let imagePath = "posts/\(imageName)"
                         

@@ -9,6 +9,9 @@ struct HomeMapView: View {
     @StateObject private var locationService = LocationService.shared
     @State private var showingCreatePost = false
     @State private var mapSelection: ServicePost?
+    @StateObject private var notificationsViewModel = NotificationsViewModel()
+    @State private var showingNotifications = false
+    @State private var showingMessages = false
     
     var body: some View {
         NavigationView {
@@ -33,8 +36,8 @@ struct HomeMapView: View {
                 
                 // Top Controls Overlay
                 VStack {
-                    // Search and Filter Bar
-                    VStack(spacing: 12) {
+                    // Top Section with search bar and buttons
+                    HStack(alignment: .top, spacing: 12) {
                         // Search Bar
                         HStack {
                             Image(systemName: "magnifyingglass")
@@ -61,29 +64,85 @@ struct HomeMapView: View {
                         .cornerRadius(10)
                         .shadow(radius: 2)
                         
-                        // Filter Chips
-                        HStack(spacing: 12) {
-                            FilterChip(
-                                title: "Offers",
-                                isSelected: viewModel.showOnlyOffers,
-                                color: .blue,
-                                action: viewModel.toggleOfferFilter
-                            )
+                        // Notifications button
+                        Button(action: { showingNotifications = true }) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell")
+                                    .font(.title2)
+                                    .foregroundColor(.primary)
+                                    .frame(width: 40, height: 40)
+                                    .background(Color(.systemBackground))
+                                    .clipShape(Circle())
+                                    .shadow(radius: 2)
+                                
+                                // Unread badge
+                                if notificationsViewModel.bellNotificationCount > 0 {
+                                    Text("\(min(notificationsViewModel.bellNotificationCount, 99))")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                        .frame(minWidth: 16, minHeight: 16)
+                                        .padding(.horizontal, notificationsViewModel.bellNotificationCount > 9 ? 4 : 0)
+                                        .background(Color.red)
+                                        .clipShape(Capsule())
+                                        .offset(x: 8, y: -8)
+                                }
+                            }
+                        }
+                        
+                        // Vertical stack for messages button and zoom/location controls
+                        VStack(spacing: 8) {
+                            // Messages button
+                            Button(action: { showingMessages = true }) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(systemName: "message")
+                                        .font(.title2)
+                                        .foregroundColor(.primary)
+                                        .frame(width: 40, height: 40)
+                                        .background(Color(.systemBackground))
+                                        .clipShape(Circle())
+                                        .shadow(radius: 2)
+                                    
+                                    // Unread badge
+                                    if notificationsViewModel.messageNotificationCount > 0 {
+                                        Text("\(min(notificationsViewModel.messageNotificationCount, 99))")
+                                            .font(.caption2)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                            .frame(minWidth: 16, minHeight: 16)
+                                            .padding(.horizontal, notificationsViewModel.messageNotificationCount > 9 ? 4 : 0)
+                                            .background(Color.blue)
+                                            .clipShape(Capsule())
+                                            .offset(x: 8, y: -8)
+                                    }
+                                }
+                            }
                             
-                            FilterChip(
-                                title: "Requests",
-                                isSelected: viewModel.showOnlyRequests,
-                                color: .orange,
-                                action: viewModel.toggleRequestFilter
-                            )
+                            // Zoom in
+                            Button(action: { viewModel.zoomIn() }) {
+                                Image(systemName: "plus")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color(.systemBackground))
+                                    .clipShape(Circle())
+                                    .shadow(radius: 2)
+                            }
                             
-                            Spacer()
+                            // Zoom out
+                            Button(action: { viewModel.zoomOut() }) {
+                                Image(systemName: "minus")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color(.systemBackground))
+                                    .clipShape(Circle())
+                                    .shadow(radius: 2)
+                            }
                             
-                            // Location Button
+                            // Location button
                             Button(action: viewModel.centerOnUserLocation) {
                                 Image(systemName: "location.fill")
                                     .foregroundColor(.blue)
-                                    .frame(width: 40, height: 40)
+                                    .frame(width: 36, height: 36)
                                     .background(Color(.systemBackground))
                                     .clipShape(Circle())
                                     .shadow(radius: 2)
@@ -91,9 +150,30 @@ struct HomeMapView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.top, 50)
+                    .padding(.top, 50) // Safe area padding
                     
                     Spacer()
+                    
+                    // Bottom Filter Chips (horizontal)
+                    HStack(spacing: 12) {
+                        FilterChip(
+                            title: "Offers",
+                            isSelected: viewModel.showOnlyOffers,
+                            color: .blue,
+                            action: viewModel.toggleOfferFilter
+                        )
+                        
+                        FilterChip(
+                            title: "Requests",
+                            isSelected: viewModel.showOnlyRequests,
+                            color: .orange,
+                            action: viewModel.toggleRequestFilter
+                        )
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 20)
                     
                     // Post Preview Card
                     if viewModel.showingPostPreview, let post = viewModel.selectedPost {
@@ -126,15 +206,24 @@ struct HomeMapView: View {
             .navigationBarHidden(true)
             .task {
                 await viewModel.loadPosts()
+                print("🗺️ Loaded \(viewModel.filteredPosts.count) posts with coordinates")
                 locationService.startUpdatingLocation()
+                notificationsViewModel.startListening()
             }
             .onDisappear {
                 locationService.stopUpdatingLocation()
+                notificationsViewModel.stopListening()
             }
             .sheet(isPresented: $showingCreatePost) {
                 NavigationView {
                     ServiceFormView()
                 }
+            }
+            .fullScreenCover(isPresented: $showingNotifications) {
+                NotificationsView()
+            }
+            .fullScreenCover(isPresented: $showingMessages) {
+                ConversationsListView()
             }
         }
     }
@@ -289,9 +378,7 @@ struct PostPreviewCard: View {
                 }
         )
         .fullScreenCover(isPresented: $showingFullDetail) {
-            NavigationView {
-                PostDetailView(post: post)
-            }
+            PostDetailView(post: post)
         }
     }
     
