@@ -1,5 +1,6 @@
 // PostRepository.swift
 // Path: ClaudeHustlerFirebase/Repositories/PostRepository.swift
+// UPDATED: Complete file with tag support, removed category methods
 
 import Foundation
 import FirebaseFirestore
@@ -71,7 +72,156 @@ final class PostRepository: RepositoryProtocol {
         return post
     }
     
+    // MARK: - Fetch by Tags (NEW)
+    func fetchByTags(_ tags: [String], limit: Int = 20, lastDocument: DocumentSnapshot? = nil, isRequest: Bool? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
+        guard !tags.isEmpty else {
+            // If no tags specified, return regular fetch
+            if let isRequest = isRequest {
+                return isRequest ?
+                    try await fetchRequests(limit: limit, lastDocument: lastDocument) :
+                    try await fetchOffers(limit: limit, lastDocument: lastDocument)
+            } else {
+                return try await fetch(limit: limit, lastDocument: lastDocument)
+            }
+        }
+        
+        // Build query
+        var query = db.collection("posts")
+            .whereField("tags", arrayContainsAny: tags)
+        
+        // Add request filter if specified
+        if let isRequest = isRequest {
+            query = query.whereField("isRequest", isEqualTo: isRequest)
+        }
+        
+        query = query
+            .order(by: "updatedAt", descending: true)
+            .limit(to: limit)
+        
+        if let lastDoc = lastDocument {
+            query = query.start(afterDocument: lastDoc)
+        }
+        
+        let snapshot = try await query.getDocuments()
+        
+        let posts = snapshot.documents.compactMap { doc -> ServicePost? in
+            var post = try? doc.data(as: ServicePost.self)
+            post?.id = doc.documentID
+            return post
+        }
+        
+        return (posts, snapshot.documents.last)
+    }
     
+    // MARK: - Search Posts with Tags (NEW)
+    func searchPostsWithTags(query searchText: String, tags: [String]? = nil, limit: Int = 50) async throws -> [ServicePost] {
+        // Note: This is a basic implementation using client-side filtering
+        // For production, consider using a search service like Algolia
+        
+        // First fetch posts (with tag filter if provided)
+        let (posts, _) = if let tags = tags, !tags.isEmpty {
+            try await fetchByTags(tags, limit: limit)
+        } else {
+            try await fetch(limit: limit)
+        }
+        
+        // If no search text, return all posts
+        guard !searchText.isEmpty else {
+            return posts
+        }
+        
+        let searchLower = searchText.lowercased()
+        
+        // Filter posts by search text
+        return posts.filter { post in
+            // Search in title
+            if post.title.lowercased().contains(searchLower) {
+                return true
+            }
+            
+            // Search in description
+            if post.description.lowercased().contains(searchLower) {
+                return true
+            }
+            
+            // Search in tags
+            if post.tags.contains(where: { tag in
+                tag.lowercased().contains(searchLower)
+            }) {
+                return true
+            }
+            
+            // Search in location
+            if let location = post.location,
+               location.lowercased().contains(searchLower) {
+                return true
+            }
+            
+            return false
+        }
+    }
+    
+    // MARK: - Fetch Popular Tags for Posts (NEW)
+    func fetchPopularPostTags(limit: Int = 20) async throws -> [String] {
+        // This aggregates tags from recent posts
+        let snapshot = try await db.collection("posts")
+            .order(by: "updatedAt", descending: true)
+            .limit(to: 100)  // Sample from last 100 posts
+            .getDocuments()
+        
+        var tagCounts: [String: Int] = [:]
+        
+        // Count tag occurrences
+        for doc in snapshot.documents {
+            if let post = try? doc.data(as: ServicePost.self) {
+                for tag in post.tags {
+                    tagCounts[tag, default: 0] += 1
+                }
+            }
+        }
+        
+        // Sort by count and return top tags
+        let sortedTags = tagCounts.sorted { $0.value > $1.value }
+        return Array(sortedTags.prefix(limit).map { $0.key })
+    }
+    
+    // MARK: - Fetch Posts by Multiple Tags AND operation (NEW)
+    func fetchByAllTags(_ tags: [String], limit: Int = 20) async throws -> [ServicePost] {
+        guard !tags.isEmpty else {
+            let (posts, _) = try await fetch(limit: limit)
+            return posts
+        }
+        
+        // Firestore doesn't support multiple arrayContains queries
+        // So we fetch with one tag and filter the rest client-side
+        let firstTag = tags.first!
+        let remainingTags = Array(tags.dropFirst())
+        
+        let query = db.collection("posts")
+            .whereField("tags", arrayContains: firstTag)
+            .order(by: "updatedAt", descending: true)
+            .limit(to: limit * 2)  // Fetch more to account for filtering
+        
+        let snapshot = try await query.getDocuments()
+        
+        let posts = snapshot.documents.compactMap { doc -> ServicePost? in
+            var post = try? doc.data(as: ServicePost.self)
+            post?.id = doc.documentID
+            
+            // Check if post contains all required tags
+            guard let postTags = post?.tags else { return nil }
+            
+            for tag in remainingTags {
+                if !postTags.contains(tag) {
+                    return nil
+                }
+            }
+            
+            return post
+        }
+        
+        return Array(posts.prefix(limit))
+    }
     
     // MARK: - Fetch Offers
     func fetchOffers(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
@@ -123,7 +273,7 @@ final class PostRepository: RepositoryProtocol {
             throw NSError(domain: "PostRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Create a new post with the userId set (matching the order in DataModels.swift)
+        // Create a new post with the userId set
         var postData = ServicePost(
             id: post.id,
             userId: userId,
@@ -131,13 +281,13 @@ final class PostRepository: RepositoryProtocol {
             userProfileImage: post.userProfileImage,
             title: post.title,
             description: post.description,
-            category: post.category,
+            tags: post.tags,  // UPDATED: Use tags instead of category
             price: post.price,
             location: post.location,
             imageURLs: post.imageURLs,
             isRequest: post.isRequest,
             status: post.status,
-            updatedAt: Date(),  // This comes before the location fields
+            updatedAt: Date(),
             coordinates: post.coordinates,
             locationPrivacy: post.locationPrivacy,
             approximateRadius: post.approximateRadius
@@ -186,7 +336,7 @@ final class PostRepository: RepositoryProtocol {
         var updateData: [String: Any] = [
             "title": post.title,
             "description": post.description,
-            "category": post.category.rawValue,
+            "tags": post.tags,  // UPDATED: Use tags instead of category
             "price": post.price as Any,
             "location": post.location as Any,
             "imageURLs": post.imageURLs,
@@ -200,7 +350,6 @@ final class PostRepository: RepositoryProtocol {
         if let coordinates = post.coordinates {
             if post.locationPrivacy == .approximate {
                 // Obfuscate for approximate location
-                // In the update method, change this line:
                 let obfuscated = await LocationService.shared.obfuscateCoordinate(
                     CLLocationCoordinate2D(
                         latitude: coordinates.latitude,
@@ -243,22 +392,32 @@ final class PostRepository: RepositoryProtocol {
         cache.remove(for: "posts_page_1")
     }
     
-    // MARK: - Search Posts
-    func search(query: String, limit: Int = 20) async throws -> [ServicePost] {
-        // Note: For proper text search, consider using Algolia or ElasticSearch
-        // This is a basic implementation
-        let snapshot = try await db.collection("posts")
+    // MARK: - Search Posts (UPDATED: Removed category parameter)
+    func searchPosts(
+        query: String,
+        isRequest: Bool? = nil,
+        limit: Int = 20
+    ) async throws -> [ServicePost] {
+        var firestoreQuery = db.collection("posts")
             .order(by: "updatedAt", descending: true)
-            .limit(to: 100)
-            .getDocuments()
+        
+        if let isRequest = isRequest {
+            firestoreQuery = firestoreQuery.whereField("isRequest", isEqualTo: isRequest)
+        }
+        
+        let snapshot = try await firestoreQuery.limit(to: 100).getDocuments()
         
         let posts = snapshot.documents.compactMap { doc -> ServicePost? in
             var post = try? doc.data(as: ServicePost.self)
             post?.id = doc.documentID
             return post
         }.filter {
+            query.isEmpty ||
             $0.title.localizedCaseInsensitiveContains(query) ||
-            $0.description.localizedCaseInsensitiveContains(query)
+            $0.description.localizedCaseInsensitiveContains(query) ||
+            $0.tags.contains { tag in
+                tag.localizedCaseInsensitiveContains(query)
+            }
         }
         
         return Array(posts.prefix(limit))
@@ -292,39 +451,6 @@ final class PostRepository: RepositoryProtocol {
         
         return snapshot.documents.count
     }
-    
-    // Add to PostRepository.swift
-    func searchPosts(
-        query: String,
-        category: ServiceCategory? = nil,
-        isRequest: Bool? = nil,
-        limit: Int = 20
-    ) async throws -> [ServicePost] {
-        var firestoreQuery = db.collection("posts")
-            .order(by: "updatedAt", descending: true)
-        
-        if let category = category {
-            firestoreQuery = firestoreQuery.whereField("category", isEqualTo: category.rawValue)
-        }
-        
-        if let isRequest = isRequest {
-            firestoreQuery = firestoreQuery.whereField("isRequest", isEqualTo: isRequest)
-        }
-        
-        let snapshot = try await firestoreQuery.limit(to: 100).getDocuments()
-        
-        let posts = snapshot.documents.compactMap { doc -> ServicePost? in
-            var post = try? doc.data(as: ServicePost.self)
-            post?.id = doc.documentID
-            return post
-        }.filter {
-            query.isEmpty ||
-            $0.title.localizedCaseInsensitiveContains(query) ||
-            $0.description.localizedCaseInsensitiveContains(query)
-        }
-        
-        return Array(posts.prefix(limit))
-    }
 }
 
 // MARK: - Location Extension
@@ -336,79 +462,50 @@ extension PostRepository {
         center: CLLocationCoordinate2D,
         radiusInMeters: Double,
         isRequest: Bool? = nil,
-        limit: Int = 50
+        limit: Int = 20
     ) async throws -> [ServicePost] {
-        // Convert radius to approximate latitude/longitude bounds
-        // 1 degree latitude ≈ 111km
-        let latitudeDelta = radiusInMeters / 111000.0
-        let longitudeDelta = radiusInMeters / (111000.0 * cos(center.latitude * .pi / 180))
+        // Note: For true geospatial queries, consider using GeoFirestore or similar
+        // This is a basic implementation that fetches all and filters
+        let (posts, _) = try await fetch(limit: 100)
         
-        let minLat = center.latitude - latitudeDelta
-        let maxLat = center.latitude + latitudeDelta
-        let minLon = center.longitude - longitudeDelta
-        let maxLon = center.longitude + longitudeDelta
-        
-        // Create a compound query for posts within bounds
-        var query = db.collection("posts")
-            .whereField("coordinates", isGreaterThan: GeoPoint(latitude: minLat, longitude: minLon))
-            .whereField("coordinates", isLessThan: GeoPoint(latitude: maxLat, longitude: maxLon))
-        
-        // Add request filter if specified
-        if let isRequest = isRequest {
-            query = query.whereField("isRequest", isEqualTo: isRequest)
-        }
-        
-        let snapshot = try await query.limit(to: limit).getDocuments()
-        
-        var posts = snapshot.documents.compactMap { doc -> ServicePost? in
-            var post = try? doc.data(as: ServicePost.self)
-            post?.id = doc.documentID
-            return post
-        }
-        
-        // Further filter by exact distance (since Firestore query is rectangular)
-        posts = posts.filter { post in
+        return posts.filter { post in
+            // Filter by request type if specified
+            if let isRequest = isRequest, post.isRequest != isRequest {
+                return false
+            }
+            
+            // Check if post has coordinates
             guard let coordinates = post.coordinates else { return false }
             
-            let postLocation = CLLocation(
+            let postLocation = CLLocationCoordinate2D(
                 latitude: coordinates.latitude,
                 longitude: coordinates.longitude
             )
-            let centerLocation = CLLocation(
-                latitude: center.latitude,
-                longitude: center.longitude
+            
+            let distance = LocationService.shared.distance(
+                from: center,
+                to: postLocation
             )
             
-            return postLocation.distance(from: centerLocation) <= radiusInMeters
+            return distance <= radiusInMeters
         }
-        
-        return posts
     }
     
-    /// Fetch all posts with coordinates for map display
-    func fetchAllPostsWithLocation(
-        isRequest: Bool? = nil,
-        limit: Int = 200
-    ) async throws -> [ServicePost] {
-        var query = db.collection("posts")
-            .whereField("coordinates", isNotEqualTo: NSNull())
-            .whereField("status", isEqualTo: ServicePost.PostStatus.active.rawValue)
-            .order(by: "coordinates")
+    /// Fetch posts by city name
+    func fetchPostsByCity(_ city: String, limit: Int = 20) async throws -> [ServicePost] {
+        let snapshot = try await db.collection("posts")
+            .whereField("location", isGreaterThanOrEqualTo: city)
+            .whereField("location", isLessThanOrEqualTo: city + "\u{f8ff}")
+            .order(by: "location")
             .order(by: "updatedAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
         
-        if let isRequest = isRequest {
-            query = query.whereField("isRequest", isEqualTo: isRequest)
-        }
-        
-        let snapshot = try await query.limit(to: limit).getDocuments()
-        
-        let posts = snapshot.documents.compactMap { doc -> ServicePost? in
+        return snapshot.documents.compactMap { doc -> ServicePost? in
             var post = try? doc.data(as: ServicePost.self)
             post?.id = doc.documentID
             return post
         }
-        
-        return posts
     }
     
     /// Update existing posts to add GeoPoint from location string

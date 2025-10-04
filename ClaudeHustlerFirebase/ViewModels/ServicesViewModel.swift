@@ -345,4 +345,5 @@ final class ServicesViewModel: ObservableObject {
             return []
         }
     }
-}
+}ServiceCategory
+

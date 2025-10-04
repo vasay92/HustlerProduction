@@ -1,250 +1,306 @@
 // ServicesView.swift
 // Path: ClaudeHustlerFirebase/Views/Services/ServicesView.swift
-// COPY THIS ENTIRE FILE AND REPLACE YOUR EXISTING ServicesView.swift
+// UPDATED: Complete file with tags instead of categories
 
 import SwiftUI
 
 struct ServicesView: View {
     
-        @StateObject private var viewModel = ServicesViewModel()
-        @State private var selectedTab: ServiceTab = .offers
-        @State private var selectedCategory: ServiceCategory? = nil
-        @State private var searchText = ""
-        @State private var showingFilters = false
-        @State private var viewMode: ViewMode = .grid
-        @State private var showingCreatePost = false
+    @StateObject private var viewModel = ServicesViewModel()
+    @State private var selectedTab: ServiceTab = .offers
+    @State private var searchText = ""
+    @State private var showingFilters = false
+    @State private var viewMode: ViewMode = .grid
+    @State private var showingCreatePost = false
+    
+    enum ServiceTab {
+        case offers, requests
+    }
+    
+    enum ViewMode {
+        case grid, list
+    }
+    
+    var currentPosts: [ServicePost] {
+        selectedTab == .offers ? viewModel.offers : viewModel.requests
+    }
+    
+    var filteredPosts: [ServicePost] {
+        var posts = currentPosts
         
-        enum ServiceTab {
-            case offers, requests
-        }
-        
-        enum ViewMode {
-            case grid, list
-        }
-        
-        var currentPosts: [ServicePost] {
-            selectedTab == .offers ? viewModel.offers : viewModel.requests
-        }
-        
-        var filteredPosts: [ServicePost] {
-            var posts = currentPosts
-            
-            
-            
-            if !searchText.isEmpty {
-                posts = posts.filter {
-                    $0.title.localizedCaseInsensitiveContains(searchText) ||
-                    $0.description.localizedCaseInsensitiveContains(searchText)
+        if !searchText.isEmpty {
+            posts = posts.filter {
+                $0.title.localizedCaseInsensitiveContains(searchText) ||
+                $0.description.localizedCaseInsensitiveContains(searchText) ||
+                $0.tags.contains { tag in
+                    tag.localizedCaseInsensitiveContains(searchText)
                 }
             }
-            
-            return posts
         }
         
-        // 3 columns for grid
-        let columns = [
-            GridItem(.flexible(), spacing: 2),
-            GridItem(.flexible(), spacing: 2),
-            GridItem(.flexible(), spacing: 2)
-        ]
-        
-        var body: some View {
-            NavigationView {
-                VStack(spacing: 0) {
-                    // Tab Selector
-                    HStack(spacing: 0) {
-                        Button(action: { selectedTab = .offers }) {
-                            VStack(spacing: 4) {
-                                Text("Offers")
-                                    .font(.headline)
-                                    .foregroundColor(selectedTab == .offers ? .primary : .gray)
-                                
-                                Rectangle()
-                                    .fill(selectedTab == .offers ? Color.blue : Color.clear)
-                                    .frame(height: 3)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        
-                        Button(action: { selectedTab = .requests }) {
-                            VStack(spacing: 4) {
-                                Text("Requests")
-                                    .font(.headline)
-                                    .foregroundColor(selectedTab == .requests ? .primary : .gray)
-                                
-                                Rectangle()
-                                    .fill(selectedTab == .requests ? Color.orange : Color.clear)
-                                    .frame(height: 3)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 10)
-                    
-                    // Search Bar
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        
-                        TextField("Search services...", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                        
-                        if !searchText.isEmpty {
-                            Button(action: { searchText = "" }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                    }
-                    .padding(10)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    
-                    // Filter Bar
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            // View Mode Toggle
-                            Button(action: {
-                                viewMode = viewMode == .grid ? .list : .grid
-                            }) {
-                                Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
-                                    .foregroundColor(.blue)
-                                    .padding(8)
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(8)
-                            }
+        return posts
+    }
+    
+    // 3 columns for grid
+    let columns = [
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2)
+    ]
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Tab Selector
+                HStack(spacing: 0) {
+                    Button(action: { selectedTab = .offers }) {
+                        VStack(spacing: 4) {
+                            Text("Offers")
+                                .font(.headline)
+                                .foregroundColor(selectedTab == .offers ? .primary : .gray)
                             
-                            // Category Filters
-                            ForEach(ServiceCategory.allCases, id: \.self) { category in
-                                Button(action: {
-                                    selectedCategory = selectedCategory == category ? nil : category
-                                }) {
-                                    Text(category.displayName)
-                                        .font(.caption)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(selectedCategory == category ? Color.blue : Color(.systemGray6))
-                                        .foregroundColor(selectedCategory == category ? .white : .primary)
-                                        .cornerRadius(15)
-                                }
-                            }
+                            Rectangle()
+                                .fill(selectedTab == .offers ? Color.blue : Color.clear)
+                                .frame(height: 3)
                         }
-                        .padding(.horizontal)
                     }
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
                     
-                    // Main Content
-                    ScrollView {
-                        if filteredPosts.isEmpty {
-                            EmptyStateView(
-                                icon: "magnifyingglass",
-                                title: "No Services Found",
-                                message: selectedTab == .offers
-                                    ? "Be the first to offer services!"
-                                    : "No service requests yet.",
-                                buttonTitle: selectedTab == .offers ? "Create Offer" : "Create Request",
-                                action: {
-                                    showingCreatePost = true
-                                }
-                            )
-                            .padding(.top, 50)
-                        } else {
-                            if viewMode == .grid {
-                                LazyVGrid(columns: columns, spacing: 2) {
-                                    ForEach(filteredPosts) { post in
-                                        NavigationLink(destination: PostDetailView(post: post)) {
-                                            MinimalServiceCard(post: post, isRequest: post.isRequest)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .onAppear {
-                                            // Load more when reaching the last item
-                                            if post.id == filteredPosts.last?.id {
-                                                Task {
-                                                    if selectedTab == .offers && viewModel.offersHasMore {
-                                                        await viewModel.loadMoreOffers()
-                                                    } else if selectedTab == .requests && viewModel.requestsHasMore {
-                                                        await viewModel.loadMoreRequests()
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Loading indicator
-                                    if (selectedTab == .offers && viewModel.isLoadingOffers) ||
-                                       (selectedTab == .requests && viewModel.isLoadingRequests) {
-                                        ProgressView()
-                                            .frame(maxWidth: .infinity)
-                                            .padding()
-                                    }
-                                }
-                                .padding(.horizontal, 5)  // ← CHANGED: From .padding(.horizontal) to match Reels grid
-                            } else {
-                                // List View
-                                LazyVStack(spacing: 12) {
-                                    ForEach(filteredPosts) { post in
-                                        NavigationLink(destination: PostDetailView(post: post)) {
-                                            ServiceListCard(post: post, isRequest: post.isRequest)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .onAppear {
-                                            if post.id == filteredPosts.last?.id {
-                                                Task {
-                                                    if selectedTab == .offers && viewModel.offersHasMore {
-                                                        await viewModel.loadMoreOffers()
-                                                    } else if selectedTab == .requests && viewModel.requestsHasMore {
-                                                        await viewModel.loadMoreRequests()
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                    if (selectedTab == .offers && viewModel.isLoadingOffers) ||
-                                       (selectedTab == .requests && viewModel.isLoadingRequests) {
-                                        ProgressView()
-                                            .frame(maxWidth: .infinity)
-                                            .padding()
-                                    }
-                                }
-                                .padding(.horizontal)  // ← KEEP AS IS for list view
-                            }
+                    Button(action: { selectedTab = .requests }) {
+                        VStack(spacing: 4) {
+                            Text("Requests")
+                                .font(.headline)
+                                .foregroundColor(selectedTab == .requests ? .primary : .gray)
+                            
+                            Rectangle()
+                                .fill(selectedTab == .requests ? Color.orange : Color.clear)
+                                .frame(height: 3)
                         }
                     }
-                    .refreshable {
-                        await viewModel.refresh(type: selectedTab == .offers ? .offers : .requests)
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal)
+                .padding(.top, 10)
+                
+                // Search Bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                    
+                    TextField("Search services...", text: $searchText)
+                        .textFieldStyle(PlainTextFieldStyle())
+                    
+                    if !searchText.isEmpty {
+                        Button(action: { searchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
                     }
                 }
+                .padding(10)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                
+                // UPDATED: Tag Filter Section
+                if !viewModel.trendingTags.isEmpty || !viewModel.selectedTags.isEmpty {
+                    VStack(spacing: 0) {
+                        // Active filters (if any)
+                        if !viewModel.selectedTags.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    // Clear all button
+                                    Button(action: {
+                                        withAnimation {
+                                            viewModel.clearTagFilters()
+                                        }
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.caption)
+                                            Text("Clear All")
+                                                .font(.caption.bold())
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Color.red)
+                                        .cornerRadius(15)
+                                    }
+                                    
+                                    // Active filter tags
+                                    ForEach(viewModel.selectedTags, id: \.self) { tag in
+                                        TagChip(
+                                            tag: tag,
+                                            isSelected: true,
+                                            onDelete: {
+                                                withAnimation {
+                                                    viewModel.removeTagFilter(tag)
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                            .padding(.vertical, 8)
+                            .background(Color(.systemGray6))
+                        }
+                        
+                        // Popular tags and view mode toggle
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                // View Mode Toggle
+                                Button(action: {
+                                    viewMode = viewMode == .grid ? .list : .grid
+                                }) {
+                                    Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
+                                        .foregroundColor(.blue)
+                                        .padding(8)
+                                        .background(Color.blue.opacity(0.1))
+                                        .cornerRadius(8)
+                                }
+                                
+                                if !viewModel.trendingTags.isEmpty {
+                                    Divider()
+                                        .frame(height: 20)
+                                        .padding(.horizontal, 4)
+                                    
+                                    Text("Popular:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    
+                                    ForEach(viewModel.trendingTags, id: \.self) { tag in
+                                        if !viewModel.selectedTags.contains(tag) {
+                                            Button(action: {
+                                                withAnimation {
+                                                    viewModel.addTagFilter(tag)
+                                                }
+                                            }) {
+                                                Text(tag)
+                                                    .font(.caption)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 6)
+                                                    .background(Color(.systemGray5))
+                                                    .foregroundColor(.primary)
+                                                    .cornerRadius(15)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .padding(.vertical, 8)
+                        
+                        Divider()
+                    }
+                }
+                
+                // Main Content
+                ScrollView {
+                    if filteredPosts.isEmpty {
+                        EmptyStateView(
+                            icon: "magnifyingglass",
+                            title: "No Services Found",
+                            message: selectedTab == .offers
+                                ? "Be the first to offer services!"
+                                : "No service requests yet.",
+                            buttonTitle: selectedTab == .offers ? "Create Offer" : "Create Request",
+                            action: {
+                                showingCreatePost = true
+                            }
+                        )
+                        .padding(.top, 50)
+                    } else {
+                        if viewMode == .grid {
+                            LazyVGrid(columns: columns, spacing: 2) {
+                                ForEach(filteredPosts) { post in
+                                    NavigationLink(destination: PostDetailView(post: post)) {
+                                        MinimalServiceCard(post: post, isRequest: post.isRequest)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .onAppear {
+                                        // Load more when reaching the last item
+                                        if post.id == filteredPosts.last?.id {
+                                            Task {
+                                                if selectedTab == .offers && viewModel.offersHasMore {
+                                                    await viewModel.loadMoreOffers()
+                                                } else if selectedTab == .requests && viewModel.requestsHasMore {
+                                                    await viewModel.loadMoreRequests()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Loading indicator
+                                if (selectedTab == .offers && viewModel.isLoadingOffers) ||
+                                   (selectedTab == .requests && viewModel.isLoadingRequests) {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                }
+                            }
+                            .padding(.horizontal, 5)
+                        } else {
+                            // List View
+                            LazyVStack(spacing: 12) {
+                                ForEach(filteredPosts) { post in
+                                    NavigationLink(destination: PostDetailView(post: post)) {
+                                        ServiceListCard(post: post, isRequest: post.isRequest)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .onAppear {
+                                        if post.id == filteredPosts.last?.id {
+                                            Task {
+                                                if selectedTab == .offers && viewModel.offersHasMore {
+                                                    await viewModel.loadMoreOffers()
+                                                } else if selectedTab == .requests && viewModel.requestsHasMore {
+                                                    await viewModel.loadMoreRequests()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if (selectedTab == .offers && viewModel.isLoadingOffers) ||
+                                   (selectedTab == .requests && viewModel.isLoadingRequests) {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+                .refreshable {
+                    await viewModel.refresh(type: selectedTab == .offers ? .offers : .requests)
+                }
                 .navigationBarHidden(true)
-    //            .sheet(isPresented: $showingFilters) {
-    //                EnhancedFiltersView(
-    //                    selectedCategory: $selectedCategory,
-    //                    selectedTab: selectedTab
-    //                )
-    //            }
                 .sheet(isPresented: $showingCreatePost) {
                     ServiceFormView(isRequest: selectedTab == .requests)
                 }
             }
         }
     }
+}
 
 
-// MARK: - Minimal Service Card (for grid view)
+// MARK: - UPDATED: Minimal Service Card (for grid view) with tags
 struct MinimalServiceCard: View {
     let post: ServicePost
     let isRequest: Bool
     
     private var cardWidth: CGFloat {
-        (UIScreen.main.bounds.width - 4) / 3  // Changed for tighter spacing
+        (UIScreen.main.bounds.width - 4) / 3
     }
     
     var body: some View {
         VStack(spacing: 0) {
-            // Image Section (removed price overlay)
+            // Image Section
             ZStack {
                 if !post.imageURLs.isEmpty, let firstImageURL = post.imageURLs.first {
                     AsyncImage(url: URL(string: firstImageURL)) { phase in
@@ -271,11 +327,9 @@ struct MinimalServiceCard: View {
                 } else {
                     imagePlaceholder
                 }
-                
-                // NO MORE PRICE OVERLAY HERE
             }
             
-            // Title and Category Section (kept, but removed price)
+            // UPDATED: Title and Tags Section
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.title)
                     .font(.caption)
@@ -283,22 +337,27 @@ struct MinimalServiceCard: View {
                     .lineLimit(1)
                     .foregroundColor(.primary)
                 
-                Text(post.category.displayName)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                
-                // REMOVED PRICE TEXT HERE
+                // Show first tag or type badge
+                if let firstTag = post.tags.first {
+                    Text(firstTag)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(isRequest ? "REQUEST" : "OFFER")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
             .frame(width: cardWidth, alignment: .leading)
             .padding(4)
         }
         .background(Color(UIColor.systemBackground))
-        // REMOVED .cornerRadius(10) - now square edges
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
     private var imagePlaceholder: some View {
-        Rectangle()  // No cornerRadius - square edges
+        Rectangle()
             .fill(
                 LinearGradient(
                     colors: isRequest ?
@@ -311,7 +370,7 @@ struct MinimalServiceCard: View {
             .frame(width: cardWidth, height: cardWidth * 1.2)
             .overlay(
                 VStack(spacing: 4) {
-                    Image(systemName: categoryIcon(for: post.category))
+                    Image(systemName: isRequest ? "hand.raised.fill" : "wrench.and.screwdriver.fill")
                         .font(.title2)
                         .foregroundColor(.white)
                     Text(isRequest ? "REQUEST" : "OFFER")
@@ -321,11 +380,9 @@ struct MinimalServiceCard: View {
                 }
             )
     }
-    
-    
 }
 
-// MARK: - Service List Card (for list view)
+// MARK: - UPDATED: Service List Card (for list view) with tags
 struct ServiceListCard: View {
     let post: ServicePost
     let isRequest: Bool
@@ -384,10 +441,29 @@ struct ServiceListCard: View {
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                 
+                // UPDATED: Tags instead of category
                 HStack {
-                    Label(post.category.displayName, systemImage: categoryIcon(for: post.category))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if !post.tags.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 4) {
+                                ForEach(post.tags.prefix(3), id: \.self) { tag in
+                                    Text(tag)
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color(.systemGray5))
+                                        .foregroundColor(.secondary)
+                                        .cornerRadius(4)
+                                }
+                                if post.tags.count > 3 {
+                                    Text("+\(post.tags.count - 3)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .frame(height: 20)
+                    }
                     
                     Spacer()
                     
@@ -420,11 +496,9 @@ struct ServiceListCard: View {
             )
             .frame(width: 80, height: 80)
             .overlay(
-                Image(systemName: categoryIcon(for: post.category))
+                Image(systemName: isRequest ? "hand.raised.fill" : "wrench.and.screwdriver.fill")
                     .font(.title2)
                     .foregroundColor(.white)
             )
     }
-    
-    
 }
