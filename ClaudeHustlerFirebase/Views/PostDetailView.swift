@@ -84,21 +84,7 @@ struct PostDetailView: View {
         .sheet(isPresented: $showingEditView) {
             ServiceFormView(post: post)
         }
-        .sheet(isPresented: $showingMessageView) {
-            if let userId = post.userId {
-                NavigationView {
-                    ChatView(recipientId: userId)
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Cancel") {
-                                    showingMessageView = false
-                                }
-                            }
-                        }
-                }
-            }
-        }
+        
         .confirmationDialog("Delete Post?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 Task {

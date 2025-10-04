@@ -440,7 +440,7 @@ struct CameraView: View {
             thumbnailURL: thumbnailURL.isEmpty ? mediaURL : thumbnailURL,
             title: reelTitle,
             description: reelDescription,
-            hashtags: extractHashtags(from: reelDescription),  // Using hashtags from description
+            tags: extractHashtags(from: reelDescription),  // Using hashtags from description
             likes: [],
             comments: 0,
             shares: 0,

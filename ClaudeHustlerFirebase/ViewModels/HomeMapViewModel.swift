@@ -61,10 +61,10 @@ final class HomeMapViewModel: ObservableObject {
         
         do {
             // First, check ALL posts to see what we have
-            let allPostsResult = try await repository.fetch(limit: 100)
+            let allPostsResult = try await repository.fetch(limit: 500)
             print("📊 Total posts in database: \(allPostsResult.items.count)")
             
-            // Check how many have coordinates
+            // Filter for posts with coordinates
             let postsWithCoords = allPostsResult.items.filter { $0.coordinates != nil }
             print("📍 Posts with coordinates: \(postsWithCoords.count)")
             
@@ -77,13 +77,8 @@ final class HomeMapViewModel: ObservableObject {
                 }
             }
             
-            // Now fetch posts with location data
-            let allPostsResult = try await repository.fetch(limit: 500)
-            let postsWithCoords = allPostsResult.items.filter { $0.coordinates != nil }
-            print("🗺️ fetchAllPostsWithLocation returned: \(fetchedPosts.count) posts")
-            
             // Handle location privacy
-            posts = fetchedPosts.map { post in
+            posts = postsWithCoords.map { post in
                 var modifiedPost = post
                 
                 // If location privacy is approximate, obfuscate the coordinates
