@@ -1,7 +1,6 @@
-
-
 // ServicesViewModel.swift
 // Path: ClaudeHustlerFirebase/ViewModels/ServicesViewModel.swift
+// UPDATED: Added tag support
 
 import Foundation
 import SwiftUI
@@ -19,8 +18,14 @@ final class ServicesViewModel: ObservableObject {
     @Published var requestsHasMore = true
     @Published var error: Error?
     
+    // MARK: - Tag Properties (ADDED)
+    @Published var selectedTags: [String] = []
+    @Published var trendingTags: [String] = []
+    @Published var isFilteringByTags = false
+    
     // MARK: - Private Properties
     private let repository = PostRepository()
+    private let tagRepository = TagRepository.shared  // ADDED
     private var offersLastDocument: DocumentSnapshot?
     private var requestsLastDocument: DocumentSnapshot?
     private let pageSize = 20
@@ -32,6 +37,7 @@ final class ServicesViewModel: ObservableObject {
         Self.shared = self
         Task {
             await loadInitialData()
+            await loadTrendingTags()  // ADDED
         }
     }
     
@@ -51,7 +57,18 @@ final class ServicesViewModel: ObservableObject {
         error = nil
         
         do {
-            let (posts, lastDoc) = try await repository.fetchOffers(limit: pageSize)
+            let (posts, lastDoc): ([ServicePost], DocumentSnapshot?)
+            
+            // UPDATED: Check if filtering by tags
+            if !selectedTags.isEmpty {
+                (posts, lastDoc) = try await repository.fetchByTags(
+                    selectedTags,
+                    limit: pageSize,
+                    isRequest: false
+                )
+            } else {
+                (posts, lastDoc) = try await repository.fetchOffers(limit: pageSize)
+            }
             
             await MainActor.run {
                 self.offers = posts
@@ -76,10 +93,22 @@ final class ServicesViewModel: ObservableObject {
         isLoadingOffers = true
         
         do {
-            let (posts, newLastDoc) = try await repository.fetchOffers(
-                limit: pageSize,
-                lastDocument: lastDoc
-            )
+            let (posts, newLastDoc): ([ServicePost], DocumentSnapshot?)
+            
+            // UPDATED: Check if filtering by tags
+            if !selectedTags.isEmpty {
+                (posts, newLastDoc) = try await repository.fetchByTags(
+                    selectedTags,
+                    limit: pageSize,
+                    lastDocument: lastDoc,
+                    isRequest: false
+                )
+            } else {
+                (posts, newLastDoc) = try await repository.fetchOffers(
+                    limit: pageSize,
+                    lastDocument: lastDoc
+                )
+            }
             
             await MainActor.run {
                 self.offers.append(contentsOf: posts)
@@ -102,7 +131,18 @@ final class ServicesViewModel: ObservableObject {
         error = nil
         
         do {
-            let (posts, lastDoc) = try await repository.fetchRequests(limit: pageSize)
+            let (posts, lastDoc): ([ServicePost], DocumentSnapshot?)
+            
+            // UPDATED: Check if filtering by tags
+            if !selectedTags.isEmpty {
+                (posts, lastDoc) = try await repository.fetchByTags(
+                    selectedTags,
+                    limit: pageSize,
+                    isRequest: true
+                )
+            } else {
+                (posts, lastDoc) = try await repository.fetchRequests(limit: pageSize)
+            }
             
             await MainActor.run {
                 self.requests = posts
@@ -127,10 +167,22 @@ final class ServicesViewModel: ObservableObject {
         isLoadingRequests = true
         
         do {
-            let (posts, newLastDoc) = try await repository.fetchRequests(
-                limit: pageSize,
-                lastDocument: lastDoc
-            )
+            let (posts, newLastDoc): ([ServicePost], DocumentSnapshot?)
+            
+            // UPDATED: Check if filtering by tags
+            if !selectedTags.isEmpty {
+                (posts, newLastDoc) = try await repository.fetchByTags(
+                    selectedTags,
+                    limit: pageSize,
+                    lastDocument: lastDoc,
+                    isRequest: true
+                )
+            } else {
+                (posts, newLastDoc) = try await repository.fetchRequests(
+                    limit: pageSize,
+                    lastDocument: lastDoc
+                )
+            }
             
             await MainActor.run {
                 self.requests.append(contentsOf: posts)
@@ -172,10 +224,15 @@ final class ServicesViewModel: ObservableObject {
         case offers, requests
     }
     
-    // MARK: - Create/Update Methods (PHASE 2.2)
+    // MARK: - Create/Update Methods (UPDATED WITH TAGS)
 
     func createPost(_ post: ServicePost) async throws -> String {
         let postId = try await repository.create(post)
+        
+        // ADDED: Update tag analytics
+        if !post.tags.isEmpty {
+            await tagRepository.updateTagAnalytics(post.tags, type: "post")
+        }
         
         // Refresh the appropriate list
         if post.isRequest {
@@ -190,6 +247,11 @@ final class ServicesViewModel: ObservableObject {
     func updatePost(_ post: ServicePost) async throws {
         try await repository.update(post)
         
+        // ADDED: Update tag analytics
+        if !post.tags.isEmpty {
+            await tagRepository.updateTagAnalytics(post.tags, type: "post")
+        }
+        
         // Update local state
         if post.isRequest {
             if let index = requests.firstIndex(where: { $0.id == post.id }) {
@@ -199,6 +261,88 @@ final class ServicesViewModel: ObservableObject {
             if let index = offers.firstIndex(where: { $0.id == post.id }) {
                 offers[index] = post
             }
+        }
+    }
+    
+    // MARK: - Tag Methods (ADDED)
+    
+    func loadTrendingTags() async {
+        do {
+            let tags = try await tagRepository.fetchTrendingTags(limit: 15)
+            await MainActor.run {
+                self.trendingTags = tags
+            }
+        } catch {
+            print("Failed to load trending tags: \(error)")
+        }
+    }
+    
+    func toggleTagFilter(_ tag: String) {
+        if selectedTags.contains(tag) {
+            selectedTags.removeAll { $0 == tag }
+        } else {
+            selectedTags.append(tag)
+        }
+        
+        isFilteringByTags = !selectedTags.isEmpty
+        
+        // Reload data with new filters
+        Task {
+            await refresh(type: .offers)
+            await refresh(type: .requests)
+        }
+    }
+    
+    func clearTagFilters() {
+        selectedTags.removeAll()
+        isFilteringByTags = false
+        
+        // Reload without filters
+        Task {
+            await refresh(type: .offers)
+            await refresh(type: .requests)
+        }
+    }
+    
+    func addTagFilter(_ tag: String) {
+        if !selectedTags.contains(tag) {
+            selectedTags.append(tag)
+            isFilteringByTags = true
+            
+            Task {
+                await refresh(type: .offers)
+                await refresh(type: .requests)
+            }
+        }
+    }
+    
+    func removeTagFilter(_ tag: String) {
+        selectedTags.removeAll { $0 == tag }
+        isFilteringByTags = !selectedTags.isEmpty
+        
+        Task {
+            await refresh(type: .offers)
+            await refresh(type: .requests)
+        }
+    }
+    
+    // MARK: - Search with Tags (ADDED)
+    
+    func searchPostsWithTags(query: String, includeOffers: Bool = true, includeRequests: Bool = true) async -> [ServicePost] {
+        do {
+            let posts = try await repository.searchPostsWithTags(
+                query: query,
+                tags: selectedTags.isEmpty ? nil : selectedTags
+            )
+            
+            return posts.filter { post in
+                if includeOffers && !post.isRequest { return true }
+                if includeRequests && post.isRequest { return true }
+                return false
+            }
+        } catch {
+            print("Search failed: \(error)")
+            return []
         }
     }
 }
