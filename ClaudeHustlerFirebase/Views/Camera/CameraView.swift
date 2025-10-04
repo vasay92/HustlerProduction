@@ -1,5 +1,6 @@
 // CameraView.swift
 // Path: ClaudeHustlerFirebase/Views/Camera/CameraView.swift
+// UPDATED: Complete file with hashtags for reels, no category selection
 
 import SwiftUI
 import PhotosUI
@@ -172,17 +173,15 @@ struct CameraView: View {
                                 TextField("Title", text: $title)
                                     .textFieldStyle(RoundedBorderTextFieldStyle())
                                 
-                                TextField("Description", text: $description, axis: .vertical)
+                                TextField("Description (include #hashtags)", text: $description, axis: .vertical)
                                     .lineLimit(3...5)
                                     .textFieldStyle(RoundedBorderTextFieldStyle())
                                 
-                                // Category picker
-                                
-                                .pickerStyle(MenuPickerStyle())
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
+                                // Hashtag hint
+                                Text("Add hashtags to help people discover your reel")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .padding(.horizontal)
                         }
@@ -432,7 +431,7 @@ struct CameraView: View {
         
         uploadProgress = 0.8
         
-        // Create Reel object
+        // Create Reel object (no category)
         let reel = Reel(
             userId: userId,
             userName: firebase.currentUser?.name ?? "Unknown",
@@ -441,8 +440,7 @@ struct CameraView: View {
             thumbnailURL: thumbnailURL.isEmpty ? mediaURL : thumbnailURL,
             title: reelTitle,
             description: reelDescription,
-            category: selectedCategory,
-            hashtags: extractHashtags(from: reelDescription),
+            hashtags: extractHashtags(from: reelDescription),  // Using hashtags from description
             likes: [],
             comments: 0,
             shares: 0,

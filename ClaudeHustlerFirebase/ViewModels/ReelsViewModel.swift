@@ -357,38 +357,37 @@ final class ReelsViewModel: ObservableObject {
     // MARK: - Create/Update Reel
     
     func createReel(
-        title: String,
-        description: String,
-        videoURL: String,
-        thumbnailURL: String? = nil,
-        category: ServiceCategory? = nil,
-        hashtags: [String] = []
-    ) async throws -> String {
-        guard let userId = currentUserId,
-              let userName = firebase.currentUser?.name else {
-            throw NSError(domain: "ReelsViewModel", code: 0,
-                         userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+            title: String,
+            description: String,
+            videoURL: String,
+            thumbnailURL: String? = nil,
+            hashtags: [String] = []
+        ) async throws -> String {
+            guard let userId = currentUserId,
+                  let userName = firebase.currentUser?.name else {
+                throw NSError(domain: "ReelsViewModel", code: 0,
+                             userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+            }
+            
+            let reel = Reel(
+                userId: userId,
+                userName: userName,
+                userProfileImage: firebase.currentUser?.profileImageURL,
+                videoURL: videoURL,
+                thumbnailURL: thumbnailURL ?? videoURL,
+                title: title,
+                description: description,
+                hashtags: hashtags  // No more category
+            )
+            
+            let reelId = try await reelRepository.create(reel)
+            
+            // Reload reels to show the new one
+            await loadInitialReels()
+            
+            return reelId
         }
-        
-        let reel = Reel(
-            userId: userId,
-            userName: userName,
-            userProfileImage: firebase.currentUser?.profileImageURL,
-            videoURL: videoURL,
-            thumbnailURL: thumbnailURL ?? videoURL,
-            title: title,
-            description: description,
-            category: category,
-            hashtags: hashtags
-        )
-        
-        let reelId = try await reelRepository.create(reel)
-        
-        // Reload reels to show the new one
-        await loadInitialReels()
-        
-        return reelId
-    }
+
     
     func updateReel(_ reel: Reel) async throws {
         try await reelRepository.update(reel)

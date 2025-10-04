@@ -1,10 +1,6 @@
 // PostDetailView.swift
 // Path: ClaudeHustlerFirebase/Views/Post/PostDetailView.swift
-//
-// CHANGES MADE TO FIX NAVIGATION ISSUES:
-// 1. Removed NavigationView wrapper from body
-// 2. Removed .navigationBarHidden(false) modifier
-// 3. Removed custom back button from toolbar (SwiftUI provides one automatically)
+// UPDATED: Complete file with tags instead of categories
 
 import SwiftUI
 import Firebase
@@ -27,14 +23,6 @@ struct PostDetailView: View {
         ZStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    VStack {
-                                        Text("DEBUG: Post loaded - \(post.title)")
-                                            .foregroundColor(.red)
-                                            .padding()
-                                    }
-                                    .onAppear {
-                                        print("DEBUG: PostDetailView body rendered with post: \(post.title)")
-                                    }
                     // Photo Gallery
                     photoGallerySection
                     
@@ -47,66 +35,71 @@ struct PostDetailView: View {
                     // Action Buttons
                     actionButtonsSection
                     
-                    Spacer(minLength: 100)
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        Button(action: { showingShareSheet = true }) {
-                            Image(systemName: "square.and.arrow.up")
-                                .foregroundColor(.primary)
-                        }
-                        
-                        // Options menu for post owner
-                        if post.userId == firebase.currentUser?.id {
-                            Menu {
-                                Button(action: { showingEditView = true }) {
-                                    Label("Edit Post", systemImage: "pencil")
-                                }
-                                
-                                Divider()
-                                
-                                Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
-                                    Label("Delete Post", systemImage: "trash")
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .foregroundColor(.primary)
-                            }
-                        }
-                    }
+                    Spacer(minLength: 20)
                 }
             }
             
-            // Bottom Action Buttons
-            bottomActionButtons
+            // Loading overlay for deletion
+            if isDeleting {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                ProgressView("Deleting...")
+                    .padding()
+                    .background(Color(.systemBackground))
+                    .cornerRadius(10)
+                    .shadow(radius: 5)
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    if post.userId == firebase.currentUser?.id {
+                        Button(action: { showingEditView = true }) {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        
+                        Divider()
+                        
+                        Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    
+                    Button(action: { showingShareSheet = true }) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+            }
         }
         .task {
             await loadPosterInfo()
             await checkSaveStatus()
         }
         .sheet(isPresented: $showingShareSheet) {
-            ShareSheet(items: [post.title, post.description])
+            ShareSheet(items: [shareContent()])
         }
-        .fullScreenCover(isPresented: $showingMessageView) {
-            ChatView(
-                recipientId: post.userId,
-                contextType: .post,
-                contextId: post.id,
-                contextData: (
-                    title: post.title,
-                    image: post.imageURLs.first,
-                    userId: post.userId
-                ),
-                isFromContentView: true
-            )
-        }
-        .fullScreenCover(isPresented: $showingEditView) {
+        .sheet(isPresented: $showingEditView) {
             ServiceFormView(post: post)
         }
-        .confirmationDialog("Delete Post?", isPresented: $showingDeleteConfirmation) {
+        .sheet(isPresented: $showingMessageView) {
+            if let userId = post.userId {
+                NavigationView {
+                    ChatView(recipientId: userId)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Cancel") {
+                                    showingMessageView = false
+                                }
+                            }
+                        }
+                }
+            }
+        }
+        .confirmationDialog("Delete Post?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 Task {
                     await deletePost()
@@ -114,69 +107,69 @@ struct PostDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This action cannot be undone. Your post will be permanently deleted.")
+            Text("This action cannot be undone.")
         }
-        .overlay(
-            Group {
-                if isDeleting {
-                    Color.black.opacity(0.4)
-                        .ignoresSafeArea()
-                        .overlay(
-                            VStack {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.5)
-                                Text("Deleting...")
-                                    .foregroundColor(.white)
-                                    .padding(.top)
-                            }
-                        )
-                }
-            }
-        )
     }
     
-    // MARK: - View Components
-    
+    // MARK: - Photo Gallery Section
     @ViewBuilder
     private var photoGallerySection: some View {
         if !post.imageURLs.isEmpty {
             VStack(spacing: 0) {
+                // Main Image
                 TabView(selection: $selectedPhotoIndex) {
                     ForEach(Array(post.imageURLs.enumerated()), id: \.offset) { index, imageURL in
-                        AsyncImage(url: URL(string: imageURL)) { image in
-                            image
-                                .resizable()
-                                .scaledToFit()
-                        } placeholder: {
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.2))
-                                .overlay(
-                                    ProgressView()
-                                )
+                        AsyncImage(url: URL(string: imageURL)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxHeight: 350)
+                                    .tag(index)
+                            case .failure(_):
+                                Image(systemName: "photo")
+                                    .foregroundColor(.gray)
+                                    .frame(maxHeight: 350)
+                            case .empty:
+                                ProgressView()
+                                    .frame(maxHeight: 350)
+                            @unknown default:
+                                EmptyView()
+                            }
                         }
-                        .frame(height: 350)
-                        .tag(index)
                     }
                 }
                 .frame(height: 350)
-                .tabViewStyle(PageTabViewStyle())
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
                 
                 // Thumbnail Strip
                 if post.imageURLs.count > 1 {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
                             ForEach(Array(post.imageURLs.enumerated()), id: \.offset) { index, imageURL in
-                                AsyncImage(url: URL(string: imageURL)) { image in
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                } placeholder: {
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.2))
+                                AsyncImage(url: URL(string: imageURL)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 60, height: 60)
+                                            .clipped()
+                                            .cornerRadius(8)
+                                    case .failure(_):
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 60, height: 60)
+                                    case .empty:
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 60, height: 60)
+                                            .overlay(ProgressView().scaleEffect(0.5))
+                                    @unknown default:
+                                        EmptyView()
+                                    }
                                 }
-                                .frame(width: 60, height: 60)
-                                .cornerRadius(8)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
                                         .stroke(selectedPhotoIndex == index ? Color.blue : Color.clear, lineWidth: 2)
@@ -210,10 +203,10 @@ struct PostDetailView: View {
                 .frame(height: 350)
                 .overlay(
                     VStack(spacing: 10) {
-                        Image(systemName: categoryIcon(for: post.category))
+                        Image(systemName: post.isRequest ? "hand.raised.fill" : "wrench.and.screwdriver.fill")
                             .font(.system(size: 60))
                             .foregroundColor(.white.opacity(0.8))
-                        Text(post.category.displayName)
+                        Text(post.isRequest ? "Service Request" : "Service Offer")
                             .font(.headline)
                             .foregroundColor(.white.opacity(0.8))
                     }
@@ -221,6 +214,7 @@ struct PostDetailView: View {
         }
     }
     
+    // MARK: - Post Details Section
     @ViewBuilder
     private var postDetailsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -254,10 +248,22 @@ struct PostDetailView: View {
                 }
             }
             
-            // Category Badge
+            // UPDATED: Tags instead of category badge
+            if !post.tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(post.tags, id: \.self) { tag in
+                            TagChip(
+                                tag: tag,
+                                isClickable: false
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Request/Offer and Status badges
             HStack {
-                CategoryBadge(category: post.category)
-                
                 if post.isRequest {
                     RequestBadge()
                 }
@@ -303,6 +309,7 @@ struct PostDetailView: View {
         .background(Color(.systemBackground))
     }
     
+    // MARK: - User Info Section
     @ViewBuilder
     private var userInfoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -315,134 +322,86 @@ struct PostDetailView: View {
                     UserProfileImage(imageURL: posterInfo?.profileImageURL, userName: posterInfo?.name ?? post.userName)
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        // User Name
                         Text(posterInfo?.name ?? post.userName ?? "Unknown User")
-                            .font(.headline)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
                             .foregroundColor(.primary)
                         
-                        // Rating
-                        HStack(spacing: 4) {
-                            PostDetailStarRatingView(rating: posterInfo?.rating ?? 0.0, maxRating: 5)
-                            Text("(\(posterInfo?.reviewCount ?? 0))")
+                        if let memberSince = posterInfo?.createdAt {
+                            Text("Member since \(yearFormatter.string(from: memberSince))")
                                 .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        
-                        // Member Since
-                        if let createdAt = posterInfo?.createdAt {
-                            Text("Member since \(createdAt, formatter: yearFormatter)")
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                                .foregroundColor(.secondary)
                         }
                     }
                     
                     Spacer()
                     
                     Image(systemName: "chevron.right")
+                        .font(.caption)
                         .foregroundColor(.gray)
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
             }
+            .buttonStyle(PlainButtonStyle())
         }
         .padding()
         .background(Color(.systemBackground))
     }
     
+    // MARK: - Action Buttons Section
     @ViewBuilder
     private var actionButtonsSection: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 12) {
             PostActionButton(
                 icon: isSaved ? "bookmark.fill" : "bookmark",
-                title: isSaved ? "Saved" : "Save",
-                color: isSaved ? .blue : .gray,
-                action: { toggleSave() }
+                title: "Save",
+                color: isSaved ? .orange : .gray,
+                action: toggleSave
             )
             
             PostActionButton(
                 icon: "square.and.arrow.up",
                 title: "Share",
-                color: .gray,
+                color: .blue,
                 action: { showingShareSheet = true }
             )
             
-            PostActionButton(
-                icon: "flag",
-                title: "Report",
-                color: .gray,
-                action: {
-                    // TODO: Implement report functionality
-                }
-            )
+            if post.userId != firebase.currentUser?.id {
+                PostActionButton(
+                    icon: "message",
+                    title: "Message",
+                    color: .green,
+                    action: { showingMessageView = true }
+                )
+            }
         }
         .padding()
-        .background(Color(.systemBackground))
-    }
-    
-    @ViewBuilder
-    private var bottomActionButtons: some View {
-        VStack {
-            Spacer()
-            HStack(spacing: 12) {
-                Button(action: {
-                    if post.userId != firebase.currentUser?.id {
-                        showingMessageView = true
-                    }
-                }) {
-                    Label("Message", systemImage: "message.fill")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(post.userId == firebase.currentUser?.id ? Color.gray : Color.blue)
-                        .cornerRadius(12)
-                }
-                .disabled(post.userId == firebase.currentUser?.id)
-                
-                if post.isRequest && post.userId != firebase.currentUser?.id {
-                    Button(action: {
-                        // TODO: Implement make offer functionality
-                    }) {
-                        Label("Make Offer", systemImage: "tag.fill")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .cornerRadius(12)
-                    }
-                } else if !post.isRequest && post.userId != firebase.currentUser?.id {
-                    Button(action: {
-                        // TODO: Implement book service functionality
-                    }) {
-                        Label("Book Service", systemImage: "calendar.badge.plus")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .cornerRadius(12)
-                    }
-                }
-            }
-            .padding()
-            .background(
-                Color(.systemBackground)
-                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: -5)
-            )
-        }
     }
     
     // MARK: - Helper Functions
+    private func shareContent() -> String {
+        var content = "\(post.title)\n\n"
+        content += "\(post.description)\n\n"
+        
+        if let price = post.price {
+            content += "Price: $\(Int(price))\n"
+        }
+        
+        if !post.tags.isEmpty {
+            content += "Tags: \(post.tags.joined(separator: " "))\n"
+        }
+        
+        if let location = post.location {
+            content += "Location: \(location)\n"
+        }
+        
+        return content
+    }
     
     private func loadPosterInfo() async {
-        let userId = post.userId
-        
         do {
             let document = try await Firestore.firestore()
                 .collection("users")
-                .document(userId)
+                .document(post.userId)
                 .getDocument()
             
             if document.exists {
@@ -478,8 +437,6 @@ struct PostDetailView: View {
         }
     }
     
-    
-    
     private func deletePost() async {
         guard let postId = post.id else { return }
         
@@ -502,21 +459,6 @@ struct PostDetailView: View {
 }
 
 // MARK: - Supporting Views
-
-struct CategoryBadge: View {
-    let category: ServiceCategory
-    
-    var body: some View {
-        Text(category.displayName)
-            .font(.caption)
-            .fontWeight(.medium)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Color.blue.opacity(0.1))
-            .foregroundColor(.blue)
-            .cornerRadius(12)
-    }
-}
 
 struct RequestBadge: View {
     var body: some View {

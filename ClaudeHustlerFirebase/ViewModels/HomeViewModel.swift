@@ -1,7 +1,6 @@
-
-
 // HomeViewModel.swift
 // Path: ClaudeHustlerFirebase/ViewModels/HomeViewModel.swift
+// UPDATED: Complete file with tags instead of categories
 
 import SwiftUI
 import Combine
@@ -15,7 +14,6 @@ class HomeViewModel: ObservableObject {
     @Published var trendingPosts: [ServicePost] = []
     @Published var isLoading = false
     @Published var searchText = ""
-    @Published var selectedCategory: ServiceCategory?
     @Published var hasMore = true
     
     private let repository = PostRepository.shared
@@ -47,17 +45,17 @@ class HomeViewModel: ObservableObject {
     }
     
     private func filterPosts() {
-        if searchText.isEmpty && selectedCategory == nil {
+        if searchText.isEmpty {
             filteredPosts = posts
         } else {
             filteredPosts = posts.filter { post in
-                let matchesSearch = searchText.isEmpty ||
-                    post.title.localizedCaseInsensitiveContains(searchText) ||
-                    post.description.localizedCaseInsensitiveContains(searchText)
+                let matchesSearch = post.title.localizedCaseInsensitiveContains(searchText) ||
+                    post.description.localizedCaseInsensitiveContains(searchText) ||
+                    post.tags.contains { tag in
+                        tag.localizedCaseInsensitiveContains(searchText)
+                    }
                 
-                let matchesCategory = selectedCategory == nil || post.category == selectedCategory
-                
-                return matchesSearch && matchesCategory
+                return matchesSearch
             }
         }
     }
@@ -159,18 +157,10 @@ class HomeViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Category Filter
-    
-    func selectCategory(_ category: ServiceCategory?) {
-        selectedCategory = category
-        filterPosts()
-    }
+    // MARK: - Clear Filters
     
     func clearFilters() {
         searchText = ""
-        selectedCategory = nil
         filterPosts()
     }
-    
-    
 }

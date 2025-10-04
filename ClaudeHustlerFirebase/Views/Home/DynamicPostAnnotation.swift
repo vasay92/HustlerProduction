@@ -1,72 +1,68 @@
 // DynamicPostAnnotation.swift
-// Dynamic map annotation that changes based on zoom level
+// Path: ClaudeHustlerFirebase/Views/Home/DynamicPostAnnotation.swift
+// UPDATED: Complete file with tags instead of categories
 
 import SwiftUI
 import MapKit
 
-// MARK: - Main Dynamic Annotation
+// MARK: - Dynamic Post Annotation
 struct DynamicPostAnnotation: View {
     let post: ServicePost
     let isSelected: Bool
     let zoomLevel: Double
-    @ObservedObject var viewModel: HomeMapViewModel
+    let viewModel: HomeMapViewModel
     
-    // Determine display mode based on zoom level
-    private var displayMode: DisplayMode {
+    @State private var userRating: Double? = nil
+    @State private var reviewCount: Int? = nil
+    
+    // Determine annotation style based on zoom level
+    private var annotationStyle: AnnotationStyle {
         if isSelected {
-            return .selected // Always show full details when selected
-        } else if zoomLevel < 0.3 {
-            return .detailed // Very close zoom - show badge with rating
-        } else if zoomLevel < 0.6 {
-            return .compact  // Medium zoom - show title only
+            return .selectedBubble
+        } else if zoomLevel < 0.02 {
+            return .detailed
+        } else if zoomLevel < 0.1 {
+            return .compact
         } else {
-            return .minimal  // Far zoom - just dots
+            return .minimal
         }
     }
     
-    enum DisplayMode {
+    enum AnnotationStyle {
         case minimal
         case compact
         case detailed
-        case selected
+        case selectedBubble
     }
     
     var body: some View {
-        ZStack {
-            // Base annotation based on display mode
-            switch displayMode {
+        Group {
+            switch annotationStyle {
             case .minimal:
-                MinimalDotPin(post: post, isSelected: false)
-                
+                MinimalDotPin(post: post, isSelected: isSelected)
             case .compact:
-                CompactTitlePin(post: post, isSelected: false)
-                
+                CompactTitlePin(post: post, isSelected: isSelected)
             case .detailed:
                 DetailedBadgePin(
                     post: post,
-                    isSelected: false,
+                    isSelected: isSelected,
                     userRating: viewModel.getUserRating(for: post.userId),
                     reviewCount: viewModel.getUserReviewCount(for: post.userId)
                 )
-                
-            case .selected:
-                MinimalDotPin(post: post, isSelected: true)
-                    .overlay(
-                        SelectedPostBubble(
-                            post: post,
-                            userRating: viewModel.getUserRating(for: post.userId),
-                            reviewCount: viewModel.getUserReviewCount(for: post.userId)
-                        )
-                        .offset(y: -45)
-                        .transition(.scale.combined(with: .opacity))
-                    )
+            case .selectedBubble:
+                SelectedPostBubble(
+                    post: post,
+                    userRating: viewModel.getUserRating(for: post.userId),
+                    reviewCount: viewModel.getUserReviewCount(for: post.userId)
+                )
+                .offset(y: -50)
+                .transition(.scale.combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: displayMode)
     }
 }
 
-// MARK: - Minimal Dot Pin (Your existing design)
+// MARK: - Minimal Dot Pin
 struct MinimalDotPin: View {
     let post: ServicePost
     let isSelected: Bool
@@ -171,11 +167,11 @@ struct SelectedPostBubble: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                // Category badge
+                // Type badge (Request/Offer)
                 HStack(spacing: 4) {
-                    Image(systemName: getCategoryIcon())
+                    Image(systemName: post.isRequest ? "hand.raised.fill" : "wrench.and.screwdriver.fill")
                         .font(.caption2)
-                    Text(post.category.displayName)
+                    Text(post.isRequest ? "SERVICE REQUEST" : "SERVICE OFFER")
                         .font(.caption2)
                         .fontWeight(.medium)
                 }
@@ -191,6 +187,14 @@ struct SelectedPostBubble: View {
                     .foregroundColor(.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                
+                // Tags preview (if any)
+                if !post.tags.isEmpty {
+                    Text(post.tags.prefix(3).joined(separator: " "))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
                 
                 // User and rating info
                 HStack(spacing: 0) {
@@ -226,7 +230,7 @@ struct SelectedPostBubble: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(post.isRequest ? .orange : .blue)
                         
-                        Text(post.isRequest ? "budget" : "/hour")
+                        Text(post.isRequest ? "budget" : "")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
@@ -249,22 +253,6 @@ struct SelectedPostBubble: View {
                 .font(.system(size: 10))
                 .foregroundColor(.white)
                 .offset(y: -1)
-        }
-    }
-    
-    private func getCategoryIcon() -> String {
-        switch post.category {
-        case .cleaning: return "sparkles"
-        case .tutoring: return "book.fill"
-        case .delivery: return "shippingbox.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .carpentry: return "hammer.fill"
-        case .painting: return "paintbrush.fill"
-        case .landscaping: return "leaf.fill"
-        case .moving: return "box.truck.fill"
-        case .technology: return "desktopcomputer"
-        case .other: return "ellipsis.circle.fill"
         }
     }
 }

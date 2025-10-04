@@ -114,37 +114,38 @@ final class ReelRepository: RepositoryProtocol {
     
     // MARK: - Create Reel
     func create(_ reel: Reel) async throws -> String {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+            guard let userId = Auth.auth().currentUser?.uid else {
+                throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
+            }
+            
+            // Create reel data dictionary
+            let reelData: [String: Any] = [
+                "userId": userId,
+                "userName": reel.userName ?? "",
+                "userProfileImage": reel.userProfileImage ?? "",
+                "videoURL": reel.videoURL,
+                "thumbnailURL": reel.thumbnailURL ?? "",
+                "title": reel.title,
+                "description": reel.description,
+                // REMOVED: "category" field
+                "hashtags": reel.hashtags,
+                "createdAt": Date(),
+                "likes": [],
+                "comments": 0,
+                "shares": 0,
+                "views": 0,
+                "isPromoted": false
+            ]
+            
+            let docRef = try await db.collection("reels").addDocument(data: reelData)
+            
+            // Clear cache
+            cache.remove(for: "reels_page_1")
+            cache.remove(for: "trending_reels")
+            
+            return docRef.documentID
         }
-        
-        // Create reel data dictionary
-        let reelData: [String: Any] = [
-            "userId": userId,
-            "userName": reel.userName ?? "",
-            "userProfileImage": reel.userProfileImage ?? "",
-            "videoURL": reel.videoURL,
-            "thumbnailURL": reel.thumbnailURL ?? "",
-            "title": reel.title,
-            "description": reel.description,
-            "category": reel.category?.rawValue ?? "",
-            "hashtags": reel.hashtags,
-            "createdAt": Date(),
-            "likes": [],
-            "comments": 0,
-            "shares": 0,
-            "views": 0,
-            "isPromoted": false
-        ]
-        
-        let docRef = try await db.collection("reels").addDocument(data: reelData)
-        
-        // Clear cache
-        cache.remove(for: "reels_page_1")
-        cache.remove(for: "trending_reels")
-        
-        return docRef.documentID
-    }
+
     
     // MARK: - Update Reel
     func update(_ reel: Reel) async throws {
