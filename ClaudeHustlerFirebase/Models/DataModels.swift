@@ -1,5 +1,5 @@
 // DataModels.swift
-// This should REPLACE your existing DataModels.swift file completely
+// Updated version with tags replacing categories
 
 import Foundation
 import FirebaseFirestore
@@ -30,7 +30,6 @@ struct User: Codable, Identifiable {
 }
 
 // MARK: - Notification Settings
-// In User model (DataModels.swift)
 struct NotificationSettings: Codable {
     var newMessages: Bool = true
     var messageRequests: Bool = true
@@ -39,7 +38,7 @@ struct NotificationSettings: Codable {
     var reviewEdits: Bool = true
     var helpfulVotes: Bool = true
     var reelLikes: Bool = true
-    var reelComments: Bool = true  // ADDED
+    var reelComments: Bool = true
     var commentLikes: Bool = true
     var commentReplies: Bool = true
 }
@@ -58,10 +57,9 @@ struct PortfolioCard: Codable, Identifiable {
     var mediaURLs: [String] = []
     var description: String?
     var displayOrder: Int = 0
-    var createdAt: Date = Date()  // Added timestamp for sorting
+    var createdAt: Date = Date()
     var updatedAt: Date = Date()
     
-    // Computed properties remain the same
     var hasImages: Bool {
         return !mediaURLs.isEmpty || coverImageURL != nil
     }
@@ -105,9 +103,6 @@ struct ReviewReply: Codable {
     let repliedAt: Date = Date()
 }
 
-
-
-
 // MARK: - Saved Items Model
 struct SavedItem: Codable, Identifiable {
     @DocumentID var id: String?
@@ -121,7 +116,7 @@ struct SavedItem: Codable, Identifiable {
     }
 }
 
-// MARK: - Service Post Model
+// MARK: - Service Post Model (UPDATED WITH TAGS)
 struct ServicePost: Codable, Identifiable {
     @DocumentID var id: String?
     let userId: String
@@ -129,8 +124,11 @@ struct ServicePost: Codable, Identifiable {
     var userProfileImage: String?
     var title: String
     var description: String
-    var category: ServiceCategory
+    var tags: [String] = []  // NEW: Replaced category with tags
     var price: Double?
+    var priceAmount: Double? {  // Computed property for backwards compatibility
+        return price
+    }
     var location: String?
     var imageURLs: [String] = []
     var isRequest: Bool = false
@@ -138,10 +136,20 @@ struct ServicePost: Codable, Identifiable {
     let createdAt: Date = Date()
     var updatedAt: Date = Date()
     
-    // New location fields
-    var coordinates: GeoPoint? // Firebase GeoPoint for exact location
+    // Location fields
+    var coordinates: GeoPoint?
     var locationPrivacy: LocationPrivacy = .exact
-    var approximateRadius: Double? // Radius in meters for approximate location
+    var approximateRadius: Double?
+    
+    // NEW: Computed property to check if urgent (based on tags)
+    var isUrgent: Bool {
+        tags.contains { tag in
+            let lowercased = tag.lowercased()
+            return lowercased.contains("#urgent") ||
+                   lowercased.contains("#asap") ||
+                   lowercased.contains("#emergency")
+        }
+    }
     
     enum PostStatus: String, Codable {
         case active, completed, cancelled
@@ -177,7 +185,7 @@ struct Status: Codable, Identifiable {
     }
 }
 
-// MARK: - Reel Model
+// MARK: - Reel Model (UPDATED - renamed hashtags to tags for consistency)
 struct Reel: Codable, Identifiable {
     @DocumentID var id: String?
     let userId: String
@@ -187,16 +195,20 @@ struct Reel: Codable, Identifiable {
     var thumbnailURL: String?
     var title: String
     var description: String
-    var category: ServiceCategory?
-    var hashtags: [String] = []
+    var tags: [String] = []  // RENAMED from hashtags for consistency
     let createdAt: Date = Date()
     var likes: [String] = []
     var comments: Int = 0
     var shares: Int = 0
     var views: Int = 0
     var isPromoted: Bool = false
+    
+    // Backwards compatibility
+    var hashtags: [String] {
+        get { tags }
+        set { tags = newValue }
+    }
 }
-
 
 // MARK: - Comment Model (Enhanced for Reels)
 struct Comment: Codable, Identifiable {
@@ -210,18 +222,17 @@ struct Comment: Codable, Identifiable {
     var likes: [String] = []
     
     // For nested replies
-    var parentCommentId: String? = nil  // nil means it's a top-level comment
+    var parentCommentId: String? = nil
     var replyCount: Int = 0
     var isDeleted: Bool = false
     var deletedAt: Date?
     
-    // Helper computed property
     var isReply: Bool {
         parentCommentId != nil
     }
 }
 
-// MARK: - Reel Like Model (for showing who liked)
+// MARK: - Reel Like Model
 struct ReelLike: Codable, Identifiable {
     @DocumentID var id: String?
     let reelId: String
@@ -231,15 +242,17 @@ struct ReelLike: Codable, Identifiable {
     let likedAt: Date = Date()
 }
 
-
-// MARK: - Service Category Enum
-enum ServiceCategory: String, CaseIterable, Codable {
-    case cleaning, tutoring, delivery, electrical, plumbing
-    case carpentry, painting, landscaping, moving, technology, other
+// MARK: - Tag Analytics Model (NEW)
+struct TagAnalytics: Codable, Identifiable {
+    @DocumentID var id: String?
+    let tag: String
+    var usageCount: Int = 0
+    var lastUsed: Date = Date()
+    var trendingScore: Double = 0.0
     
-    var displayName: String {
-        rawValue.capitalized
-    }
+    // Track which type of content uses this tag
+    var postCount: Int = 0
+    var reelCount: Int = 0
 }
 
 // MARK: - Message Model

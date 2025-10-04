@@ -1,4 +1,3 @@
-
 // ValidationHelper.swift
 // Path: ClaudeHustlerFirebase/Helpers/ValidationHelper.swift
 
@@ -39,6 +38,12 @@ struct ValidationRules {
     
     // Status (Story) Validation
     static let statusCaptionMax = 200
+    
+    // Tag Validation
+    static let minTags = 5
+    static let maxTags = 10
+    static let minTagLength = 3  // excluding #
+    static let maxTagLength = 30 // excluding #
 }
 
 // MARK: - Validation Helper
@@ -100,6 +105,103 @@ class ValidationHelper {
         }
         
         return (true, price, "")
+    }
+    
+    // MARK: - Tag Validation
+    static func validateTags(_ tags: [String]) -> (isValid: Bool, message: String) {
+        // Check tag count
+        if tags.count < ValidationRules.minTags {
+            return (false, "Minimum \(ValidationRules.minTags) tags required")
+        }
+        
+        if tags.count > ValidationRules.maxTags {
+            return (false, "Maximum \(ValidationRules.maxTags) tags allowed")
+        }
+        
+        // Validate each tag
+        for tag in tags {
+            let validation = validateSingleTag(tag)
+            if !validation.isValid {
+                return validation
+            }
+        }
+        
+        // Check for duplicates
+        if Set(tags).count != tags.count {
+            return (false, "Duplicate tags are not allowed")
+        }
+        
+        return (true, "")
+    }
+    
+    static func validateSingleTag(_ tag: String) -> (isValid: Bool, message: String) {
+        // Must start with #
+        if !tag.hasPrefix("#") {
+            return (false, "Tags must start with #")
+        }
+        
+        // Get tag without #
+        let tagContent = tag.replacingOccurrences(of: "#", with: "")
+        
+        // Check if empty after removing #
+        if tagContent.isEmpty {
+            return (false, "Tag cannot be just #")
+        }
+        
+        // Check length
+        if tagContent.count < ValidationRules.minTagLength {
+            return (false, "Tags must be at least \(ValidationRules.minTagLength) characters")
+        }
+        
+        if tagContent.count > ValidationRules.maxTagLength {
+            return (false, "Tags must be less than \(ValidationRules.maxTagLength) characters")
+        }
+        
+        // Check for valid characters (alphanumeric and hyphens only)
+        let allowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-"))
+        if tagContent.rangeOfCharacter(from: allowedCharacters.inverted) != nil {
+            return (false, "Tags can only contain letters, numbers, and hyphens")
+        }
+        
+        // Check it doesn't start or end with hyphen
+        if tagContent.hasPrefix("-") || tagContent.hasSuffix("-") {
+            return (false, "Tags cannot start or end with a hyphen")
+        }
+        
+        // Check for multiple consecutive hyphens
+        if tagContent.contains("--") {
+            return (false, "Tags cannot have multiple consecutive hyphens")
+        }
+        
+        return (true, "")
+    }
+    
+    static func formatTag(_ input: String) -> String {
+        var formatted = input.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Add # if not present
+        if !formatted.hasPrefix("#") {
+            formatted = "#" + formatted
+        }
+        
+        // Replace spaces with hyphens
+        formatted = formatted.replacingOccurrences(of: " ", with: "-")
+        
+        // Remove any character that's not alphanumeric, # or -
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "#-"))
+        formatted = formatted.components(separatedBy: allowed.inverted).joined()
+        
+        // Remove multiple consecutive hyphens
+        while formatted.contains("--") {
+            formatted = formatted.replacingOccurrences(of: "--", with: "-")
+        }
+        
+        // Remove trailing hyphen if exists
+        if formatted.hasSuffix("-") && formatted.count > 1 {
+            formatted = String(formatted.dropLast())
+        }
+        
+        return formatted
     }
     
     // MARK: - Review Validation
@@ -288,5 +390,36 @@ struct RequirementHintView: View {
             }
         }
         .padding(.horizontal, 4)
+    }
+}
+
+// MARK: - Tag Counter View (NEW)
+struct TagCounterView: View {
+    let current: Int
+    let min: Int = ValidationRules.minTags
+    let max: Int = ValidationRules.maxTags
+    
+    private var textColor: Color {
+        if current < min {
+            return .orange
+        } else if current > max {
+            return .red
+        } else {
+            return .secondary
+        }
+    }
+    
+    private var countText: String {
+        if current < min {
+            return "\(current)/\(min) min"
+        } else {
+            return "\(current)/\(max)"
+        }
+    }
+    
+    var body: some View {
+        Text(countText)
+            .font(.caption)
+            .foregroundColor(textColor)
     }
 }
