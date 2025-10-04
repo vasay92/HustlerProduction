@@ -22,6 +22,10 @@ final class HomeMapViewModel: ObservableObject {
         span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5)
     )
     
+    // MARK: - User Rating Properties for Dynamic Pins
+    @Published var userRatings: [String: Double] = [:]
+    @Published var userReviewCounts: [String: Int] = [:]
+    
     // MARK: - Private Properties
     private let repository = PostRepository.shared
     private let locationService = LocationService.shared
@@ -104,6 +108,9 @@ final class HomeMapViewModel: ObservableObject {
             filterPosts()
             print("✅ After filtering: \(filteredPosts.count) posts")
             
+            // Fetch user ratings for dynamic pins
+            await fetchUserRatingsForVisiblePosts()
+            
         } catch {
             print("❌ Error loading posts for map: \(error)")
             print("❌ Error details: \(error.localizedDescription)")
@@ -116,7 +123,61 @@ final class HomeMapViewModel: ObservableObject {
         posts = []
         filteredPosts = []
         selectedPost = nil
+        userRatings = [:]
+        userReviewCounts = [:]
         await loadPosts()
+    }
+    
+    // MARK: - User Ratings for Dynamic Pins
+    func fetchUserRatingsForVisiblePosts() async {
+        // Get unique user IDs from filtered posts
+        let userIds = Set(filteredPosts.map { $0.userId })
+        
+        print("📊 Fetching ratings for \(userIds.count) unique users...")
+        
+        // Fetch user data for each unique userId
+        await withTaskGroup(of: (String, Double?, Int?).self) { group in
+            for userId in userIds {
+                group.addTask {
+                    do {
+                        let userDoc = try await Firestore.firestore()
+                            .collection("users")
+                            .document(userId)
+                            .getDocument()
+                        
+                        if let userData = try? userDoc.data(as: User.self) {
+                            return (userId, userData.rating, userData.reviewCount)
+                        }
+                    } catch {
+                        print("Failed to fetch user data for \(userId): \(error)")
+                    }
+                    return (userId, nil, nil)
+                }
+            }
+            
+            // Collect results
+            for await (userId, rating, reviewCount) in group {
+                await MainActor.run {
+                    if let rating = rating {
+                        self.userRatings[userId] = rating
+                    }
+                    if let reviewCount = reviewCount {
+                        self.userReviewCounts[userId] = reviewCount
+                    }
+                }
+            }
+        }
+        
+        print("✅ Fetched ratings for \(userRatings.count) users")
+    }
+    
+    // Helper methods for dynamic pins
+    func getUserRating(for userId: String) -> Double? {
+        return userRatings[userId]
+    }
+    
+    func getUserReviewCount(for userId: String) -> Int? {
+        return userReviewCounts[userId]
     }
     
     // MARK: - Filtering
@@ -264,5 +325,3 @@ struct MapAnnotationItem: Identifiable {
         )
     }
 }
-
-

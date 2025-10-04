@@ -24,9 +24,11 @@ struct HomeMapView: View {
                     annotationItems: viewModel.filteredPosts
                 ) { post in
                     MapAnnotation(coordinate: post.coordinate) {
-                        PostMapAnnotation(
+                        DynamicPostAnnotation(               // ← CHANGE TO THIS
                             post: post,
-                            isSelected: viewModel.selectedPost?.id == post.id
+                            isSelected: viewModel.selectedPost?.id == post.id,
+                            zoomLevel: viewModel.mapRegion.span.latitudeDelta,
+                            viewModel: viewModel
                         )
                         .onTapGesture {
                             viewModel.selectPost(post)
@@ -534,33 +536,19 @@ struct PostMapAnnotation: View {
     
     var body: some View {
         ZStack {
+            // White border for better visibility
+            Circle()
+                .fill(Color.white)
+                .frame(width: isSelected ? 18 : 14, height: isSelected ? 18 : 14)
+                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+            
+            // Colored center dot
             Circle()
                 .fill(post.isRequest ? Color.orange : Color.blue)
-                .frame(width: isSelected ? 50 : 40, height: isSelected ? 50 : 40)
-            
-            Image(systemName: getIcon())
-                .foregroundColor(.white)
-                .font(.system(size: isSelected ? 22 : 18))
+                .frame(width: isSelected ? 14 : 10, height: isSelected ? 14 : 10)
         }
-        .scaleEffect(isSelected ? 1.2 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
-        .shadow(radius: isSelected ? 8 : 4)
-    }
-    
-    private func getIcon() -> String {
-        switch post.category {
-        case .cleaning: return "sparkles"
-        case .tutoring: return "book.fill"
-        case .delivery: return "shippingbox.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .carpentry: return "hammer.fill"
-        case .painting: return "paintbrush.fill"
-        case .landscaping: return "leaf.fill"
-        case .moving: return "box.truck.fill"
-        case .technology: return "desktopcomputer"
-        case .other: return "ellipsis.circle.fill"
-        }
+        .scaleEffect(isSelected ? 1.3 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
 }
 
