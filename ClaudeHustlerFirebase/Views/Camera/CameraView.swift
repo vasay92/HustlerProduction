@@ -102,7 +102,6 @@ struct CameraView: View {
     @State private var caption = ""
     @State private var title = ""
     @State private var description = ""
-    @State private var selectedCategory: ServiceCategory = .other
     @State private var isPosting = false
     @State private var uploadProgress: Double = 0
     @State private var showingError = false
@@ -178,11 +177,7 @@ struct CameraView: View {
                                     .textFieldStyle(RoundedBorderTextFieldStyle())
                                 
                                 // Category picker
-                                Picker("Category", selection: $selectedCategory) {
-                                    ForEach(ServiceCategory.allCases, id: \.self) { category in
-                                        Text(category.displayName).tag(category)
-                                    }
-                                }
+                                
                                 .pickerStyle(MenuPickerStyle())
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)

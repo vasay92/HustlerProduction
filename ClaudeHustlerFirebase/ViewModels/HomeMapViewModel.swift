@@ -270,21 +270,7 @@ final class HomeMapViewModel: ObservableObject {
         post.isRequest ? .orange : .blue
     }
     
-    func getAnnotationIcon(for post: ServicePost) -> String {
-        switch post.category {
-        case .cleaning: return "sparkles"
-        case .tutoring: return "book.fill"
-        case .delivery: return "shippingbox.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .carpentry: return "hammer.fill"
-        case .painting: return "paintbrush.fill"
-        case .landscaping: return "leaf.fill"
-        case .moving: return "box.truck.fill"
-        case .technology: return "desktopcomputer"
-        case .other: return "ellipsis.circle.fill"
-        }
-    }
+    
     
     // MARK: - Zoom Methods
     func zoomIn() {

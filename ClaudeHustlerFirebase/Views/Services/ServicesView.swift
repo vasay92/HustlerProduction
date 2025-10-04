@@ -29,9 +29,7 @@ struct ServicesView: View {
         var filteredPosts: [ServicePost] {
             var posts = currentPosts
             
-            if let category = selectedCategory {
-                posts = posts.filter { $0.category == category }
-            }
+            
             
             if !searchText.isEmpty {
                 posts = posts.filter {
@@ -324,22 +322,7 @@ struct MinimalServiceCard: View {
             )
     }
     
-    // Keep the categoryIcon function as is
-    func categoryIcon(for category: ServiceCategory) -> String {
-        switch category {
-        case .cleaning: return "sparkles"
-        case .tutoring: return "book.fill"
-        case .delivery: return "shippingbox.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .carpentry: return "hammer.fill"
-        case .painting: return "paintbrush.fill"
-        case .landscaping: return "leaf.fill"
-        case .moving: return "box.truck.fill"
-        case .technology: return "desktopcomputer"
-        case .other: return "ellipsis.circle.fill"
-        }
-    }
+    
 }
 
 // MARK: - Service List Card (for list view)
@@ -443,19 +426,5 @@ struct ServiceListCard: View {
             )
     }
     
-    func categoryIcon(for category: ServiceCategory) -> String {
-        switch category {
-        case .cleaning: return "sparkles"
-        case .tutoring: return "book.fill"
-        case .delivery: return "shippingbox.fill"
-        case .electrical: return "bolt.fill"
-        case .plumbing: return "drop.fill"
-        case .carpentry: return "hammer.fill"
-        case .painting: return "paintbrush.fill"
-        case .landscaping: return "leaf.fill"
-        case .moving: return "box.truck.fill"
-        case .technology: return "desktopcomputer"
-        case .other: return "ellipsis.circle.fill"
-        }
-    }
+    
 }

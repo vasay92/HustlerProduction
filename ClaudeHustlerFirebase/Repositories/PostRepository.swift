@@ -71,27 +71,7 @@ final class PostRepository: RepositoryProtocol {
         return post
     }
     
-    // MARK: - Fetch by Category
-    func fetchByCategory(_ category: ServiceCategory, limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
-        var query = db.collection("posts")
-            .whereField("category", isEqualTo: category.rawValue)
-            .order(by: "updatedAt", descending: true)
-            .limit(to: limit)
-        
-        if let lastDoc = lastDocument {
-            query = query.start(afterDocument: lastDoc)
-        }
-        
-        let snapshot = try await query.getDocuments()
-        
-        let posts = snapshot.documents.compactMap { doc -> ServicePost? in
-            var post = try? doc.data(as: ServicePost.self)
-            post?.id = doc.documentID
-            return post
-        }
-        
-        return (posts, snapshot.documents.last)
-    }
+    
     
     // MARK: - Fetch Offers
     func fetchOffers(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [ServicePost], lastDoc: DocumentSnapshot?) {
