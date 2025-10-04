@@ -397,7 +397,7 @@ struct ReviewCard: View {
 }
 
 // Add this extension to make String Identifiable for sheet(item:)
-extension String: Identifiable {
+@retroactive extension String: Identifiable {
     public var id: String { self }
 }
 

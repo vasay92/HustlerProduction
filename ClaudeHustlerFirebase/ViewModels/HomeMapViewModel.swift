@@ -78,7 +78,8 @@ final class HomeMapViewModel: ObservableObject {
             }
             
             // Now fetch posts with location data
-            let fetchedPosts = try await repository.fetchAllPostsWithLocation(limit: 500)
+            let allPostsResult = try await repository.fetch(limit: 500)
+            let postsWithCoords = allPostsResult.items.filter { $0.coordinates != nil }
             print("🗺️ fetchAllPostsWithLocation returned: \(fetchedPosts.count) posts")
             
             // Handle location privacy
@@ -86,7 +87,7 @@ final class HomeMapViewModel: ObservableObject {
                 var modifiedPost = post
                 
                 // If location privacy is approximate, obfuscate the coordinates
-                if post.locationPrivacy == .approximate,
+                if post.locationPrivacy == ServicePost.LocationPrivacy.approximate,
                    let coordinates = post.coordinates {
                     let obfuscated = locationService.obfuscateCoordinate(
                         CLLocationCoordinate2D(

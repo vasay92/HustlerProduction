@@ -377,7 +377,7 @@ final class ReelsViewModel: ObservableObject {
                 thumbnailURL: thumbnailURL ?? videoURL,
                 title: title,
                 description: description,
-                hashtags: hashtags  // No more category
+                tags: hashtags  // No more category
             )
             
             let reelId = try await reelRepository.create(reel)

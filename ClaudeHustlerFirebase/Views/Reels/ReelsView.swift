@@ -408,17 +408,7 @@ struct FullScreenReelView: View {
                                     captionSection
                                 }
                                 
-                                // Category
-                                if let category = displayReel.category {
-                                    Text(category.displayName)
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.white.opacity(0.2))
-                                        .cornerRadius(4)
-                                }
+                                
                             }
                             .frame(maxWidth: geometry.size.width * 0.65, alignment: .leading)
                             .padding(.leading, 16)

@@ -3,63 +3,66 @@
 
 import SwiftUI
 import Firebase
+import MapKit
 
 struct PostDetailModalView: View {
     let post: ServicePost
     @Environment(\.dismiss) var dismiss
-    @StateObject private var firebase = FirebaseService.shared
+    @State private var region: MKCoordinateRegion
+    
+    init(post: ServicePost) {
+        self.post = post
+        
+        // Initialize map region
+        if let coordinates = post.coordinates {
+            let center = CLLocationCoordinate2D(
+                latitude: coordinates.latitude,
+                longitude: coordinates.longitude
+            )
+            _region = State(initialValue: MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            ))
+        } else {
+            // Default to a general location if no coordinates
+            _region = State(initialValue: MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+                span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+            ))
+        }
+    }
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Header with close button
-                    HStack {
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "xmark")
-                                .font(.title2)
-                                .foregroundColor(.primary)
-                                .frame(width: 30, height: 30)
-                                .background(Color(.systemGray5))
-                                .clipShape(Circle())
-                        }
-                        
-                        Spacer()
-                        
-                        Text(post.isRequest ? "REQUEST" : "OFFER")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(post.isRequest ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2))
-                            .foregroundColor(post.isRequest ? .orange : .blue)
-                            .cornerRadius(12)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Images if available
-                    if !post.imageURLs.isEmpty {
-                        TabView {
-                            ForEach(Array(post.imageURLs.enumerated()), id: \.offset) { index, imageURL in
-                                AsyncImage(url: URL(string: imageURL)) { image in
-                                    image
-                                        .resizable()
-                                        .scaledToFit()
-                                } placeholder: {
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.2))
-                                        .overlay(
-                                            ProgressView()
-                                        )
+                    // Map preview if coordinates available
+                    if post.coordinates != nil {
+                        Map(coordinateRegion: $region, annotationItems: [post]) { post in
+                            MapAnnotation(coordinate: CLLocationCoordinate2D(
+                                latitude: post.coordinates!.latitude,
+                                longitude: post.coordinates!.longitude
+                            )) {
+                                VStack {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.title)
+                                        .foregroundColor(post.isRequest ? .orange : .blue)
+                                    
+                                    Text(post.title)
+                                        .font(.caption)
+                                        .padding(4)
+                                        .background(Color.white)
+                                        .cornerRadius(4)
+                                        .shadow(radius: 2)
                                 }
-                                .frame(maxHeight: 350)
                             }
                         }
-                        .frame(height: 350)
-                        .tabViewStyle(PageTabViewStyle())
-                        .indexViewStyle(.page(backgroundDisplayMode: .always))
+                        .frame(height: 200)
+                        .cornerRadius(10)
+                        .padding(.horizontal)
                     }
                     
+                    // Post details
                     VStack(alignment: .leading, spacing: 12) {
                         // Title
                         Text(post.title)
@@ -74,18 +77,22 @@ struct PostDetailModalView: View {
                                 .foregroundColor(post.isRequest ? .orange : .green)
                         }
                         
-                        // Category
-                        HStack {
-                            Image(systemName: categoryIcon(for: post.category))
-                                .foregroundColor(.blue)
-                            Text(post.category.displayName)
-                                .font(.subheadline)
-                                .foregroundColor(.blue)
+                        // UPDATED: Tags instead of category
+                        if !post.tags.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(post.tags, id: \.self) { tag in
+                                        Text(tag)
+                                            .font(.caption)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(Color.blue.opacity(0.1))
+                                            .foregroundColor(.blue)
+                                            .cornerRadius(20)
+                                    }
+                                }
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(20)
                         
                         // Description
                         Text(post.description)
@@ -117,49 +124,52 @@ struct PostDetailModalView: View {
                             VStack(alignment: .leading) {
                                 Text(post.userName ?? "Unknown User")
                                     .font(.subheadline)
-                                    .fontWeight(.medium)
-                                Text("Posted \(timeAgoString(from: post.updatedAt))")
+                                    .fontWeight(.semibold)
+                                
+                                Text("View Profile")
                                     .font(.caption)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(.blue)
                             }
                             
                             Spacer()
                         }
-                        .padding(.vertical, 8)
-                        
-                        // Message button
-                        if post.userId != firebase.currentUser?.id {
-                            Button(action: {
-                                dismiss()
-                                // You can add message functionality here later
-                            }) {
-                                HStack {
-                                    Image(systemName: "message.fill")
-                                    Text("Send Message")
-                                }
-                                .foregroundColor(.white)
+                        .padding(.top)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Action buttons
+                    HStack(spacing: 12) {
+                        Button(action: {}) {
+                            Label("Message", systemImage: "message")
                                 .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(Color.blue)
-                                .cornerRadius(12)
-                            }
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                        
+                        Button(action: {}) {
+                            Image(systemName: "bookmark")
+                                .frame(width: 50, height: 50)
+                                .background(Color(.systemGray5))
+                                .cornerRadius(10)
                         }
                     }
                     .padding(.horizontal)
                     
-                    Spacer(minLength: 50)
+                    Spacer()
                 }
-                .padding(.top)
             }
-            .navigationBarHidden(true)
+            .navigationTitle("Service Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
-    
-    
-    
-    private func timeAgoString(from date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
 }
+

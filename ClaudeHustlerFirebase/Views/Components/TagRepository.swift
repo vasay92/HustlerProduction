@@ -4,8 +4,9 @@
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth
+import Combine
 
-final class TagRepository {
+final class TagRepository: ObservableObject {
     // Singleton
     static let shared = TagRepository()
     
