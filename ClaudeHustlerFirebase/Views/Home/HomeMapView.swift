@@ -1,4 +1,4 @@
-// HomeMapView.swift - Fixed with bottom preview card
+// HomeMapView.swift - Final version with map tap to dismiss
 // Path: ClaudeHustlerFirebase/Views/Home/HomeMapView.swift
 
 import SwiftUI
@@ -31,12 +31,21 @@ struct HomeMapView: View {
                         .onTapGesture {
                             viewModel.selectPost(post)
                         }
-                        .zIndex(1)
                     }
                 }
                 .ignoresSafeArea(edges: .top)
                 
-                // Top Controls Overlay
+                // Invisible overlay for dismissing preview - positioned right after Map
+                if viewModel.showingPostPreview {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            viewModel.dismissPostPreview()
+                        }
+                }
+                
+                // Top Controls Overlay - above the invisible overlay
                 VStack {
                     // Top Section with search bar and buttons
                     HStack(alignment: .top, spacing: 12) {
@@ -179,7 +188,7 @@ struct HomeMapView: View {
                         .padding(.horizontal)
                         .padding(.bottom, viewModel.showingPostPreview ? 8 : 20)
                         
-                        // Post Preview Card - Now at the very bottom
+                        // Post Preview Card - at the very bottom
                         if viewModel.showingPostPreview, let post = viewModel.selectedPost {
                             PostPreviewCard(post: post) {
                                 viewModel.dismissPostPreview()
@@ -190,19 +199,7 @@ struct HomeMapView: View {
                     }
                 }
                 
-                // Invisible overlay for dismissing preview
-                if viewModel.showingPostPreview {
-                    Color.clear
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            viewModel.dismissPostPreview()
-                        }
-                        .allowsHitTesting(true)
-                        .zIndex(-1)
-                }
-                
-                // FAB for creating posts
+                // FAB for creating posts - only when preview is not showing
                 if !viewModel.showingPostPreview {
                     VStack {
                         Spacer()
@@ -250,7 +247,7 @@ struct HomeMapView: View {
     }
 }
 
-// PostPreviewCard - Fixed compact version at bottom
+// PostPreviewCard remains exactly the same as before
 struct PostPreviewCard: View {
     let post: ServicePost
     let onDismiss: () -> Void
@@ -530,7 +527,7 @@ struct PostPreviewCard: View {
     }
 }
 
-// Keep your existing PostMapAnnotation and other structs...
+// Keep your existing PostMapAnnotation, FilterChip, and other structs...
 struct PostMapAnnotation: View {
     let post: ServicePost
     let isSelected: Bool
