@@ -1,5 +1,6 @@
 // ServiceFormView.swift
 // Path: ClaudeHustlerFirebase/Views/Services/ServiceFormView.swift
+// UPDATED: Replaced categories with tags
 
 import SwiftUI
 import PhotosUI
@@ -15,7 +16,7 @@ struct ServiceFormView: View {
     // Form Fields
     @State private var title = ""
     @State private var description = ""
-    @State private var selectedCategory: ServiceCategory = .other
+    @State private var tags: [String] = []  // UPDATED: Replaced selectedCategory with tags
     @State private var price = ""
     @State private var location = ""
     @State private var isRequest = false
@@ -47,7 +48,7 @@ struct ServiceFormView: View {
         self.existingPost = post
         _title = State(initialValue: post?.title ?? "")
         _description = State(initialValue: post?.description ?? "")
-        _selectedCategory = State(initialValue: post?.category ?? .other)
+        _tags = State(initialValue: post?.tags ?? [])  // UPDATED: Initialize tags
         _price = State(initialValue: post?.price != nil ? String(Int(post!.price!)) : "")
         _location = State(initialValue: post?.location ?? "")
         _locationInput = State(initialValue: post?.location ?? "")
@@ -74,10 +75,22 @@ struct ServiceFormView: View {
         ValidationHelper.validatePostPrice(price)
     }
     
+    // UPDATED: Add tag validation
+    private var tagsValidation: (isValid: Bool, message: String) {
+        if tags.count < 5 {
+            return (false, "Please add at least 5 tags")
+        }
+        if tags.count > 10 {
+            return (false, "Maximum 10 tags allowed")
+        }
+        return (true, "")
+    }
+    
     private var isFormValid: Bool {
         titleValidation.isValid &&
         descriptionValidation.isValid &&
-        priceValidation.isValid
+        priceValidation.isValid &&
+        tagsValidation.isValid  // UPDATED: Include tag validation
     }
     
     var body: some View {
@@ -87,7 +100,7 @@ struct ServiceFormView: View {
                     typeToggleSection
                     titleSection
                     descriptionSection
-                    categorySection
+                    tagSection  // UPDATED: Replaced categorySection with tagSection
                     priceSection
                     enhancedLocationSection
                     imagesSection
@@ -198,26 +211,32 @@ struct ServiceFormView: View {
         .padding(.horizontal)
     }
     
+    // UPDATED: New tag section replacing category section
     @ViewBuilder
-    private var categorySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var tagSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Category")
+                Text("Tags")
                     .font(.headline)
                 Text("*")
                     .foregroundColor(.red)
+                Text("(5-10 required)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
             
-            Picker("Category", selection: $selectedCategory) {
-                ForEach(ServiceCategory.allCases, id: \.self) { category in
-                    Text(category.displayName).tag(category)
-                }
+            // Use the existing TagInputField component
+            TagInputField(tags: $tags)
+                .withValidation(tagsValidation, showError: $showValidationErrors)
+            
+            // Popular tags suggestions
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Popular tags")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                PopularTagsView(selectedTags: $tags)
             }
-            .pickerStyle(MenuPickerStyle())
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(8)
         }
         .padding(.horizontal)
     }
@@ -522,6 +541,17 @@ struct ServiceFormView: View {
                 }
                 .foregroundColor(.red)
             }
+            
+            // UPDATED: Add tag validation message
+            if !tagsValidation.isValid {
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption)
+                    Text(tagsValidation.message)
+                        .font(.caption)
+                }
+                .foregroundColor(.red)
+            }
         }
         .padding()
         .background(Color.red.opacity(0.1))
@@ -612,7 +642,7 @@ struct ServiceFormView: View {
                     var updatedPost = existingPost!
                     updatedPost.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
                     updatedPost.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-                    updatedPost.category = selectedCategory
+                    updatedPost.tags = tags  // UPDATED: Save tags instead of category
                     updatedPost.price = priceValidation.price
                     updatedPost.location = displayLocation.isEmpty ? location : displayLocation
                     updatedPost.imageURLs = imageURLs.isEmpty ? (existingPost?.imageURLs ?? []) : imageURLs
@@ -631,6 +661,9 @@ struct ServiceFormView: View {
                     
                     try await servicesViewModel.updatePost(updatedPost)
                     
+                    // Update tag analytics
+                    await TagRepository.shared.updateTagAnalytics(tags, type: "post")
+                    
                     // Trigger refresh
                     await HomeViewModel.shared?.refresh()
                     await HomeMapViewModel.shared?.refresh()
@@ -645,7 +678,7 @@ struct ServiceFormView: View {
                         userProfileImage: firebase.currentUser?.profileImageURL,
                         title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                        category: selectedCategory,
+                        tags: tags,  // UPDATED: Save tags instead of category
                         price: priceValidation.price,
                         location: displayLocation.isEmpty ? nil : displayLocation,
                         imageURLs: imageURLs,
@@ -659,10 +692,12 @@ struct ServiceFormView: View {
                         locationPrivacy: ServicePost.LocationPrivacy(
                             rawValue: locationPrivacy.rawValue
                         ) ?? .exact,
-                        approximateRadius: approximateRadius,
-                        
+                        approximateRadius: approximateRadius
                     )
                     _ = try await servicesViewModel.createPost(newPost)
+                    
+                    // Update tag analytics
+                    await TagRepository.shared.updateTagAnalytics(tags, type: "post")
                     
                     // Trigger refresh in ViewModels
                     await HomeViewModel.shared?.refresh()
@@ -864,6 +899,46 @@ struct MultiImagePicker: UIViewControllerRepresentable {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Popular Tags View Component (NEW)
+struct PopularTagsView: View {
+    @Binding var selectedTags: [String]
+    @State private var popularTags: [String] = []
+    @StateObject private var tagRepository = TagRepository.shared
+    
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(popularTags, id: \.self) { tag in
+                    if !selectedTags.contains(tag) && selectedTags.count < 10 {
+                        Button(action: {
+                            withAnimation {
+                                selectedTags.append(tag)
+                            }
+                        }) {
+                            Text(tag)
+                                .font(.caption)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.blue.opacity(0.1))
+                                .foregroundColor(.blue)
+                                .cornerRadius(15)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            Task {
+                do {
+                    popularTags = try await tagRepository.fetchTrendingTags(limit: 15)
+                } catch {
+                    print("Failed to load popular tags: \(error)")
                 }
             }
         }
