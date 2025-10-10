@@ -84,7 +84,22 @@ struct PostDetailView: View {
         .sheet(isPresented: $showingEditView) {
             ServiceFormView(post: post)
         }
-        
+        // FIX #2: ADD MESSAGE NAVIGATION
+        .fullScreenCover(isPresented: $showingMessageView) {
+            if let recipientId = post.userId {
+                ChatView(
+                    recipientId: recipientId,
+                    contextType: .post,
+                    contextId: post.id,
+                    contextData: (
+                        title: post.title,
+                        image: post.imageURLs.first,
+                        userId: recipientId
+                    ),
+                    isFromContentView: false
+                )
+            }
+        }
         .confirmationDialog("Delete Post?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 Task {
@@ -333,24 +348,12 @@ struct PostDetailView: View {
         .background(Color(.systemBackground))
     }
     
+    // FIX #1: CORRECT BUTTON ORDER
     // MARK: - Action Buttons Section
     @ViewBuilder
     private var actionButtonsSection: some View {
         HStack(spacing: 12) {
-            PostActionButton(
-                icon: isSaved ? "bookmark.fill" : "bookmark",
-                title: "Save",
-                color: isSaved ? .orange : .gray,
-                action: toggleSave
-            )
-            
-            PostActionButton(
-                icon: "square.and.arrow.up",
-                title: "Share",
-                color: .blue,
-                action: { showingShareSheet = true }
-            )
-            
+            // MESSAGE FIRST (only if not own post)
             if post.userId != firebase.currentUser?.id {
                 PostActionButton(
                     icon: "message",
@@ -359,6 +362,22 @@ struct PostDetailView: View {
                     action: { showingMessageView = true }
                 )
             }
+            
+            // SAVE SECOND
+            PostActionButton(
+                icon: isSaved ? "bookmark.fill" : "bookmark",
+                title: "Save",
+                color: isSaved ? .orange : .gray,
+                action: toggleSave
+            )
+            
+            // SHARE THIRD
+            PostActionButton(
+                icon: "square.and.arrow.up",
+                title: "Share",
+                color: .blue,
+                action: { showingShareSheet = true }
+            )
         }
         .padding()
     }
