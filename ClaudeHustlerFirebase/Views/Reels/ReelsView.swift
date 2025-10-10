@@ -163,28 +163,65 @@ struct ReelGridItem: View {
     let reel: Reel
     let action: () -> Void
     
+    @State private var loadingFailed = false
+    @State private var loadingTimer: Timer?
+    
     var body: some View {
         Button(action: action) {
             ZStack {
-                // Thumbnail
-                if let thumbnailURL = reel.thumbnailURL {
-                    AsyncImage(url: URL(string: thumbnailURL)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
-                            .clipped()
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.2))
-                            .overlay(ProgressView())
+                // Background - always show something
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                
+                // Thumbnail or fallback
+                if let thumbnailURL = reel.thumbnailURL, !thumbnailURL.isEmpty {
+                    AsyncImage(url: URL(string: thumbnailURL)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
+                                .clipped()
+                                .onAppear {
+                                    // Cancel timer if image loads successfully
+                                    loadingTimer?.invalidate()
+                                }
+                            
+                        case .failure(_):
+                            // Show fallback on failure
+                            fallbackView
+                            
+                        case .empty:
+                            // Show loading only briefly, then fallback
+                            if loadingFailed {
+                                fallbackView
+                            } else {
+                                ZStack {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                    
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                }
+                                .onAppear {
+                                    // Set a timeout for loading
+                                    loadingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                                        loadingFailed = true
+                                    }
+                                }
+                            }
+                            
+                        @unknown default:
+                            fallbackView
+                        }
                     }
                 } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
+                    fallbackView
                 }
                 
-                // View count overlay with eye icon (UPDATED)
+                // View count overlay with eye icon
                 VStack {
                     Spacer()
                     HStack {
@@ -210,6 +247,46 @@ struct ReelGridItem: View {
             .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
             .background(Color.gray.opacity(0.2))
         }
+        .onDisappear {
+            // Clean up timer when view disappears
+            loadingTimer?.invalidate()
+        }
+    }
+    
+    @ViewBuilder
+    private var fallbackView: some View {
+        // Fallback view when thumbnail fails to load or times out
+        ZStack {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.purple.opacity(0.6),
+                            Color.pink.opacity(0.6)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            
+            VStack(spacing: 8) {
+                // Show video/image icon based on content
+                Image(systemName: reel.videoURL.contains(".mp4") || reel.videoURL.contains(".mov") ? "play.rectangle.fill" : "photo.fill")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                
+                // Show title if available
+                if !reel.title.isEmpty {
+                    Text(reel.title)
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
+                }
+            }
+        }
+        .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
     }
     
     // Format view count (e.g., 1.2K, 3M)
@@ -218,8 +295,9 @@ struct ReelGridItem: View {
             return String(format: "%.1fM", Double(count) / 1_000_000)
         } else if count >= 1_000 {
             return String(format: "%.1fK", Double(count) / 1_000)
+        } else {
+            return "\(count)"
         }
-        return "\(count)"
     }
 }
 

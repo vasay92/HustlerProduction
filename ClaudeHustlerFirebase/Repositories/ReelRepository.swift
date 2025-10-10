@@ -112,42 +112,47 @@ final class ReelRepository: RepositoryProtocol {
         return trending
     }
     
-    // MARK: - Create Reel
+    // MARK: - Create Reel (FIXED)
     func create(_ reel: Reel) async throws -> String {
-            guard let userId = Auth.auth().currentUser?.uid else {
-                throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-            }
-            
-            // Create reel data dictionary
-            let reelData: [String: Any] = [
-                "userId": userId,
-                "userName": reel.userName ?? "",
-                "userProfileImage": reel.userProfileImage ?? "",
-                "videoURL": reel.videoURL,
-                "thumbnailURL": reel.thumbnailURL ?? "",
-                "title": reel.title,
-                "description": reel.description,
-                // REMOVED: "category" field
-                "hashtags": reel.hashtags,
-                "createdAt": Date(),
-                "likes": [],
-                "comments": 0,
-                "shares": 0,
-                "views": 0,
-                "isPromoted": false
-            ]
-            
-            let docRef = try await db.collection("reels").addDocument(data: reelData)
-            
-            // Clear cache
-            cache.remove(for: "reels_page_1")
-            cache.remove(for: "trending_reels")
-            
-            return docRef.documentID
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
+        
+        // Create reel data dictionary with CORRECT field names
+        let reelData: [String: Any] = [
+            "userId": userId,
+            "userName": reel.userName ?? "",
+            "userProfileImage": reel.userProfileImage ?? "",
+            "videoURL": reel.videoURL,
+            "thumbnailURL": reel.thumbnailURL ?? "",
+            "title": reel.title,
+            "description": reel.description,
+            "tags": reel.tags,  // ✅ FIXED: Using "tags" instead of "hashtags"
+            "createdAt": Date(),
+            "likes": [],
+            "comments": 0,
+            "shares": 0,
+            "views": 0,
+            "isPromoted": false
+        ]
+        
+        let docRef = try await db.collection("reels").addDocument(data: reelData)
+        
+        // Clear cache
+        cache.remove(for: "reels_page_1")
+        cache.remove(for: "trending_reels")
+        
+        // Update tag analytics if you have TagRepository
+        if !reel.tags.isEmpty {
+            await TagRepository.shared.updateTagAnalytics(reel.tags, type: "reel")
+        }
+        
+        return docRef.documentID
+    }
+
 
     
-    // MARK: - Update Reel
+    // MARK: - Update Reel (FIXED)
     func update(_ reel: Reel) async throws {
         guard let reelId = reel.id else {
             throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Reel ID is required"])
@@ -164,11 +169,11 @@ final class ReelRepository: RepositoryProtocol {
             throw NSError(domain: "ReelRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Unauthorized to update this reel"])
         }
         
-        // Update only allowed fields
+        // Update only allowed fields with CORRECT field names
         let updates: [String: Any] = [
             "title": reel.title,
             "description": reel.description,
-            "hashtags": reel.hashtags,
+            "tags": reel.tags,  // ✅ FIXED: Using "tags" instead of "hashtags"
             "updatedAt": Date()
         ]
         
@@ -177,6 +182,11 @@ final class ReelRepository: RepositoryProtocol {
         // Update cache
         cache.store(reel, for: "reel_\(reelId)")
         cache.remove(for: "reels_page_1")
+        
+        // Update tag analytics if you have TagRepository
+        if !reel.tags.isEmpty {
+            await TagRepository.shared.updateTagAnalytics(reel.tags, type: "reel")
+        }
     }
     
     // MARK: - Delete Reel
