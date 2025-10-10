@@ -482,10 +482,9 @@ extension PostRepository {
                 longitude: coordinates.longitude
             )
             
-            let distance = LocationService.shared.distance(
-                from: center,
-                to: postLocation
-            )
+            let centerLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
+            let postLocationCL = CLLocation(latitude: postLocation.latitude, longitude: postLocation.longitude)
+            let distance = centerLocation.distance(from: postLocationCL)
             
             return distance <= radiusInMeters
         }
