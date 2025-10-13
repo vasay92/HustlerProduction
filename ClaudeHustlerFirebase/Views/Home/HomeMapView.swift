@@ -1,4 +1,4 @@
-// HomeMapView.swift - Final version with map tap to dismiss
+// HomeMapView.swift - Final version with location functionality
 // Path: ClaudeHustlerFirebase/Views/Home/HomeMapView.swift
 
 import SwiftUI
@@ -24,7 +24,7 @@ struct HomeMapView: View {
                     annotationItems: viewModel.filteredPosts
                 ) { post in
                     MapAnnotation(coordinate: post.coordinate) {
-                        DynamicPostAnnotation(               // ← CHANGE TO THIS
+                        DynamicPostAnnotation(
                             post: post,
                             isSelected: viewModel.selectedPost?.id == post.id,
                             zoomLevel: viewModel.mapRegion.span.latitudeDelta,
@@ -131,8 +131,12 @@ struct HomeMapView: View {
                                 }
                             }
                             
-                            // Zoom in
-                            Button(action: { viewModel.zoomIn() }) {
+                            // Zoom in - MODIFIED with animation
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    viewModel.zoomIn()
+                                }
+                            }) {
                                 Image(systemName: "plus")
                                     .foregroundColor(.blue)
                                     .frame(width: 36, height: 36)
@@ -141,8 +145,12 @@ struct HomeMapView: View {
                                     .shadow(radius: 2)
                             }
                             
-                            // Zoom out
-                            Button(action: { viewModel.zoomOut() }) {
+                            // Zoom out - MODIFIED with animation
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    viewModel.zoomOut()
+                                }
+                            }) {
                                 Image(systemName: "minus")
                                     .foregroundColor(.blue)
                                     .frame(width: 36, height: 36)
@@ -151,15 +159,21 @@ struct HomeMapView: View {
                                     .shadow(radius: 2)
                             }
                             
-                            // Location button
-                            Button(action: viewModel.centerOnUserLocation) {
-                                Image(systemName: "location.fill")
-                                    .foregroundColor(.blue)
+                            // Location button - MODIFIED with enhanced functionality
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    viewModel.centerOnUserLocation()
+                                }
+                            }) {
+                                Image(systemName: locationService.userLocation != nil ? "location.fill" : "location.slash.fill")
+                                    .foregroundColor(locationService.userLocation != nil ? .blue : .gray)
                                     .frame(width: 36, height: 36)
                                     .background(Color(.systemBackground))
                                     .clipShape(Circle())
                                     .shadow(radius: 2)
                             }
+                            .disabled(locationService.authorizationStatus == .denied ||
+                                     locationService.authorizationStatus == .restricted)
                         }
                     }
                     .padding(.horizontal)
@@ -186,6 +200,17 @@ struct HomeMapView: View {
                             )
                             
                             Spacer()
+                            
+                            // OPTIONAL: Show location status when denied
+                            if locationService.authorizationStatus == .denied {
+                                Text("Location disabled")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.red.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
                         }
                         .padding(.horizontal)
                         .padding(.bottom, viewModel.showingPostPreview ? 8 : 20)

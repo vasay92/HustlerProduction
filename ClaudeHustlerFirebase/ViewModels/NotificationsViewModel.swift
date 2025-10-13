@@ -222,7 +222,9 @@ final class NotificationsViewModel: ObservableObject {
         // This would update the app icon badge count
         // Requires AppDelegate setup with UNUserNotificationCenter
         #if !targetEnvironment(simulator)
-        UNUserNotificationCenter.current().setBadgeCount(bellNotificationCount)
+        Task {
+            try? await UNUserNotificationCenter.current().setBadgeCount(bellNotificationCount)
+        }
         #endif
     }
     

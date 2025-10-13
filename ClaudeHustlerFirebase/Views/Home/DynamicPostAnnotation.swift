@@ -1,6 +1,5 @@
-// DynamicPostAnnotation.swift
+// DynamicPostAnnotation.swift - Fixed version
 // Path: ClaudeHustlerFirebase/Views/Home/DynamicPostAnnotation.swift
-// UPDATED: Complete file with tags instead of categories
 
 import SwiftUI
 import MapKit
@@ -36,7 +35,8 @@ struct DynamicPostAnnotation: View {
     }
     
     var body: some View {
-        Group {
+        // FIX: Use ZStack instead of Group, or use @ViewBuilder
+        ZStack {
             switch annotationStyle {
             case .minimal:
                 MinimalDotPin(post: post, isSelected: isSelected)
@@ -59,6 +59,17 @@ struct DynamicPostAnnotation: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
+    }
+}
+
+// MARK: - HomeMapViewModel Extension for Helper Methods
+extension HomeMapViewModel {
+    func getUserRating(for userId: String) -> Double? {
+        return userRatings[userId]
+    }
+    
+    func getUserReviewCount(for userId: String) -> Int? {
+        return userReviewCounts[userId]
     }
 }
 
@@ -148,13 +159,24 @@ struct DetailedBadgePin: View {
                             .foregroundColor(post.isRequest ? .orange : .blue)
                     }
                 }
+                
+                // First tag
+                if let firstTag = post.tags.first {
+                    Text(firstTag)
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(3)
+                }
             }
+            .padding(6)
+            .background(Color.white)
+            .cornerRadius(6)
+            .shadow(color: .black.opacity(0.08), radius: 3)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color.white)
-        .cornerRadius(6)
-        .shadow(color: .black.opacity(0.1), radius: 3)
+        .frame(maxWidth: 140)
     }
 }
 
@@ -165,94 +187,98 @@ struct SelectedPostBubble: View {
     let reviewCount: Int?
     
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                // Type badge (Request/Offer)
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
+            HStack {
+                Text(post.title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                // Close hint
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.gray.opacity(0.7))
+            }
+            
+            // Description
+            if !post.description.isEmpty {
+                Text(post.description)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            // Info Row
+            HStack {
+                // Type badge
                 HStack(spacing: 4) {
-                    Image(systemName: post.isRequest ? "hand.raised.fill" : "wrench.and.screwdriver.fill")
-                        .font(.caption2)
-                    Text(post.isRequest ? "SERVICE REQUEST" : "SERVICE OFFER")
-                        .font(.caption2)
-                        .fontWeight(.medium)
+                    Circle()
+                        .fill(post.isRequest ? Color.orange : Color.blue)
+                        .frame(width: 6, height: 6)
+                    Text(post.isRequest ? "Request" : "Offer")
+                        .font(.system(size: 10, weight: .medium))
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(post.isRequest ? Color.orange.opacity(0.15) : Color.blue.opacity(0.15))
                 .foregroundColor(post.isRequest ? .orange : .blue)
-                .cornerRadius(4)
+                .cornerRadius(10)
                 
-                // Title
-                Text(post.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
                 
-                // Tags preview (if any)
-                if !post.tags.isEmpty {
-                    Text(post.tags.prefix(3).joined(separator: " "))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                
-                // User and rating info
-                HStack(spacing: 0) {
-                    if let userName = post.userName {
-                        Text("by \(userName)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                    
-                    Spacer()
-                    
-                    if let rating = userRating, rating > 0 {
-                        HStack(spacing: 2) {
-                            ForEach(0..<5) { i in
-                                Image(systemName: i < Int(rating.rounded()) ? "star.fill" : "star")
-                                    .font(.system(size: 8))
-                                    .foregroundColor(.orange)
-                            }
-                            if let count = reviewCount {
-                                Text("(\(count))")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
+                // Rating
+                if let rating = userRating, rating > 0 {
+                    HStack(spacing: 4) {
+                        ForEach(0..<5) { index in
+                            Image(systemName: index < Int(rating) ? "star.fill" : "star")
+                                .font(.system(size: 8))
+                                .foregroundColor(.orange)
+                        }
+                        if let count = reviewCount {
+                            Text("(\(count))")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
-                
-                // Price
-                if let price = post.price {
-                    HStack {
-                        Text("$\(Int(price))")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(post.isRequest ? .orange : .blue)
-                        
-                        Text(post.isRequest ? "budget" : "")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Text("Tap for details")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
-                    }
+            }
+            
+            // Price
+            if let price = post.price {
+                HStack {
+                    Text("$\(Int(price))")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(post.isRequest ? .orange : .blue)
+                    
+                    Text(post.isRequest ? "budget" : "")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("Tap for details")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
                 }
             }
-            .padding(10)
-            .frame(width: 200)
-            .background(Color.white)
-            .cornerRadius(10)
-            .shadow(color: .black.opacity(0.12), radius: 6)
-            
-            // Pointer
+        }
+        .padding(10)
+        .frame(width: 200)
+        .background(Color.white)
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.12), radius: 6)
+        
+        // Pointer triangle is placed outside the VStack
+        .overlay(
             Image(systemName: "arrowtriangle.down.fill")
                 .font(.system(size: 10))
                 .foregroundColor(.white)
-                .offset(y: -1)
-        }
+                .offset(y: -1),
+            alignment: .bottom
+        )
     }
 }

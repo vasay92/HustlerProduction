@@ -1,5 +1,5 @@
-// LocationService.swift
-// Path: ClaudeHustlerFirebase/Services/LocationService.swift
+// LocationService.swift - Enhanced with debugging
+// Path: ClaudeHustlerFirebase/Views/Services/LocationService.swift
 
 import Foundation
 import CoreLocation
@@ -19,25 +19,48 @@ final class LocationService: NSObject, ObservableObject {
     override init() {
         super.init()
         setupLocationManager()
+        checkInitialAuthorizationStatus()
     }
     
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.distanceFilter = 10 // Update every 10 meters
+        
+        print("📍 LocationService: Setup complete")
+    }
+    
+    private func checkInitialAuthorizationStatus() {
+        authorizationStatus = locationManager.authorizationStatus
+        print("📍 LocationService: Initial authorization status: \(authorizationStatus.debugDescription)")
+        
+        // If already authorized, start updating immediately
+        if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
+            startUpdatingLocation()
+        }
     }
     
     // MARK: - Permission Handling
     func requestLocationPermission() {
+        print("📍 LocationService: Requesting location permission")
         locationManager.requestWhenInUseAuthorization()
     }
     
     func startUpdatingLocation() {
-        if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
-            locationManager.startUpdatingLocation()
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            print("❌ LocationService: Cannot start updates - not authorized. Status: \(authorizationStatus.debugDescription)")
+            return
         }
+        
+        print("📍 LocationService: Starting location updates")
+        locationManager.startUpdatingLocation()
+        
+        // Request a single location update immediately
+        locationManager.requestLocation()
     }
     
     func stopUpdatingLocation() {
+        print("📍 LocationService: Stopping location updates")
         locationManager.stopUpdatingLocation()
     }
     
@@ -92,24 +115,40 @@ final class LocationService: NSObject, ObservableObject {
 extension LocationService: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
+        print("📍 LocationService: Authorization changed to: \(authorizationStatus.debugDescription)")
         
         switch authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
             startUpdatingLocation()
-        case .denied, .restricted:
-            locationError = "Location access denied. Please enable in Settings."
-        default:
+        case .denied:
+            locationError = "Location access denied. Please enable in Settings > Privacy > Location Services"
+            print("❌ LocationService: Location access denied")
+        case .restricted:
+            locationError = "Location access restricted"
+            print("❌ LocationService: Location access restricted")
+        case .notDetermined:
+            print("📍 LocationService: Location permission not determined")
+        @unknown default:
             break
         }
     }
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
+        
+        print("📍 LocationService: Received location update - Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude)")
         userLocation = location.coordinate
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("❌ LocationService: Location error: \(error.localizedDescription)")
         locationError = error.localizedDescription
+        
+        // If it's a network error, we might still have a cached location
+        if let location = manager.location {
+            print("📍 LocationService: Using cached location")
+            userLocation = location.coordinate
+        }
     }
 }
 
@@ -127,6 +166,20 @@ enum LocationError: LocalizedError {
             return "Could not determine address for this location"
         case .permissionDenied:
             return "Location permission denied"
+        }
+    }
+}
+
+// MARK: - CLAuthorizationStatus Debug Extension
+extension CLAuthorizationStatus {
+    var debugDescription: String {
+        switch self {
+        case .notDetermined: return "Not Determined"
+        case .restricted: return "Restricted"
+        case .denied: return "Denied"
+        case .authorizedAlways: return "Authorized Always"
+        case .authorizedWhenInUse: return "Authorized When In Use"
+        @unknown default: return "Unknown"
         }
     }
 }

@@ -1,5 +1,6 @@
-// StatusRepository.swift
-// Path: ClaudeHustlerFirebase/Repositories/StatusRepository.swift
+// StatusRepository_FIXED.swift
+// This fixes Status to work like Instagram/WhatsApp - multiple statuses under ONE circle per user
+// Replace StatusRepository.swift content with this
 
 import Foundation
 import FirebaseFirestore
@@ -19,10 +20,9 @@ final class StatusRepository: RepositoryProtocol {
     
     private init() {}
     
-    // MARK: - RepositoryProtocol Implementation
+    // MARK: - RepositoryProtocol Implementation (unchanged)
     
     func fetch(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> (items: [Status], lastDoc: DocumentSnapshot?) {
-        // Fetch all active statuses
         var query = db.collection("statuses")
             .whereField("isActive", isEqualTo: true)
             .whereField("expiresAt", isGreaterThan: Date())
@@ -56,7 +56,6 @@ final class StatusRepository: RepositoryProtocol {
             throw NSError(domain: "StatusRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Create a new Status with the required properties
         let newStatus = Status(
             userId: userId,
             userName: item.userName,
@@ -73,6 +72,7 @@ final class StatusRepository: RepositoryProtocol {
         
         // Clear cache
         cache.remove(for: "statuses_following")
+        cache.remove(for: "user_all_statuses_\(userId)")
         
         return docRef.documentID
     }
@@ -87,16 +87,19 @@ final class StatusRepository: RepositoryProtocol {
     }
     
     func delete(_ id: String) async throws {
-        // Soft delete - mark as inactive
         try await db.collection("statuses").document(id).updateData([
             "isActive": false
         ])
         
         cache.remove(for: "status_\(id)")
         cache.remove(for: "statuses_following")
+        
+        if let userId = Auth.auth().currentUser?.uid {
+            cache.remove(for: "user_all_statuses_\(userId)")
+        }
     }
     
-    // MARK: - Status-Specific Methods
+    // MARK: - FIXED: Fetch ALL statuses grouped by user
     
     func fetchStatusesFromFollowing(userIds: [String]) async throws -> [Status] {
         if userIds.isEmpty { return [] }
@@ -107,10 +110,12 @@ final class StatusRepository: RepositoryProtocol {
             return cached.filter { !$0.isExpired }
         }
         
+        // Fetch ALL active statuses from all users
         let snapshot = try await db.collection("statuses")
             .whereField("userId", in: userIds)
             .whereField("isActive", isEqualTo: true)
             .whereField("expiresAt", isGreaterThan: Date())
+            .order(by: "createdAt", descending: true)
             .getDocuments()
         
         let statuses = snapshot.documents.compactMap { doc -> Status? in
@@ -123,6 +128,66 @@ final class StatusRepository: RepositoryProtocol {
         cache.store(statuses, for: "statuses_following")
         
         return statuses
+    }
+    
+    // MARK: - NEW: Fetch ALL statuses for a specific user (for viewing)
+    func fetchAllUserStatuses(for userId: String) async throws -> [Status] {
+        let cacheKey = "user_all_statuses_\(userId)"
+        
+        // Check cache
+        if let cached: [Status] = cache.retrieve([Status].self, for: cacheKey),
+           !cache.isExpired(for: cacheKey, maxAge: 60) {
+            return cached.filter { !$0.isExpired }
+        }
+        
+        // Fetch ALL active statuses for this user
+        let snapshot = try await db.collection("statuses")
+            .whereField("userId", isEqualTo: userId)
+            .whereField("isActive", isEqualTo: true)
+            .whereField("expiresAt", isGreaterThan: Date())
+            .order(by: "createdAt", descending: false)  // Oldest first for viewing order
+            .getDocuments()
+        
+        let statuses = snapshot.documents.compactMap { doc -> Status? in
+            var status = try? doc.data(as: Status.self)
+            status?.id = doc.documentID
+            return status?.isExpired == false ? status : nil
+        }
+        
+        // Cache results
+        cache.store(statuses, for: cacheKey)
+        
+        return statuses
+    }
+    
+    // MARK: - Get status count for a user (for UI indicator)
+    func getUserStatusCount(for userId: String) async throws -> Int {
+        let statuses = try await fetchAllUserStatuses(for: userId)
+        return statuses.count
+    }
+    
+    // MARK: - Check if user has any status (for showing circle)
+    func userHasActiveStatus(userId: String) async throws -> Bool {
+        let statuses = try await fetchAllUserStatuses(for: userId)
+        return !statuses.isEmpty
+    }
+    
+    // MARK: - Mark all user's statuses as viewed
+    func markUserStatusesAsViewed(_ userId: String, by viewerId: String) async throws {
+        let statuses = try await fetchAllUserStatuses(for: userId)
+        
+        let batch = db.batch()
+        for status in statuses where status.id != nil {
+            let ref = db.collection("statuses").document(status.id!)
+            batch.updateData([
+                "viewedBy": FieldValue.arrayUnion([viewerId])
+            ], forDocument: ref)
+        }
+        
+        try await batch.commit()
+        
+        // Clear cache
+        cache.remove(for: "user_all_statuses_\(userId)")
     }
     
     func markAsViewed(_ statusId: String, by userId: String) async throws {
@@ -150,28 +215,19 @@ final class StatusRepository: RepositoryProtocol {
         cache.remove(for: "statuses_following")
     }
     
+    // MARK: - Legacy method for backward compatibility
     func getUserStatus(for userId: String) async throws -> Status? {
-        let snapshot = try await db.collection("statuses")
-            .whereField("userId", isEqualTo: userId)
-            .whereField("isActive", isEqualTo: true)
-            .whereField("expiresAt", isGreaterThan: Date())
-            .order(by: "createdAt", descending: true)
-            .limit(to: 1)
-            .getDocuments()
-        
-        guard let doc = snapshot.documents.first else { return nil }
-        var status = try doc.data(as: Status.self)
-        status.id = doc.documentID
-        return status.isExpired == false ? status : nil
+        let statuses = try await fetchAllUserStatuses(for: userId)
+        return statuses.first
     }
     
-    // Add to StatusRepository.swift
+    // MARK: - Create Status helper
     func createStatus(image: UIImage, caption: String?) async throws -> String {
         guard let userId = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "StatusRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
         
-        // Upload image using FirebaseService
+        // Upload image
         let imageURL = try await FirebaseService.shared.uploadImage(
             image,
             path: "statuses/\(userId)/\(UUID().uuidString).jpg"
@@ -196,35 +252,10 @@ final class StatusRepository: RepositoryProtocol {
         
         return try await create(status)
     }
-    // Add to StatusRepository.swift:
-    func markStatusAsViewed(_ statusId: String) async throws {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "StatusRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-        }
-        
-        try await db.collection("statuses").document(statusId).updateData([
-            "viewedBy": FieldValue.arrayUnion([userId])
-        ])
-        
-        // Clear cache if needed
-        cache.remove(for: "status_\(statusId)")
+    
+    func getCurrentUserActiveStatus() async throws -> Status? {
+        guard let userId = Auth.auth().currentUser?.uid else { return nil }
+        let statuses = try await fetchAllUserStatuses(for: userId)
+        return statuses.first
     }
-        
-        func getCurrentUserActiveStatus() async throws -> Status? {
-            guard let userId = Auth.auth().currentUser?.uid else { return nil }
-            
-            let snapshot = try await db.collection("statuses")
-                .whereField("userId", isEqualTo: userId)
-                .whereField("isActive", isEqualTo: true)
-                .whereField("expiresAt", isGreaterThan: Date())
-                .limit(to: 1)
-                .getDocuments()
-            
-            guard let doc = snapshot.documents.first else { return nil }
-            
-            var status = try doc.data(as: Status.self)
-            status.id = doc.documentID
-            
-            return status.isExpired ? nil : status
-        }
-    }
+}

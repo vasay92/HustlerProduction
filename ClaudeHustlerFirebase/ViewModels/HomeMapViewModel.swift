@@ -1,4 +1,4 @@
-// HomeMapViewModel.swift
+// HomeMapViewModel.swift - Fixed version
 // Path: ClaudeHustlerFirebase/ViewModels/HomeMapViewModel.swift
 
 import Foundation
@@ -17,10 +17,15 @@ final class HomeMapViewModel: ObservableObject {
     @Published var searchText = ""
     @Published var showOnlyRequests = false
     @Published var showOnlyOffers = false
+    
+    // Start with Chicago as default, will update with user location
     @Published var mapRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 41.9742, longitude: -87.9073), // Chicago area
-        span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5)
+        center: CLLocationCoordinate2D(latitude: 41.9742, longitude: -87.9073),
+        span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1) // Zoomed out view
     )
+    
+    // Track if we've set initial location
+    private var hasSetInitialLocation = false
     
     // MARK: - User Rating Properties for Dynamic Pins
     @Published var userRatings: [String: Double] = [:]
@@ -45,14 +50,80 @@ final class HomeMapViewModel: ObservableObject {
             locationService.requestLocationPermission()
         }
         
-        // Observe user location changes
-        Task { @MainActor in
-            for await _ in locationService.$userLocation.values {
-                if let location = locationService.userLocation {
-                    updateMapRegion(center: location)
+        // Start location updates
+        locationService.startUpdatingLocation()
+        
+        // Set up a timer to check for initial location
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+            Task { @MainActor in
+                guard let self = self else {
+                    timer.invalidate()
+                    return
+                }
+                
+                // Check if we have user location and haven't set initial position yet
+                if let userLocation = self.locationService.userLocation,
+                   !self.hasSetInitialLocation {
+                    // Set initial map region centered on user but zoomed out
+                    self.setInitialMapRegion(center: userLocation)
+                    self.hasSetInitialLocation = true
+                    timer.invalidate() // Stop checking once we've set it
                 }
             }
         }
+    }
+    
+    // Set initial map region (zoomed out to show area)
+    private func setInitialMapRegion(center: CLLocationCoordinate2D) {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            mapRegion = MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(
+                    latitudeDelta: 0.1,  // About 11km - shows neighborhood/area
+                    longitudeDelta: 0.1
+                )
+            )
+        }
+        print("📍 Initial map region set to user location (zoomed out)")
+    }
+    
+    // MARK: - Location Methods
+    
+    // Called when user taps location button - centers and zooms in
+    func centerOnUserLocation() {
+        guard let userLocation = locationService.userLocation else {
+            print("❌ No user location available")
+            
+            // Request permission if not granted
+            if locationService.authorizationStatus == .notDetermined {
+                locationService.requestLocationPermission()
+            } else if locationService.authorizationStatus == .denied ||
+                      locationService.authorizationStatus == .restricted {
+                // Could show alert here about enabling location in settings
+                print("❌ Location permission denied")
+            }
+            return
+        }
+        
+        // Animate to user location with closer zoom for precision
+        withAnimation(.easeInOut(duration: 0.5)) {
+            mapRegion = MKCoordinateRegion(
+                center: userLocation,
+                span: MKCoordinateSpan(
+                    latitudeDelta: 0.02,  // About 2km - closer view
+                    longitudeDelta: 0.02
+                )
+            )
+        }
+        print("📍 Centered on user location (zoomed in)")
+    }
+    
+    // Update map region without animation (for manual pan/zoom)
+    func updateMapRegion(center: CLLocationCoordinate2D, span: MKCoordinateSpan? = nil) {
+        mapRegion = MKCoordinateRegion(
+            center: center,
+            span: span ?? mapRegion.span
+        )
     }
     
     // MARK: - Data Loading
@@ -73,114 +144,70 @@ final class HomeMapViewModel: ObservableObject {
             if !postsWithoutCoords.isEmpty {
                 print("⚠️ Posts WITHOUT coordinates:")
                 postsWithoutCoords.forEach { post in
-                    print("  - \(post.title) (location: \(post.location ?? "none"))")
+                    print("  - \(post.title) (location: \(post.location ?? "nil"))")
                 }
             }
             
-            // Handle location privacy
-            posts = postsWithCoords.map { post in
-                var modifiedPost = post
-                
-                // If location privacy is approximate, obfuscate the coordinates
-                if post.locationPrivacy == ServicePost.LocationPrivacy.approximate,
-                   let coordinates = post.coordinates {
-                    let obfuscated = locationService.obfuscateCoordinate(
-                        CLLocationCoordinate2D(
-                            latitude: coordinates.latitude,
-                            longitude: coordinates.longitude
-                        ),
-                        radiusInMeters: post.approximateRadius ?? 1000
-                    )
-                    modifiedPost.coordinates = GeoPoint(
-                        latitude: obfuscated.latitude,
-                        longitude: obfuscated.longitude
-                    )
-                }
-                
-                return modifiedPost
-            }
-            
-            print("✅ Final posts array has: \(posts.count) posts")
+            // Store posts with coordinates
+            posts = postsWithCoords
             filterPosts()
-            print("✅ After filtering: \(filteredPosts.count) posts")
             
-            // Fetch user ratings for dynamic pins
-            await fetchUserRatingsForVisiblePosts()
+            // Load user ratings
+            await loadUserRatings(for: posts)
             
         } catch {
-            print("❌ Error loading posts for map: \(error)")
-            print("❌ Error details: \(error.localizedDescription)")
+            print("❌ Error loading posts: \(error)")
         }
         
         isLoading = false
     }
-
-    func refresh() async {
-        posts = []
-        filteredPosts = []
-        selectedPost = nil
-        userRatings = [:]
-        userReviewCounts = [:]
-        await loadPosts()
-    }
     
-    // MARK: - User Ratings for Dynamic Pins
-    func fetchUserRatingsForVisiblePosts() async {
-        // Get unique user IDs from filtered posts
-        let userIds = Set(filteredPosts.map { $0.userId })
-        
-        print("📊 Fetching ratings for \(userIds.count) unique users...")
-        
-        // Fetch user data for each unique userId
-        await withTaskGroup(of: (String, Double?, Int?).self) { group in
-            for userId in userIds {
-                group.addTask {
-                    do {
-                        let userDoc = try await Firestore.firestore()
-                            .collection("users")
-                            .document(userId)
-                            .getDocument()
-                        
-                        if let userData = try? userDoc.data(as: User.self) {
-                            return (userId, userData.rating, userData.reviewCount)
-                        }
-                    } catch {
-                        print("Failed to fetch user data for \(userId): \(error)")
-                    }
-                    return (userId, nil, nil)
-                }
-            }
+    // MARK: - User Ratings
+    func loadUserRatings(for posts: [ServicePost]) async {
+        for post in posts {
+            // userId is not optional, so we can use it directly
+            let userId = post.userId
             
-            // Collect results
-            for await (userId, rating, reviewCount) in group {
-                await MainActor.run {
-                    if let rating = rating {
+            do {
+                let userDoc = try await Firestore.firestore()
+                    .collection("users")
+                    .document(userId)
+                    .getDocument()
+                
+                if let data = userDoc.data() {
+                    let rating = data["rating"] as? Double ?? 0.0
+                    let reviewCount = data["reviewCount"] as? Int ?? 0
+                    
+                    await MainActor.run {
                         self.userRatings[userId] = rating
-                    }
-                    if let reviewCount = reviewCount {
                         self.userReviewCounts[userId] = reviewCount
                     }
                 }
+            } catch {
+                print("Error loading rating for user \(userId): \(error)")
             }
         }
-        
-        print("✅ Fetched ratings for \(userRatings.count) users")
     }
     
-    // Helper methods for dynamic pins
-    func getUserRating(for userId: String) -> Double? {
-        return userRatings[userId]
+    // MARK: - Post Selection
+    func selectPost(_ post: ServicePost) {
+        selectedPost = post
+        showingPostPreview = true
     }
     
-    func getUserReviewCount(for userId: String) -> Int? {
-        return userReviewCounts[userId]
+    func dismissPostPreview() {
+        showingPostPreview = false
+        // Delay clearing selection for animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.selectedPost = nil
+        }
     }
     
     // MARK: - Filtering
     func filterPosts() {
         var filtered = posts
         
-        // Apply offer/request filter
+        // Apply type filters
         if showOnlyRequests && !showOnlyOffers {
             filtered = filtered.filter { $0.isRequest }
         } else if showOnlyOffers && !showOnlyRequests {
@@ -192,19 +219,11 @@ final class HomeMapViewModel: ObservableObject {
             filtered = filtered.filter { post in
                 post.title.localizedCaseInsensitiveContains(searchText) ||
                 post.description.localizedCaseInsensitiveContains(searchText) ||
-                post.location?.localizedCaseInsensitiveContains(searchText) == true
+                (post.location?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
         
         filteredPosts = filtered
-    }
-    
-    func toggleRequestFilter() {
-        showOnlyRequests.toggle()
-        if showOnlyRequests {
-            showOnlyOffers = false
-        }
-        filterPosts()
     }
     
     func toggleOfferFilter() {
@@ -215,58 +234,23 @@ final class HomeMapViewModel: ObservableObject {
         filterPosts()
     }
     
-    func clearFilters() {
-        searchText = ""
-        showOnlyRequests = false
-        showOnlyOffers = false
+    func toggleRequestFilter() {
+        showOnlyRequests.toggle()
+        if showOnlyRequests {
+            showOnlyOffers = false
+        }
         filterPosts()
     }
     
-    // MARK: - Map Interactions
-    func selectPost(_ post: ServicePost) {
-        selectedPost = post
-        showingPostPreview = true
-        
-        // Center map on selected post
-        if let coordinates = post.coordinates {
-            let center = CLLocationCoordinate2D(
-                latitude: coordinates.latitude,
-                longitude: coordinates.longitude
-            )
-            updateMapRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05))
-        }
+    // MARK: - Refresh
+    func refresh() async {
+        await loadPosts()
     }
     
-    func dismissPostPreview() {
-        showingPostPreview = false
-        // Don't immediately clear selectedPost to allow for animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.selectedPost = nil
-        }
-    }
-    
-    func updateMapRegion(center: CLLocationCoordinate2D, span: MKCoordinateSpan? = nil) {
-        mapRegion = MKCoordinateRegion(
-            center: center,
-            span: span ?? mapRegion.span
-        )
-    }
-    
-    // MARK: - Location Methods
-    func centerOnUserLocation() {
-        if let userLocation = locationService.userLocation {
-            updateMapRegion(
-                center: userLocation,
-                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-            )
-        }
-    }
-    
+    // MARK: - Helper Methods
     func getAnnotationColor(for post: ServicePost) -> Color {
         post.isRequest ? .orange : .blue
     }
-    
-    
     
     // MARK: - Zoom Methods
     func zoomIn() {
@@ -276,7 +260,9 @@ final class HomeMapViewModel: ObservableObject {
         )
         // Limit maximum zoom
         if newSpan.latitudeDelta > 0.001 {
-            updateMapRegion(center: mapRegion.center, span: newSpan)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                updateMapRegion(center: mapRegion.center, span: newSpan)
+            }
         }
     }
 
@@ -287,7 +273,9 @@ final class HomeMapViewModel: ObservableObject {
         )
         // Limit minimum zoom
         if newSpan.latitudeDelta < 10.0 {
-            updateMapRegion(center: mapRegion.center, span: newSpan)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                updateMapRegion(center: mapRegion.center, span: newSpan)
+            }
         }
     }
 }

@@ -1,15 +1,18 @@
 // ReelsView.swift
 // Path: ClaudeHustlerFirebase/Views/Reels/ReelsView.swift
-// UPDATED: Own status first, eye icon for views
+// MODIFIED: Support for multiple statuses per user (Instagram/WhatsApp style)
 
 import SwiftUI
 import AVKit
 import FirebaseFirestore
 
+// REMOVED: extension String: Identifiable - already in ProfileSupportingViews.swift
+
 struct ReelsView: View {
     @StateObject private var viewModel = ReelsViewModel()
     @StateObject private var firebase = FirebaseService.shared
     @State private var selectedStatus: Status?
+    @State private var selectedUserId: String? = nil  // NEW: For grouped statuses
     @State private var showingCreateOptions = false
     @State private var currentReelIndex = 0
     @State private var dragOffset: CGFloat = 0
@@ -47,10 +50,11 @@ struct ReelsView: View {
             await viewModel.refresh()
         }
         .sheet(isPresented: $showingStatusCreation) {
-            CameraView(mode: .status)  // Uses your existing camera flow
+            CameraView(mode: .status)
         }
-        .fullScreenCover(item: $selectedStatus) { status in
-            StatusViewerView(status: status)
+        // MODIFIED: Changed to use selectedUserId for grouped statuses
+        .fullScreenCover(item: $selectedUserId) { userId in
+            StatusViewerView(initialUserId: userId)
         }
         .fullScreenCover(isPresented: $isFullScreenMode) {
             VerticalReelScrollView(
@@ -61,24 +65,19 @@ struct ReelsView: View {
         }
     }
     
-    // MARK: - Status Section (UPDATED: User's status first)
-    // MARK: - Status Section (UPDATED: User's status first)
+    // MARK: - MODIFIED Status Section (Groups statuses by user)
+    // In ReelsView.swift, replace the statusSection with this:
+
     @ViewBuilder
     private var statusSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                // Show user's own status first (or Add Story button)
+                // User's own status circle
                 if let currentUserId = firebase.currentUser?.id {
-                    if let myStatus = viewModel.statuses.first(where: { $0.userId == currentUserId }) {
-                        // User has active status - show it WITHOUT the plus overlay
-                        StatusCircle(
-                            status: myStatus,
-                            isOwnStatus: true,
-                            action: { selectStatus(myStatus) }
-                        )
-                        // REMOVED THE .overlay() WITH THE PLUS BUTTON
-                    } else {
-                        // Add Story button (no status yet) - THIS is where the plus belongs
+                    let userStatuses = viewModel.statuses.filter { $0.userId == currentUserId }
+                    
+                    if userStatuses.isEmpty {
+                        // No status - show Add Story button with plus
                         Button(action: { showingStatusCreation = true }) {
                             VStack {
                                 ZStack {
@@ -100,16 +99,38 @@ struct ReelsView: View {
                                     .foregroundColor(.primary)
                             }
                         }
+                    } else {
+                        // Has status - show without plus button
+                        StatusCircleWithCount(
+                            userId: currentUserId,
+                            userName: "Your Story",
+                            userProfileImage: firebase.currentUser?.profileImageURL,
+                            statuses: userStatuses,
+                            isOwnStatus: true,
+                            action: {
+                                selectedUserId = currentUserId
+                            }
+                        )
                     }
                 }
                 
-                // Then show other users' statuses (excluding current user's)
-                ForEach(viewModel.statuses.filter { $0.userId != firebase.currentUser?.id }) { status in
-                    StatusCircle(
-                        status: status,
-                        isOwnStatus: false,
-                        action: { selectStatus(status) }
-                    )
+                // Other users' statuses (grouped by user)
+                ForEach(uniqueStatusUsers(), id: \.self) { userId in
+                    if userId != firebase.currentUser?.id {
+                        let userStatuses = viewModel.statuses.filter { $0.userId == userId }
+                        if let firstStatus = userStatuses.first {
+                            StatusCircleWithCount(
+                                userId: userId,
+                                userName: firstStatus.userName ?? "User",
+                                userProfileImage: firstStatus.userProfileImage,
+                                statuses: userStatuses,
+                                isOwnStatus: false,
+                                action: {
+                                    selectedUserId = userId
+                                }
+                            )
+                        }
+                    }
                 }
             }
             .padding(.horizontal)
@@ -117,7 +138,21 @@ struct ReelsView: View {
         }
     }
     
-    // MARK: - Reels Grid Section (UPDATED: Eye icon with views)
+    // NEW: Helper method to get unique users with statuses
+    private func uniqueStatusUsers() -> [String] {
+        let userIds = Set(viewModel.statuses.map { $0.userId })
+        return Array(userIds).sorted { userId1, userId2 in
+            let user1Latest = viewModel.statuses
+                .filter { $0.userId == userId1 }
+                .first?.createdAt ?? Date.distantPast
+            let user2Latest = viewModel.statuses
+                .filter { $0.userId == userId2 }
+                .first?.createdAt ?? Date.distantPast
+            return user1Latest > user2Latest
+        }
+    }
+    
+    // MARK: - Reels Grid Section
     @ViewBuilder
     private var reelsGridSection: some View {
         if viewModel.reels.isEmpty && !viewModel.isLoadingReels {
@@ -128,12 +163,9 @@ struct ReelsView: View {
                     ReelGridItem(reel: reel) {
                         currentReelIndex = index
                         isFullScreenMode = true
-                        // Track view when reel is opened
-                        
                     }
                 }
                 
-                // Load more indicator
                 if viewModel.hasMoreReels && !viewModel.reels.isEmpty {
                     ProgressView()
                         .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
@@ -148,17 +180,162 @@ struct ReelsView: View {
             .padding(.horizontal, 1)
         }
     }
+}
+
+// MARK: - NEW Status Circle Component with Multiple Status Indicator
+struct StatusCircleWithCount: View {
+    let userId: String
+    let userName: String
+    let userProfileImage: String?
+    let statuses: [Status]
+    let isOwnStatus: Bool
+    let action: () -> Void
     
-    // MARK: - Helper Methods
-    private func selectStatus(_ status: Status) {
-        selectedStatus = status
-        Task {
-            await viewModel.viewStatus(status.id ?? "")
+    @StateObject private var firebase = FirebaseService.shared
+    
+    private var hasUnviewedStatus: Bool {
+        guard let currentUserId = firebase.currentUser?.id else { return true }
+        return statuses.contains { status in
+            !status.viewedBy.contains(currentUserId)
+        }
+    }
+    
+    private var statusCount: Int {
+        statuses.count
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                ZStack {
+                    // Multi-segment ring for multiple statuses
+                    if statusCount > 1 {
+                        SegmentedStatusRing(
+                            segments: statusCount,
+                            isViewed: !hasUnviewedStatus,
+                            isOwnStatus: isOwnStatus
+                        )
+                        .frame(width: 76, height: 76)
+                    } else if statusCount == 1 {
+                        // Single ring for one status
+                        Circle()
+                            .stroke(
+                                hasUnviewedStatus ?
+                                    (isOwnStatus ? Color.blue : Color.purple) :
+                                    Color.gray,
+                                lineWidth: hasUnviewedStatus ? 3 : 1.5
+                            )
+                            .frame(width: 76, height: 76)
+                    } else {
+                        // No status - just gray circle for others, blue-ish for own
+                        Circle()
+                            .stroke(
+                                isOwnStatus ? Color.gray.opacity(0.3) : Color.gray.opacity(0.2),
+                                lineWidth: 1.5
+                            )
+                            .frame(width: 76, height: 76)
+                    }
+                    
+                    // Profile image
+                    if let firstStatus = statuses.first {
+                        AsyncImage(url: URL(string: firstStatus.mediaURL)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 70, height: 70)
+                                .clipShape(Circle())
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 70, height: 70)
+                                .overlay(
+                                    Text(String(userName.first ?? "U"))
+                                        .foregroundColor(.white)
+                                )
+                        }
+                    } else if isOwnStatus {
+                        // Show user's profile image when no status
+                        AsyncImage(url: URL(string: userProfileImage ?? "")) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 70, height: 70)
+                                .clipShape(Circle())
+                        } placeholder: {
+                            Circle()
+                                .fill(Color(.systemGray6))
+                                .frame(width: 70, height: 70)
+                                .overlay(
+                                    Text(String(userName.first ?? "U"))
+                                        .foregroundColor(.gray)
+                                )
+                        }
+                    }
+                }
+                
+                // Username with status count
+                HStack(spacing: 2) {
+                    Text(userName)
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    
+                    if statusCount > 1 && !isOwnStatus {
+                        Text("(\(statusCount))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .frame(width: 70)
+            }
         }
     }
 }
 
-// MARK: - Reel Grid Item (UPDATED: Eye icon instead of play)
+// MARK: - NEW Segmented Ring for Multiple Statuses (like Instagram)
+struct SegmentedStatusRing: View {
+    let segments: Int
+    let isViewed: Bool
+    let isOwnStatus: Bool
+    
+    private let spacing: Double = 3
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                ForEach(0..<segments, id: \.self) { index in
+                    Circle()
+                        .trim(
+                            from: segmentStart(index),
+                            to: segmentEnd(index)
+                        )
+                        .stroke(
+                            isViewed ? Color.gray : (isOwnStatus ? Color.blue : Color.purple),
+                            style: StrokeStyle(
+                                lineWidth: isViewed ? 1.5 : 3,
+                                lineCap: .round
+                            )
+                        )
+                        .rotationEffect(.degrees(-90))
+                }
+            }
+        }
+    }
+    
+    private func segmentStart(_ index: Int) -> CGFloat {
+        let segmentSize = 1.0 / Double(segments)
+        let gapSize = (spacing / 360.0)
+        return CGFloat(Double(index) * segmentSize + (index > 0 ? gapSize : 0))
+    }
+    
+    private func segmentEnd(_ index: Int) -> CGFloat {
+        let segmentSize = 1.0 / Double(segments)
+        let gapSize = (spacing / 360.0)
+        return CGFloat(Double(index + 1) * segmentSize - gapSize)
+    }
+}
+
+// MARK: - Reel Grid Item
 struct ReelGridItem: View {
     let reel: Reel
     let action: () -> Void
@@ -169,11 +346,9 @@ struct ReelGridItem: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                // Background - always show something
                 Rectangle()
                     .fill(Color.gray.opacity(0.2))
                 
-                // Thumbnail or fallback
                 if let thumbnailURL = reel.thumbnailURL, !thumbnailURL.isEmpty {
                     AsyncImage(url: URL(string: thumbnailURL)) { phase in
                         switch phase {
@@ -184,35 +359,27 @@ struct ReelGridItem: View {
                                 .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
                                 .clipped()
                                 .onAppear {
-                                    // Cancel timer if image loads successfully
                                     loadingTimer?.invalidate()
                                 }
-                            
                         case .failure(_):
-                            // Show fallback on failure
                             fallbackView
-                            
                         case .empty:
-                            // Show loading only briefly, then fallback
                             if loadingFailed {
                                 fallbackView
                             } else {
                                 ZStack {
                                     Rectangle()
                                         .fill(Color.gray.opacity(0.2))
-                                    
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                 }
                                 .onAppear {
-                                    // Set a timeout for loading
                                     loadingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
                                         loadingFailed = true
                                     }
                                 }
                             }
-                            
                         @unknown default:
                             fallbackView
                         }
@@ -221,11 +388,9 @@ struct ReelGridItem: View {
                     fallbackView
                 }
                 
-                // View count overlay with eye icon
                 VStack {
                     Spacer()
                     HStack {
-                        // Eye icon with view count
                         HStack(spacing: 4) {
                             Image(systemName: "eye.fill")
                                 .font(.caption)
@@ -238,7 +403,6 @@ struct ReelGridItem: View {
                         .padding(.vertical, 4)
                         .background(Color.black.opacity(0.7))
                         .cornerRadius(12)
-                        
                         Spacer()
                     }
                     .padding(8)
@@ -248,14 +412,12 @@ struct ReelGridItem: View {
             .background(Color.gray.opacity(0.2))
         }
         .onDisappear {
-            // Clean up timer when view disappears
             loadingTimer?.invalidate()
         }
     }
     
     @ViewBuilder
     private var fallbackView: some View {
-        // Fallback view when thumbnail fails to load or times out
         ZStack {
             Rectangle()
                 .fill(
@@ -270,12 +432,10 @@ struct ReelGridItem: View {
                 )
             
             VStack(spacing: 8) {
-                // Show video/image icon based on content
                 Image(systemName: reel.videoURL.contains(".mp4") || reel.videoURL.contains(".mov") ? "play.rectangle.fill" : "photo.fill")
                     .font(.title2)
                     .foregroundColor(.white)
                 
-                // Show title if available
                 if !reel.title.isEmpty {
                     Text(reel.title)
                         .font(.caption2)
@@ -289,7 +449,6 @@ struct ReelGridItem: View {
         .frame(width: UIScreen.main.bounds.width / 3 - 2, height: 180)
     }
     
-    // Format view count (e.g., 1.2K, 3M)
     private func formatViewCount(_ count: Int) -> String {
         if count >= 1_000_000 {
             return String(format: "%.1fM", Double(count) / 1_000_000)
@@ -297,45 +456,6 @@ struct ReelGridItem: View {
             return String(format: "%.1fK", Double(count) / 1_000)
         } else {
             return "\(count)"
-        }
-    }
-}
-
-// MARK: - Status Circle Component
-struct StatusCircle: View {
-    let status: Status
-    let isOwnStatus: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack {
-                AsyncImage(url: URL(string: status.mediaURL)) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 70, height: 70)
-                        .clipShape(Circle())
-                } placeholder: {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 70, height: 70)
-                }
-                .overlay(
-                    Circle()
-                        .stroke(
-                            status.viewedBy.contains(FirebaseService.shared.currentUser?.id ?? "") ?
-                                Color.gray :
-                                (isOwnStatus ? Color.blue : Color.purple),
-                            lineWidth: status.viewedBy.contains(FirebaseService.shared.currentUser?.id ?? "") ? 1 : 3
-                        )
-                )
-                
-                Text(isOwnStatus ? "Your Story" : (status.userName ?? "User"))
-                    .font(.caption)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-            }
         }
     }
 }
@@ -360,7 +480,7 @@ struct EmptyReelsPlaceholder: View {
     }
 }
 
-// MARK: - Keep existing VerticalReelScrollView and FullScreenReelView unchanged
+// MARK: - Vertical Reel Scroll View
 struct VerticalReelScrollView: View {
     let reels: [Reel]
     let initialIndex: Int
@@ -390,7 +510,6 @@ struct VerticalReelScrollView: View {
                         )
                         .tag(index)
                         .onAppear {
-                            // Track view when reel appears
                             Task {
                                 await viewModel.incrementReelView(reel.id ?? "")
                             }
@@ -400,7 +519,6 @@ struct VerticalReelScrollView: View {
                 .tabViewStyle(PageTabViewStyle())
                 .indexViewStyle(PageIndexViewStyle(backgroundDisplayMode: .never))
                 
-                // Close button
                 VStack {
                     HStack {
                         Button(action: { dismiss() }) {
@@ -423,15 +541,12 @@ struct VerticalReelScrollView: View {
     }
 }
 
-// Keep the rest of FullScreenReelView implementation as is...
-// StatusViewerView remains unchanged...
-
-// MARK: - Full Screen Reel View (Individual Reel)
+// MARK: - Full Screen Reel View
 struct FullScreenReelView: View {
     let reel: Reel
     let isCurrentReel: Bool
     let onDismiss: () -> Void
-    @ObservedObject var viewModel: ReelsViewModel  // UPDATED: Accept from parent
+    @ObservedObject var viewModel: ReelsViewModel
     
     @State private var isLiked = false
     @State private var isFollowing = false
@@ -447,7 +562,6 @@ struct FullScreenReelView: View {
     @State private var showingShareSheet = false
     @State private var isDeleting = false
     
-    // Real-time listeners
     @State private var reelListener: ListenerRegistration?
     @State private var currentReel: Reel?
     
@@ -466,27 +580,19 @@ struct FullScreenReelView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 
-                // Background image/video
                 reelBackgroundContent
                 
-                // Content overlay
                 VStack {
                     Spacer()
                     
-                    // Bottom content container
                     ZStack(alignment: .bottom) {
-                        // Left side - Info (aligned to leading edge)
                         HStack {
                             VStack(alignment: .leading, spacing: 10) {
-                                // User info
                                 userInfoSection
                                 
-                                // Caption
                                 if !displayReel.title.isEmpty || !displayReel.description.isEmpty {
                                     captionSection
                                 }
-                                
-                                
                             }
                             .frame(maxWidth: geometry.size.width * 0.65, alignment: .leading)
                             .padding(.leading, 16)
@@ -495,7 +601,6 @@ struct FullScreenReelView: View {
                             Spacer()
                         }
                         
-                        // Right side - Actions (aligned to trailing edge)
                         HStack {
                             Spacer()
                             rightActionButtons
@@ -537,7 +642,7 @@ struct FullScreenReelView: View {
             )
         }
         .sheet(isPresented: $showingEditSheet) {
-            EditReelCaptionView(reel: displayReel, viewModel: viewModel)  // Pass viewModel
+            EditReelCaptionView(reel: displayReel, viewModel: viewModel)
         }
         .fullScreenCover(isPresented: $showingMessageView) {
             ChatView(
@@ -611,8 +716,6 @@ struct FullScreenReelView: View {
                 }
             }
         } else if !displayReel.videoURL.isEmpty {
-            let videoURL = displayReel.videoURL
-            // Video player would go here
             Rectangle()
                 .fill(Color.black)
                 .overlay(
@@ -650,13 +753,11 @@ struct FullScreenReelView: View {
                     )
             }
             
-            // Username
             Text(displayReel.userName ?? "User")
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundColor(.white)
             
-            // Follow button (if not own reel)
             if !isOwnReel {
                 Button(action: { toggleFollow() }) {
                     Text(isFollowing ? "Following" : "Follow")
@@ -701,7 +802,6 @@ struct FullScreenReelView: View {
     @ViewBuilder
     private var rightActionButtons: some View {
         VStack(spacing: 20) {
-            // Like button
             ReelActionButton(
                 icon: isLiked ? "heart.fill" : "heart",
                 text: likesCount > 0 ? "\(likesCount)" : nil,
@@ -710,7 +810,6 @@ struct FullScreenReelView: View {
                 onLongPress: likesCount > 0 ? { showingLikesList = true } : nil
             )
             
-            // Comment button
             ReelActionButton(
                 icon: "bubble.right",
                 text: commentsCount > 0 ? "\(commentsCount)" : nil,
@@ -718,7 +817,6 @@ struct FullScreenReelView: View {
                 action: { showingComments = true }
             )
             
-            // Message button (if not own reel)
             if !isOwnReel {
                 ReelActionButton(
                     icon: "message",
@@ -728,7 +826,6 @@ struct FullScreenReelView: View {
                 )
             }
             
-            // Share button
             ReelActionButton(
                 icon: "paperplane",
                 text: displayReel.shares > 0 ? "\(displayReel.shares)" : nil,
@@ -736,7 +833,6 @@ struct FullScreenReelView: View {
                 action: { shareReel() }
             )
             
-            // Save button
             ReelActionButton(
                 icon: isSaved ? "bookmark.fill" : "bookmark",
                 text: nil,
@@ -744,7 +840,6 @@ struct FullScreenReelView: View {
                 action: { toggleSave() }
             )
             
-            // More options menu
             Menu {
                 if isOwnReel {
                     Button(action: { showingEditSheet = true }) {
@@ -773,18 +868,13 @@ struct FullScreenReelView: View {
             }
         }
         .padding(.trailing, 16)
-        .padding(.bottom, 80)  // Space for tab bar
+        .padding(.bottom, 80)
     }
     
-    // MARK: - Updated Methods Using ViewModel
-    
-    private func setupReelView() {
-        Task {
-            await loadReelData()
-            await checkSaveStatus()
-            checkFollowingStatus()
-            // Note: Real-time listener removed in MVVM migration
-        }
+    private func setupReelView() async {
+        await loadReelData()
+        await checkSaveStatus()
+        checkFollowingStatus()
     }
     
     private func loadReelData() async {
@@ -793,18 +883,18 @@ struct FullScreenReelView: View {
         commentsCount = displayReel.comments
         
         if let reelId = reel.id {
-            isSaved = await viewModel.isReelSaved(reelId)  // UPDATED
+            isSaved = await viewModel.isReelSaved(reelId)
         }
     }
     
     private func checkSaveStatus() async {
         if let reelId = reel.id {
-            isSaved = await viewModel.isReelSaved(reelId)  // UPDATED
+            isSaved = await viewModel.isReelSaved(reelId)
         }
     }
     
     private func checkFollowingStatus() {
-        isFollowing = viewModel.isFollowingCreator(reel.userId)  // UPDATED
+        isFollowing = viewModel.isFollowingCreator(reel.userId)
     }
     
     private func toggleLike() {
@@ -812,11 +902,11 @@ struct FullScreenReelView: View {
             guard let reelId = reel.id else { return }
             
             if isLiked {
-                await viewModel.unlikeReel(reelId)  // UPDATED
+                await viewModel.unlikeReel(reelId)
                 isLiked = false
                 likesCount = max(0, likesCount - 1)
             } else {
-                await viewModel.likeReel(reelId)  // UPDATED
+                await viewModel.likeReel(reelId)
                 isLiked = true
                 likesCount += 1
             }
@@ -826,7 +916,7 @@ struct FullScreenReelView: View {
     private func toggleFollow() {
         Task {
             do {
-                try await viewModel.toggleFollowReelCreator(reel.userId)  // UPDATED
+                try await viewModel.toggleFollowReelCreator(reel.userId)
                 isFollowing.toggle()
             } catch {
                 print("Error toggling follow: \(error)")
@@ -839,7 +929,7 @@ struct FullScreenReelView: View {
         
         Task {
             do {
-                isSaved = try await viewModel.toggleSaveReel(reelId)  // UPDATED
+                isSaved = try await viewModel.toggleSaveReel(reelId)
             } catch {
                 print("Error toggling save: \(error)")
             }
@@ -851,7 +941,7 @@ struct FullScreenReelView: View {
         
         Task {
             if let reelId = reel.id {
-                await viewModel.shareReel(reelId)  // UPDATED
+                await viewModel.shareReel(reelId)
             }
         }
     }
@@ -862,7 +952,7 @@ struct FullScreenReelView: View {
         isDeleting = true
         
         do {
-            try await viewModel.deleteReel(reelId)  // UPDATED
+            try await viewModel.deleteReel(reelId)
             onDismiss()
         } catch {
             print("Error deleting reel: \(error)")
@@ -876,7 +966,7 @@ struct FullScreenReelView: View {
     }
 }
 
-// MARK: - Reel Viewer View (Standalone for saved reels, etc)
+// MARK: - Reel Viewer View
 struct ReelViewerView: View {
     let reel: Reel
     @Environment(\.dismiss) var dismiss
@@ -892,9 +982,8 @@ struct ReelViewerView: View {
     @State private var isDeleting = false
     @State private var showingShareSheet = false
     @StateObject private var firebase = FirebaseService.shared
-    @StateObject private var viewModel = ReelsViewModel()  // ADDED
+    @StateObject private var viewModel = ReelsViewModel()
     
-    // Check if current user owns this reel
     var isOwnReel: Bool {
         reel.userId == firebase.currentUser?.id
     }
@@ -903,7 +992,6 @@ struct ReelViewerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            // Video/Image content
             if let thumbnailURL = reel.thumbnailURL {
                 AsyncImage(url: URL(string: thumbnailURL)) { image in
                     image
@@ -915,9 +1003,7 @@ struct ReelViewerView: View {
                 }
             }
             
-            // Overlay controls
             VStack {
-                // Top bar
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
@@ -933,11 +1019,8 @@ struct ReelViewerView: View {
                 
                 Spacer()
                 
-                // Bottom content
                 HStack(alignment: .bottom) {
-                    // Left side - Info
                     VStack(alignment: .leading, spacing: 10) {
-                        // User info
                         Button(action: { showingUserProfile = true }) {
                             HStack {
                                 Circle()
@@ -970,7 +1053,6 @@ struct ReelViewerView: View {
                             }
                         }
                         
-                        // Caption
                         if !reel.title.isEmpty {
                             Text(reel.title)
                                 .font(.headline)
@@ -988,7 +1070,6 @@ struct ReelViewerView: View {
                     
                     Spacer()
                     
-                    // Right side - Actions
                     VStack(spacing: 20) {
                         Button(action: { toggleLike() }) {
                             VStack {
@@ -1076,7 +1157,7 @@ struct ReelViewerView: View {
             )
         }
         .sheet(isPresented: $showingEditSheet) {
-            EditReelCaptionView(reel: reel, viewModel: viewModel)  // Pass viewModel
+            EditReelCaptionView(reel: reel, viewModel: viewModel)
         }
         .fullScreenCover(isPresented: $showingMessageView) {
             ChatView(
@@ -1119,14 +1200,12 @@ struct ReelViewerView: View {
         )
     }
     
-    // MARK: - Updated Methods Using ViewModel
-    
     private func checkInitialStates() async {
-        isFollowing = viewModel.isFollowingCreator(reel.userId)  // UPDATED
+        isFollowing = viewModel.isFollowingCreator(reel.userId)
         isLiked = reel.likes.contains(firebase.currentUser?.id ?? "")
         
         if let reelId = reel.id {
-            isSaved = await viewModel.isReelSaved(reelId)  // UPDATED
+            isSaved = await viewModel.isReelSaved(reelId)
         }
     }
     
@@ -1135,9 +1214,9 @@ struct ReelViewerView: View {
             guard let reelId = reel.id else { return }
             
             if isLiked {
-                await viewModel.unlikeReel(reelId)  // UPDATED
+                await viewModel.unlikeReel(reelId)
             } else {
-                await viewModel.likeReel(reelId)  // UPDATED
+                await viewModel.likeReel(reelId)
             }
             isLiked.toggle()
         }
@@ -1146,7 +1225,7 @@ struct ReelViewerView: View {
     private func toggleFollow() {
         Task {
             do {
-                try await viewModel.toggleFollowReelCreator(reel.userId)  // UPDATED
+                try await viewModel.toggleFollowReelCreator(reel.userId)
                 isFollowing.toggle()
             } catch {
                 print("Error toggling follow: \(error)")
@@ -1159,7 +1238,7 @@ struct ReelViewerView: View {
         
         Task {
             do {
-                isSaved = try await viewModel.toggleSaveReel(reelId)  // UPDATED
+                isSaved = try await viewModel.toggleSaveReel(reelId)
             } catch {
                 print("Error toggling save: \(error)")
             }
@@ -1171,7 +1250,7 @@ struct ReelViewerView: View {
         
         Task {
             if let reelId = reel.id {
-                await viewModel.shareReel(reelId)  // UPDATED
+                await viewModel.shareReel(reelId)
             }
         }
     }
@@ -1182,7 +1261,7 @@ struct ReelViewerView: View {
         isDeleting = true
         
         do {
-            try await viewModel.deleteReel(reelId)  // UPDATED
+            try await viewModel.deleteReel(reelId)
             dismiss()
         } catch {
             print("Error deleting reel: \(error)")
@@ -1190,8 +1269,6 @@ struct ReelViewerView: View {
         }
     }
 }
-
-
 
 // MARK: - Action Button Component
 struct ReelActionButton: View {
@@ -1240,7 +1317,7 @@ struct ReelShareSheet: UIViewControllerRepresentable {
 // MARK: - Edit Reel Caption View
 struct EditReelCaptionView: View {
     let reel: Reel
-    @ObservedObject var viewModel: ReelsViewModel  // UPDATED: Accept viewModel
+    @ObservedObject var viewModel: ReelsViewModel
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     @State private var title: String
@@ -1293,7 +1370,7 @@ struct EditReelCaptionView: View {
         updatedReel.description = description
         
         do {
-            try await viewModel.updateReel(updatedReel)  // UPDATED: Use viewModel
+            try await viewModel.updateReel(updatedReel)
             dismiss()
         } catch {
             print("Error updating reel: \(error)")
@@ -1302,6 +1379,3 @@ struct EditReelCaptionView: View {
         isSaving = false
     }
 }
-
-// Note: Other supporting views like CreateContentOptionsSheet, CommentsView, etc.
-// should be in separate files or remain unchanged if they don't have direct repository calls

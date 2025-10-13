@@ -26,5 +26,7 @@
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:832317565221:ios:cbeee2fdba3ae7d614d2cc</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>This app needs your location to show nearby services and requests on the map.</string>
 </dict>
 </plist>
