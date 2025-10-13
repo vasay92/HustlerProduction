@@ -86,19 +86,17 @@ struct PostDetailView: View {
         }
         // FIX #2: ADD MESSAGE NAVIGATION
         .fullScreenCover(isPresented: $showingMessageView) {
-            if let recipientId = post.userId {
-                ChatView(
-                    recipientId: recipientId,
-                    contextType: .post,
-                    contextId: post.id,
-                    contextData: (
-                        title: post.title,
-                        image: post.imageURLs.first,
-                        userId: recipientId
-                    ),
-                    isFromContentView: false
-                )
-            }
+            ChatView(
+                recipientId: post.userId,  // Direct use - no if let needed
+                contextType: .post,
+                contextId: post.id,
+                contextData: (
+                    title: post.title,
+                    image: post.imageURLs.first,
+                    userId: post.userId
+                ),
+                isFromContentView: false
+            )
         }
         .confirmationDialog("Delete Post?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
