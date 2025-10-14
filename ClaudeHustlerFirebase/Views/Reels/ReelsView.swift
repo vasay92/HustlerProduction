@@ -74,13 +74,25 @@ struct ReelsView: View {
                 VerticalReelScrollView(
                     reels: searchResults,
                     initialIndex: currentReelIndex,
-                    viewModel: viewModel
+                    viewModel: viewModel,
+                    onHashtagTapped: { hashtag in
+                        searchQuery = hashtag
+                        Task {
+                            await searchReels()
+                        }
+                    }
                 )
             } else {
                 VerticalReelScrollView(
                     reels: viewModel.reels,
                     initialIndex: currentReelIndex,
-                    viewModel: viewModel
+                    viewModel: viewModel,
+                    onHashtagTapped: { hashtag in
+                        searchQuery = hashtag
+                        Task {
+                            await searchReels()
+                        }
+                    }
                 )
             }
         }
@@ -636,12 +648,14 @@ struct VerticalReelScrollView: View {
     @ObservedObject var viewModel: ReelsViewModel
     @Environment(\.dismiss) var dismiss
     @State private var currentIndex: Int
-    let isCleanView: Bool  // ADD THIS AS A PROP (not @State)
+    @State private var isCleanView = false
+    let onHashtagTapped: ((String) -> Void)?
     
     init(reels: [Reel], initialIndex: Int, viewModel: ReelsViewModel) {
         self.reels = reels
         self.initialIndex = initialIndex
         self.viewModel = viewModel
+        self.onHashtagTapped = onHashtagTapped
         _currentIndex = State(initialValue: initialIndex)
     }
     
@@ -657,7 +671,8 @@ struct VerticalReelScrollView: View {
                             isCurrentReel: index == currentIndex,
                             onDismiss: { dismiss() },
                             viewModel: viewModel,
-                            isCleanView: isCleanView  // PASS IT AS PROP
+                            isCleanView: isCleanView,  // PASS IT AS PROP
+                            onHashtagTapped: onHashtagTapped
                         )
                         .tag(index)
                         .onAppear {
@@ -760,7 +775,8 @@ struct FullScreenReelView: View {
     @State private var currentReel: Reel?
     
     @StateObject private var firebase = FirebaseService.shared
-    @State private var isCleanView = false
+    let isCleanView: Bool
+    let onHashtagTapped: ((String) -> Void)?
     
     var isOwnReel: Bool {
         reel.userId == firebase.currentUser?.id
@@ -817,29 +833,6 @@ struct FullScreenReelView: View {
                             }
                         }
                     }
-                }
-                
-                // Clean view toggle button - always visible
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isCleanView.toggle()
-                            }
-                        }) {
-                            Image(systemName: isCleanView ? "eye.slash.fill" : "eye.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .padding(12)
-                                .background(Color.black.opacity(0.3))
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
-                        }
-                        .padding(.top, 50)
-                        .padding(.trailing, 16)
-                    }
-                    Spacer()
                 }
             }
         }
@@ -1022,6 +1015,7 @@ struct FullScreenReelView: View {
     }
     
     // MARK: - ENHANCED Caption Section with Clickable Hashtags
+    // In FullScreenReelView, update captionSection:
     @ViewBuilder
     private var captionSection: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1030,15 +1024,17 @@ struct FullScreenReelView: View {
                     .font(.headline)
                     .foregroundColor(.white)
                     .fixedSize(horizontal: false, vertical: true)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             }
             
             if !displayReel.description.isEmpty {
-                // Using the existing HashtagTextView from Components folder
                 HashtagTextView(text: displayReel.description) { hashtag in
-                    // Handle hashtag tap - dismiss current view and trigger search
+                    // Pass the hashtag back up before dismissing
+                    onHashtagTapped?(hashtag)
                     onDismiss()
                 }
                 .lineLimit(3)
+                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             }
         }
     }

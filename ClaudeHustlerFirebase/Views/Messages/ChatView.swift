@@ -27,6 +27,7 @@ struct ChatView: View {
     @State private var otherUser: User?
     @State private var currentConversationId: String?
     @State private var isFromContentView = false
+    @State private var showingReelDetail = false
     
     // Navigation states
     @State private var postToShow: ServicePost? = nil
@@ -148,10 +149,10 @@ struct ChatView: View {
                 FullScreenReelView(
                     reel: reel,
                     isCurrentReel: true,
-                    onDismiss: {
-                        reelToShow = nil
-                    },
-                    viewModel: reelsViewModel
+                    onDismiss: { showingReelDetail = false },
+                    viewModel: reelsViewModel,
+                    isCleanView: false,  // Add this line - default to showing UI
+                    onHashtagTapped: nil
                 )
                 
                 VStack {
