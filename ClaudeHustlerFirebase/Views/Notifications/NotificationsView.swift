@@ -455,31 +455,11 @@ struct ReelWithCommentPresenter: View {
     var body: some View {
         Group {
             if let reel = reel {
-                ZStack {
-                    VerticalReelScrollView(
-                        reels: [reel],
-                        initialIndex: 0,
-                        viewModel: viewModel
-                    )
-                    
-                    VStack {
-                        HStack {
-                            Button(action: { dismiss() }) {
-                                Image(systemName: "xmark")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .background(Color.black.opacity(0.5))
-                                    .clipShape(Circle())
-                            }
-                            .padding()
-                            
-                            Spacer()
-                        }
-                        
-                        Spacer()
-                    }
-                }
+                VerticalReelScrollView(
+                    reels: [reel],
+                    initialIndex: 0,
+                    viewModel: viewModel
+                )
                 .onAppear {
                     // Auto-open comments after a brief delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
