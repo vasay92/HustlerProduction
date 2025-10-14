@@ -1,4 +1,4 @@
-// PortfolioGalleryView.swift
+// PortfolioGalleryView.swift - FIXED with proper multi-image selection
 // Path: ClaudeHustlerFirebase/Views/Profile/PortfolioGalleryView.swift
 
 import SwiftUI
@@ -13,47 +13,83 @@ struct PortfolioGalleryView: View {
     
     @State private var showingImagePicker = false
     @State private var newImages: [UIImage] = []
-    @State private var singleImage: UIImage? = nil
     @State private var isAddingImages = false
     @State private var showingEditSheet = false
     @State private var showingDeleteConfirmation = false
     @State private var mediaURLs: [String] = []
     
+    // Grid configuration for uniform squares like iPhone Photos
+    private let columns = 3
+    private let spacing: CGFloat = 2
+    private var gridItemSize: CGFloat {
+        let totalSpacing = spacing * CGFloat(columns - 1)
+        let width = UIScreen.main.bounds.width - totalSpacing
+        return width / CGFloat(columns)
+    }
+    
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Title at the top
-                    Text(card.title)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .padding(.horizontal)
-                    
-                    // Show description if available (no "Description" label)
-                    if let description = card.description, !description.isEmpty {
-                        Text(description)
-                            .font(.body)
-                            .foregroundColor(.primary)
+            ZStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Title at the top
+                        Text(card.title)
+                            .font(.title2)
+                            .fontWeight(.bold)
                             .padding(.horizontal)
-                    }
-                    
-                    // Show date created (no "Created" label)
-                    Text(card.createdAt, style: .date)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                    
-                    // Images Grid
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
-                            portfolioImageCell(url: url, index: index)
+                        
+                        // Show description if available
+                        if let description = card.description, !description.isEmpty {
+                            Text(description)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .padding(.horizontal)
                         }
                         
-                        if isOwner {
-                            addImagesButton
+                        // Show date created
+                        Text(card.createdAt, style: .date)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal)
+                        
+                        // Images Grid - 3 columns with uniform squares
+                        LazyVGrid(columns: [
+                            GridItem(.fixed(gridItemSize), spacing: spacing),
+                            GridItem(.fixed(gridItemSize), spacing: spacing),
+                            GridItem(.fixed(gridItemSize), spacing: spacing)
+                        ], spacing: spacing) {
+                            ForEach(Array(mediaURLs.enumerated()), id: \.offset) { index, url in
+                                portfolioImageCell(url: url, index: index)
+                            }
+                        }
+                        .padding(.horizontal, 0)
+                        .padding(.bottom, isOwner ? 80 : 20) // Extra padding if FAB is shown
+                    }
+                }
+                
+                // Floating Action Button (bottom right corner)
+                if isOwner {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: { showingImagePicker = true }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.blue)
+                                        .frame(width: 60, height: 60)
+                                    
+                                    Image(systemName: "plus")
+                                        .font(.title2)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 20)
                         }
                     }
-                    .padding()
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -62,10 +98,12 @@ struct PortfolioGalleryView: View {
                 EditPortfolioDetailsView(card: card, profileViewModel: profileViewModel)
             }
             .sheet(isPresented: $showingImagePicker) {
-                ImagePicker(images: $newImages, singleImage: $singleImage)
+                MultiImagePickerForPortfolio(images: $newImages)
                     .onDisappear {
                         if !newImages.isEmpty {
-                            Task { await addMoreImages(newImages) }
+                            Task {
+                                await addMoreImages(newImages)
+                            }
                         }
                     }
             }
@@ -76,6 +114,7 @@ struct PortfolioGalleryView: View {
             }
         }
         .onAppear {
+            // Initialize mediaURLs from card
             mediaURLs = card.mediaURLs
         }
     }
@@ -90,63 +129,54 @@ struct PortfolioGalleryView: View {
             currentIndex: .constant(index)
         )) {
             ZStack(alignment: .topTrailing) {
-                AsyncImage(url: URL(string: url)) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 180)
-                        .clipped()
-                        .cornerRadius(12)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 180)
-                        .cornerRadius(12)
-                        .overlay(ProgressView())
+                AsyncImage(url: URL(string: url)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: gridItemSize, height: gridItemSize)
+                            .clipped()
+                            
+                    case .failure(_):
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: gridItemSize, height: gridItemSize)
+                            .overlay(
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundColor(.gray)
+                            )
+                            
+                    case .empty:
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: gridItemSize, height: gridItemSize)
+                            .overlay(ProgressView())
+                            
+                    @unknown default:
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: gridItemSize, height: gridItemSize)
+                    }
                 }
                 
+                // Show delete button when in edit mode
                 if isOwner && isAddingImages {
-                    deleteImageButton(url: url)
+                    Button(action: {
+                        withAnimation {
+                            deleteImage(url: url)
+                        }
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .background(Color.red)
+                            .clipShape(Circle())
+                    }
+                    .padding(4)
                 }
             }
         }
-    }
-    
-    @ViewBuilder
-    private var addImagesButton: some View {
-        Button(action: { showingImagePicker = true }) {
-            Rectangle()
-                .fill(Color.gray.opacity(0.1))
-                .frame(height: 180)
-                .cornerRadius(12)
-                .overlay(
-                    VStack(spacing: 8) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.blue)
-                        Text("Add Images")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                )
-        }
-        .disabled(isAddingImages)
-    }
-    
-    @ViewBuilder
-    private func deleteImageButton(url: String) -> some View {
-        Button(action: {
-            withAnimation {
-                deleteImage(url: url)
-            }
-        }) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.title3)
-                .foregroundColor(.white)
-                .background(Color.black.opacity(0.6))
-                .clipShape(Circle())
-        }
-        .padding(4)
     }
     
     @ToolbarContentBuilder
@@ -159,7 +189,15 @@ struct PortfolioGalleryView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button(action: { showingEditSheet = true }) {
-                        Label("Edit Title", systemImage: "pencil")
+                        Label("Edit Details", systemImage: "pencil")
+                    }
+                    
+                    Button(action: {
+                        withAnimation {
+                            isAddingImages.toggle()
+                        }
+                    }) {
+                        Label(isAddingImages ? "Done Editing" : "Edit Photos", systemImage: "square.and.pencil")
                     }
                     
                     Button(role: .destructive, action: {
@@ -177,29 +215,48 @@ struct PortfolioGalleryView: View {
     // MARK: - Helper Functions
     
     private func addMoreImages(_ images: [UIImage]) async {
+        guard !images.isEmpty else { return }
+        
+        // Show loading state
         isAddingImages = true
         
         do {
             guard let userId = firebase.currentUser?.id,
-                  let cardId = card.id else { return }
+                  let cardId = card.id else {
+                print("❌ Missing user ID or card ID")
+                isAddingImages = false
+                return
+            }
             
+            print("📤 Starting upload of \(images.count) images")
             var newURLs: [String] = []
+            
             for (index, image) in images.enumerated() {
                 let path = "portfolio/\(userId)/\(cardId)/\(UUID().uuidString)_\(index).jpg"
+                print("  Uploading image \(index + 1)/\(images.count)")
                 let url = try await firebase.uploadImage(image, path: path)
                 newURLs.append(url)
             }
             
-            mediaURLs.append(contentsOf: newURLs)
+            print("✅ Uploaded \(newURLs.count) images successfully")
             
+            // Update local state immediately
+            await MainActor.run {
+                mediaURLs.append(contentsOf: newURLs)
+            }
+            
+            // Update the card in Firestore
             var updatedCard = card
             updatedCard.mediaURLs = mediaURLs
             
             try await profileViewModel.updatePortfolioCard(updatedCard)
+            print("✅ Portfolio card updated in database")
             
+            // Clear the selected images
             newImages = []
+            
         } catch {
-            print("Error adding images: \(error)")
+            print("❌ Error adding images: \(error)")
         }
         
         isAddingImages = false
@@ -228,7 +285,73 @@ struct PortfolioGalleryView: View {
     }
 }
 
-// MARK: - Simple Image Viewer
+// MARK: - Custom Multi-Image Picker for Portfolio
+struct MultiImagePickerForPortfolio: UIViewControllerRepresentable {
+    @Binding var images: [UIImage]
+    @Environment(\.dismiss) var dismiss
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 10  // Allow up to 10 images at once
+        config.preferredAssetRepresentationMode = .current
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: MultiImagePickerForPortfolio
+        
+        init(_ parent: MultiImagePickerForPortfolio) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            
+            // Clear previous selections
+            parent.images = []
+            
+            // Handle empty selection
+            guard !results.isEmpty else { return }
+            
+            // Process all selected images
+            let group = DispatchGroup()
+            var loadedImages: [UIImage] = []
+            
+            for result in results {
+                group.enter()
+                
+                if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
+                        if let image = image as? UIImage {
+                            loadedImages.append(image)
+                        }
+                        group.leave()
+                    }
+                } else {
+                    group.leave()
+                }
+            }
+            
+            // Wait for all images to load, then update
+            group.notify(queue: .main) {
+                self.parent.images = loadedImages
+                print("✅ Selected \(loadedImages.count) images")
+            }
+        }
+    }
+}
+
+// MARK: - Image Viewer (unchanged)
 struct ImageViewerView: View {
     let imageURL: String
     let allImageURLs: [String]
@@ -285,7 +408,7 @@ struct ImageViewerView: View {
     }
 }
 
-// MARK: - Edit Portfolio Details View
+// MARK: - Edit Portfolio Details View (unchanged)
 struct EditPortfolioDetailsView: View {
     let card: PortfolioCard
     @ObservedObject var profileViewModel: ProfileViewModel
