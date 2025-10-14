@@ -108,6 +108,7 @@ struct ReelsView: View {
                     
                     if !searchQuery.isEmpty {
                         Button(action: {
+                            // Clear search and return to all reels
                             searchQuery = ""
                             isSearching = false
                             searchResults = []
@@ -123,14 +124,7 @@ struct ReelsView: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(10)
                 
-                if isSearching {
-                    Button("Cancel") {
-                        searchQuery = ""
-                        isSearching = false
-                        searchResults = []
-                    }
-                    .foregroundColor(.blue)
-                }
+                // REMOVED: Cancel button - no longer needed
             }
             .padding(.horizontal)
             
@@ -202,52 +196,23 @@ struct ReelsView: View {
         .padding(.top, 50)
     }
     
+    
     // MARK: - Search Function
-    // Update in ReelRepository.swift - enhance the search function
-
-    func searchReels(query: String, limit: Int = 50) async throws -> [Reel] {
-        let searchLower = query.lowercased()
-        
-        // First, try to get reels with matching tags
-        let tagQuery = db.collection("reels")
-            .whereField("tags", arrayContains: searchLower)
-            .limit(to: limit)
-        
-        let tagSnapshot = try await tagQuery.getDocuments()
-        
-        var reels = tagSnapshot.documents.compactMap { doc -> Reel? in
-            var reel = try? doc.data(as: Reel.self)
-            reel?.id = doc.documentID
-            return reel
+    private func searchReels() async {
+        guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            isSearching = false
+            searchResults = []
+            return
         }
         
-        // If not enough results, search in all reels
-        if reels.count < 10 {
-            let allReelsSnapshot = try await db.collection("reels")
-                .order(by: "createdAt", descending: true)
-                .limit(to: 100)
-                .getDocuments()
-            
-            let additionalReels = allReelsSnapshot.documents.compactMap { doc -> Reel? in
-                var reel = try? doc.data(as: Reel.self)
-                reel?.id = doc.documentID
-                
-                // Check if title or description contains search query
-                if let reel = reel {
-                    let matches = reel.title.lowercased().contains(searchLower) ||
-                                 reel.description.lowercased().contains(searchLower) ||
-                                 reel.tags.contains { $0.lowercased().contains(searchLower) }
-                    
-                    return matches && !reels.contains(where: { $0.id == reel.id }) ? reel : nil
-                }
-                
-                return nil
-            }
-            
-            reels.append(contentsOf: additionalReels)
-        }
+        isSearching = true
         
-        return Array(reels.prefix(limit))
+        do {
+            searchResults = try await viewModel.searchReels(query: searchQuery)
+        } catch {
+            print("Error searching reels: \(error)")
+            searchResults = []
+        }
     }
     
     // MARK: - Status Section
@@ -671,6 +636,7 @@ struct VerticalReelScrollView: View {
     @ObservedObject var viewModel: ReelsViewModel
     @Environment(\.dismiss) var dismiss
     @State private var currentIndex: Int
+    let isCleanView: Bool  // ADD THIS AS A PROP (not @State)
     
     init(reels: [Reel], initialIndex: Int, viewModel: ReelsViewModel) {
         self.reels = reels
@@ -690,7 +656,8 @@ struct VerticalReelScrollView: View {
                             reel: reel,
                             isCurrentReel: index == currentIndex,
                             onDismiss: { dismiss() },
-                            viewModel: viewModel
+                            viewModel: viewModel,
+                            isCleanView: isCleanView  // PASS IT AS PROP
                         )
                         .tag(index)
                         .onAppear {
@@ -700,26 +667,65 @@ struct VerticalReelScrollView: View {
                         }
                     }
                 }
-                .tabViewStyle(PageTabViewStyle())
-                .indexViewStyle(PageIndexViewStyle(backgroundDisplayMode: .never))
-                
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .ignoresSafeArea()
+            }
+            
+            // Top header bar with gradient
+            if !isCleanView {
                 VStack {
-                    HStack {
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "xmark")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Color.black.opacity(0.5))
-                                .clipShape(Circle())
-                        }
-                        .padding()
-                        
-                        Spacer()
-                    }
+                    // Gradient overlay for top bar
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.black.opacity(0.6),
+                            Color.black.opacity(0.3),
+                            Color.black.opacity(0)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 120)
+                    .ignoresSafeArea()
                     
                     Spacer()
                 }
+            }
+            
+            // Top buttons overlay
+            VStack {
+                HStack {
+                    // Close button
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.3))
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                    }
+                    
+                    Spacer()
+                    
+                    // Clean view toggle
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isCleanView.toggle()
+                        }
+                    }) {
+                        Image(systemName: isCleanView ? "eye.slash.fill" : "eye.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.3))
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 50)
+                
+                Spacer()
             }
         }
     }
@@ -754,6 +760,7 @@ struct FullScreenReelView: View {
     @State private var currentReel: Reel?
     
     @StateObject private var firebase = FirebaseService.shared
+    @State private var isCleanView = false
     
     var isOwnReel: Bool {
         reel.userId == firebase.currentUser?.id
@@ -770,33 +777,73 @@ struct FullScreenReelView: View {
                 
                 reelBackgroundContent
                 
-                VStack {
-                    Spacer()
+                // Only show gradient and UI if not in clean view
+                if !isCleanView {
+                    // Gradient overlay
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.black.opacity(0),
+                            Color.black.opacity(0),
+                            Color.black.opacity(0.3),
+                            Color.black.opacity(0.6)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
                     
-                    ZStack(alignment: .bottom) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 10) {
-                                userInfoSection
-                                
-                                if !displayReel.title.isEmpty || !displayReel.description.isEmpty {
-                                    captionSection
-                                }
-                            }
-                            .frame(maxWidth: geometry.size.width * 0.65, alignment: .leading)
-                            .padding(.leading, 16)
-                            .padding(.bottom, 80)
-                            
-                            Spacer()
-                        }
+                    VStack {
+                        Spacer()
                         
-                        HStack {
-                            Spacer()
-                            rightActionButtons
+                        ZStack(alignment: .bottom) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    userInfoSection
+                                    
+                                    if !displayReel.title.isEmpty || !displayReel.description.isEmpty {
+                                        captionSection
+                                    }
+                                }
+                                .frame(maxWidth: geometry.size.width * 0.65, alignment: .leading)
+                                .padding(.leading, 16)
+                                .padding(.bottom, 80)
+                                
+                                Spacer()
+                            }
+                            
+                            HStack {
+                                Spacer()
+                                rightActionButtons
+                            }
                         }
                     }
                 }
+                
+                // Clean view toggle button - always visible
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isCleanView.toggle()
+                            }
+                        }) {
+                            Image(systemName: isCleanView ? "eye.slash.fill" : "eye.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding(12)
+                                .background(Color.black.opacity(0.3))
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                        }
+                        .padding(.top, 50)
+                        .padding(.trailing, 16)
+                    }
+                    Spacer()
+                }
             }
         }
+        // ... rest of your existing modifiers
         .task {
             if isCurrentReel {
                 await setupReelView()
@@ -939,12 +986,14 @@ struct FullScreenReelView: View {
                             }
                         }
                     )
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             }
             
             Text(displayReel.userName ?? "User")
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundColor(.white)
+                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             
             if !isOwnReel {
                 Button(action: { toggleFollow() }) {
@@ -954,12 +1003,17 @@ struct FullScreenReelView: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
-                        .background(isFollowing ? Color.clear : Color.red)
+                        .background(
+                            isFollowing ?
+                            Color.white.opacity(0.2) :
+                            Color.red
+                        )
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
                                 .stroke(isFollowing ? Color.white : Color.clear, lineWidth: 1)
                         )
                         .cornerRadius(4)
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                 }
             }
             
@@ -1031,30 +1085,13 @@ struct FullScreenReelView: View {
             )
             
             Menu {
-                if isOwnReel {
-                    Button(action: { showingEditSheet = true }) {
-                        Label("Edit Caption", systemImage: "pencil")
-                    }
-                    
-                    Divider()
-                    
-                    Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
-                        Label("Delete Reel", systemImage: "trash")
-                    }
-                } else {
-                    Button(action: {}) {
-                        Label("Report", systemImage: "flag")
-                    }
-                    
-                    Button(action: {}) {
-                        Label("Not Interested", systemImage: "hand.raised")
-                    }
-                }
+                // ... menu content
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.title2)
                     .foregroundColor(.white)
                     .frame(width: 44, height: 44)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             }
         }
         .padding(.trailing, 16)
@@ -1476,12 +1513,14 @@ struct ReelActionButton: View {
                     .font(.title)
                     .foregroundColor(color)
                     .scaleEffect(color == .red || color == .yellow ? 1.1 : 1.0)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                 
                 if let text = text {
                     Text(text)
                         .font(.caption2)
                         .foregroundColor(.white)
                         .fontWeight(.semibold)
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                 }
             }
             .frame(width: 44, height: 44)
@@ -1493,7 +1532,6 @@ struct ReelActionButton: View {
         )
     }
 }
-
 // MARK: - Share Sheet
 struct ReelShareSheet: UIViewControllerRepresentable {
     let items: [Any]
