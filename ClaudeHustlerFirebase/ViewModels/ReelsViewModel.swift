@@ -1,6 +1,6 @@
 // ReelsViewModel.swift
 // Path: ClaudeHustlerFirebase/ViewModels/ReelsViewModel.swift
-// UPDATED VERSION - Phase 2.1 MVVM Migration
+// ENHANCED: Added search and trending hashtags functionality
 
 import SwiftUI
 import FirebaseFirestore
@@ -21,6 +21,8 @@ final class ReelsViewModel: ObservableObject {
     @Published var hasMoreReels = true
     @Published var error: Error?
     @Published var currentUserStatus: Status?
+    @Published var trendingHashtags: [String] = []  // For trending hashtags display
+    
     static weak var shared: ReelsViewModel?
     
     // MARK: - Private Properties
@@ -45,7 +47,6 @@ final class ReelsViewModel: ObservableObject {
     // MARK: - Initialization
     init() {
         Self.shared = self
-        // REMOVED: self.currentUserId = Auth.auth().currentUser?.uid
         
         Task {
             await loadInitialData()
@@ -55,7 +56,7 @@ final class ReelsViewModel: ObservableObject {
     deinit {
         statusListener?.remove()
         for (_, listener) in reelListeners {
-            listener.remove()  // FIXED: Removed optional chaining
+            listener.remove()
         }
     }
 
@@ -67,6 +68,7 @@ final class ReelsViewModel: ObservableObject {
             group.addTask { await self.loadStatuses() }
             group.addTask { await self.loadInitialReels() }
             group.addTask { await self.loadTrendingReels() }
+            group.addTask { await self.loadTrendingHashtags() }  // NEW: Load trending hashtags
         }
     }
     
@@ -74,6 +76,88 @@ final class ReelsViewModel: ObservableObject {
         reelsLastDocument = nil
         userReelsLastDocument = nil
         await loadInitialData()
+    }
+    
+    // MARK: - NEW Search Functionality
+    
+    func searchReels(query: String) async throws -> [Reel] {
+        let searchText = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        
+        // Remove # if user typed it
+        let cleanQuery = searchText.hasPrefix("#") ? String(searchText.dropFirst()) : searchText
+        
+        // Search in repository
+        return try await reelRepository.searchReels(query: cleanQuery)
+    }
+    
+    // MARK: - NEW Trending Hashtags
+    
+    func loadTrendingHashtags() async {
+        do {
+            // Get trending tags from recent reels
+            let recentReels = try await reelRepository.fetch(limit: 100).items
+            
+            var tagCounts: [String: Int] = [:]
+            
+            // Count occurrences of each hashtag
+            for reel in recentReels {
+                // Extract hashtags from description
+                let hashtags = extractHashtags(from: reel.description)
+                for tag in hashtags {
+                    tagCounts[tag, default: 0] += 1
+                }
+                
+                // Also count tags array if it exists
+                for tag in reel.tags {
+                    tagCounts[tag, default: 0] += 1
+                }
+            }
+            
+            // Sort by count and take top 10
+            trendingHashtags = tagCounts.sorted { $0.value > $1.value }
+                .prefix(10)
+                .map { $0.key }
+            
+        } catch {
+            print("Error loading trending hashtags: \(error)")
+            trendingHashtags = []
+        }
+    }
+    
+    // MARK: - Helper function to extract hashtags from text
+    
+    private func extractHashtags(from text: String) -> [String] {
+        let pattern = #"#\w+"#
+        var hashtags: [String] = []
+        
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            let nsString = text as NSString
+            let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsString.length))
+            
+            for match in matches {
+                let hashtag = nsString.substring(with: match.range)
+                // Remove the # symbol
+                let cleanHashtag = String(hashtag.dropFirst())
+                if !cleanHashtag.isEmpty {
+                    hashtags.append(cleanHashtag.lowercased())
+                }
+            }
+        } catch {
+            print("Error extracting hashtags: \(error)")
+        }
+        
+        return hashtags
+    }
+    
+    // MARK: - Search by hashtag
+    
+    func searchReelsByHashtag(_ hashtag: String) async throws -> [Reel] {
+        // Clean the hashtag (remove # if present)
+        let cleanHashtag = hashtag.hasPrefix("#") ? String(hashtag.dropFirst()) : hashtag
+        
+        // Search for reels with this specific hashtag
+        return try await reelRepository.searchReels(query: cleanHashtag)
     }
     
     // MARK: - Status Methods
@@ -238,7 +322,7 @@ final class ReelsViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Reel Interactions (UPDATED FOR MVVM)
+    // MARK: - Reel Interactions
     
     func likeReel(_ reelId: String) async {
         do {
@@ -301,7 +385,7 @@ final class ReelsViewModel: ObservableObject {
         userReels.removeAll { $0.id == reelId }
     }
     
-    // MARK: - Save/Unsave Methods (NEW)
+    // MARK: - Save/Unsave Methods
     
     func saveReel(_ reelId: String) async throws -> Bool {
         return try await savedItemsRepository.toggleSave(
@@ -324,7 +408,7 @@ final class ReelsViewModel: ObservableObject {
         )
     }
     
-    // MARK: - Follow/Unfollow Methods (NEW)
+    // MARK: - Follow/Unfollow Methods
     
     func followReelCreator(_ userId: String) async throws {
         try await userRepository.followUser(userId)
@@ -357,45 +441,59 @@ final class ReelsViewModel: ObservableObject {
     // MARK: - Create/Update Reel
     
     func createReel(
-            title: String,
-            description: String,
-            videoURL: String,
-            thumbnailURL: String? = nil,
-            hashtags: [String] = []
-        ) async throws -> String {
-            guard let userId = currentUserId,
-                  let userName = firebase.currentUser?.name else {
-                throw NSError(domain: "ReelsViewModel", code: 0,
-                             userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
-            }
-            
-            let reel = Reel(
-                userId: userId,
-                userName: userName,
-                userProfileImage: firebase.currentUser?.profileImageURL,
-                videoURL: videoURL,
-                thumbnailURL: thumbnailURL ?? videoURL,
-                title: title,
-                description: description,
-                tags: hashtags  // No more category
-            )
-            
-            let reelId = try await reelRepository.create(reel)
-            
-            // Reload reels to show the new one
-            await loadInitialReels()
-            
-            return reelId
+        title: String,
+        description: String,
+        videoURL: String,
+        thumbnailURL: String? = nil,
+        hashtags: [String] = []
+    ) async throws -> String {
+        guard let userId = currentUserId,
+              let userName = firebase.currentUser?.name else {
+            throw NSError(domain: "ReelsViewModel", code: 0,
+                         userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
         }
-
+        
+        // Extract hashtags from description as well
+        let descriptionHashtags = extractHashtags(from: description)
+        let allHashtags = Array(Set(hashtags + descriptionHashtags)) // Combine and remove duplicates
+        
+        let reel = Reel(
+            userId: userId,
+            userName: userName,
+            userProfileImage: firebase.currentUser?.profileImageURL,
+            videoURL: videoURL,
+            thumbnailURL: thumbnailURL ?? videoURL,
+            title: title,
+            description: description,
+            tags: allHashtags
+        )
+        
+        let reelId = try await reelRepository.create(reel)
+        
+        // Reload reels to show the new one
+        await loadInitialReels()
+        
+        // Update trending hashtags
+        await loadTrendingHashtags()
+        
+        return reelId
+    }
     
     func updateReel(_ reel: Reel) async throws {
-        try await reelRepository.update(reel)
+        // Extract hashtags from updated description
+        var updatedReel = reel
+        let descriptionHashtags = extractHashtags(from: reel.description)
+        updatedReel.tags = Array(Set(reel.tags + descriptionHashtags))
+        
+        try await reelRepository.update(updatedReel)
         
         // Update local state
-        if let index = reels.firstIndex(where: { $0.id == reel.id }) {
-            reels[index] = reel
+        if let index = reels.firstIndex(where: { $0.id == updatedReel.id }) {
+            reels[index] = updatedReel
         }
+        
+        // Update trending hashtags
+        await loadTrendingHashtags()
     }
     
     // MARK: - Real-time Listeners
@@ -440,7 +538,8 @@ final class ReelsViewModel: ObservableObject {
     func getReelIndex(_ reel: Reel) -> Int {
         return reels.firstIndex(where: { $0.id == reel.id }) ?? 0
     }
-    // Track reel view
+    
+    // MARK: - Track reel view
     func incrementReelView(_ reelId: String) async {
         guard !reelId.isEmpty else { return }
         

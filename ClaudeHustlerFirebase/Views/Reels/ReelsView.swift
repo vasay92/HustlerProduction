@@ -1,23 +1,27 @@
 // ReelsView.swift
 // Path: ClaudeHustlerFirebase/Views/Reels/ReelsView.swift
-// MODIFIED: Support for multiple statuses per user (Instagram/WhatsApp style)
+// ENHANCED: Added search bar, clickable hashtags, and improved pause functionality
 
 import SwiftUI
 import AVKit
 import FirebaseFirestore
 
-// REMOVED: extension String: Identifiable - already in ProfileSupportingViews.swift
-
 struct ReelsView: View {
     @StateObject private var viewModel = ReelsViewModel()
     @StateObject private var firebase = FirebaseService.shared
     @State private var selectedStatus: Status?
-    @State private var selectedUserId: String? = nil  // NEW: For grouped statuses
+    @State private var selectedUserId: String? = nil
     @State private var showingCreateOptions = false
     @State private var currentReelIndex = 0
     @State private var dragOffset: CGFloat = 0
     @State private var isFullScreenMode = false
     @State private var showingStatusCreation = false
+    
+    // MARK: - NEW Search Properties
+    @State private var searchQuery = ""
+    @State private var isSearching = false
+    @State private var searchResults: [Reel] = []
+    @State private var showingHashtagSearch = false
     
     let columns = [
         GridItem(.flexible(), spacing: 2),
@@ -32,11 +36,20 @@ struct ReelsView: View {
                     // Status Section with user's own status first
                     statusSection
                     
-                    Divider()
+                    // NEW: Search Bar Section
+                    searchBarSection
                         .padding(.vertical, 10)
                     
-                    // Reels Grid Section
-                    reelsGridSection
+                    Divider()
+                    
+                    // Reels Grid Section - Show search results or regular reels
+                    if isSearching && !searchResults.isEmpty {
+                        searchResultsSection
+                    } else if isSearching {
+                        noResultsView
+                    } else {
+                        reelsGridSection
+                    }
                 }
             }
             .navigationBarHidden(true)
@@ -45,6 +58,7 @@ struct ReelsView: View {
             await viewModel.loadStatuses()
             await viewModel.loadInitialReels()
             await viewModel.cleanupExpiredStatuses()
+            await viewModel.loadTrendingHashtags()
         }
         .refreshable {
             await viewModel.refresh()
@@ -52,22 +66,191 @@ struct ReelsView: View {
         .sheet(isPresented: $showingStatusCreation) {
             CameraView(mode: .status)
         }
-        // MODIFIED: Changed to use selectedUserId for grouped statuses
         .fullScreenCover(item: $selectedUserId) { userId in
             StatusViewerView(initialUserId: userId)
         }
         .fullScreenCover(isPresented: $isFullScreenMode) {
-            VerticalReelScrollView(
-                reels: viewModel.reels,
-                initialIndex: currentReelIndex,
-                viewModel: viewModel
-            )
+            if isSearching && !searchResults.isEmpty {
+                VerticalReelScrollView(
+                    reels: searchResults,
+                    initialIndex: currentReelIndex,
+                    viewModel: viewModel
+                )
+            } else {
+                VerticalReelScrollView(
+                    reels: viewModel.reels,
+                    initialIndex: currentReelIndex,
+                    viewModel: viewModel
+                )
+            }
         }
     }
     
-    // MARK: - MODIFIED Status Section (Groups statuses by user)
-    // In ReelsView.swift, replace the statusSection with this:
+    // MARK: - NEW Search Bar Section
+    @ViewBuilder
+    private var searchBarSection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                        .font(.system(size: 16))
+                    
+                    TextField("Search reels by title, description, or #hashtags", text: $searchQuery)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .submitLabel(.search)
+                        .onSubmit {
+                            Task {
+                                await searchReels()
+                            }
+                        }
+                    
+                    if !searchQuery.isEmpty {
+                        Button(action: {
+                            searchQuery = ""
+                            isSearching = false
+                            searchResults = []
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 16))
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                
+                if isSearching {
+                    Button("Cancel") {
+                        searchQuery = ""
+                        isSearching = false
+                        searchResults = []
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+            .padding(.horizontal)
+            
+            // Popular hashtags suggestion
+            if !isSearching && viewModel.trendingHashtags.count > 0 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(viewModel.trendingHashtags.prefix(10), id: \.self) { tag in
+                            Button(action: {
+                                searchQuery = tag
+                                Task {
+                                    await searchReels()
+                                }
+                            }) {
+                                Text("#\(tag)")
+                                    .font(.caption)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue.opacity(0.1))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(15)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+    
+    // MARK: - NEW Search Results Section
+    @ViewBuilder
+    private var searchResultsSection: some View {
+        VStack(alignment: .leading) {
+            Text("Search Results for: \"\(searchQuery)\"")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top, 10)
+            
+            LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, reel in
+                    ReelGridItem(reel: reel) {
+                        currentReelIndex = index
+                        isFullScreenMode = true
+                    }
+                }
+            }
+            .padding(.horizontal, 1)
+        }
+    }
+    
+    // MARK: - NEW No Results View
+    @ViewBuilder
+    private var noResultsView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "magnifyingglass.circle")
+                .font(.system(size: 60))
+                .foregroundColor(.gray)
+            
+            Text("No reels found")
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text("Try searching with different keywords or hashtags")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top, 50)
+    }
+    
+    // MARK: - Search Function
+    // Update in ReelRepository.swift - enhance the search function
 
+    func searchReels(query: String, limit: Int = 50) async throws -> [Reel] {
+        let searchLower = query.lowercased()
+        
+        // First, try to get reels with matching tags
+        let tagQuery = db.collection("reels")
+            .whereField("tags", arrayContains: searchLower)
+            .limit(to: limit)
+        
+        let tagSnapshot = try await tagQuery.getDocuments()
+        
+        var reels = tagSnapshot.documents.compactMap { doc -> Reel? in
+            var reel = try? doc.data(as: Reel.self)
+            reel?.id = doc.documentID
+            return reel
+        }
+        
+        // If not enough results, search in all reels
+        if reels.count < 10 {
+            let allReelsSnapshot = try await db.collection("reels")
+                .order(by: "createdAt", descending: true)
+                .limit(to: 100)
+                .getDocuments()
+            
+            let additionalReels = allReelsSnapshot.documents.compactMap { doc -> Reel? in
+                var reel = try? doc.data(as: Reel.self)
+                reel?.id = doc.documentID
+                
+                // Check if title or description contains search query
+                if let reel = reel {
+                    let matches = reel.title.lowercased().contains(searchLower) ||
+                                 reel.description.lowercased().contains(searchLower) ||
+                                 reel.tags.contains { $0.lowercased().contains(searchLower) }
+                    
+                    return matches && !reels.contains(where: { $0.id == reel.id }) ? reel : nil
+                }
+                
+                return nil
+            }
+            
+            reels.append(contentsOf: additionalReels)
+        }
+        
+        return Array(reels.prefix(limit))
+    }
+    
+    // MARK: - Status Section
     @ViewBuilder
     private var statusSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -138,7 +321,7 @@ struct ReelsView: View {
         }
     }
     
-    // NEW: Helper method to get unique users with statuses
+    // MARK: - Helper method to get unique users with statuses
     private func uniqueStatusUsers() -> [String] {
         let userIds = Set(viewModel.statuses.map { $0.userId })
         return Array(userIds).sorted { userId1, userId2 in
@@ -182,7 +365,8 @@ struct ReelsView: View {
     }
 }
 
-// MARK: - NEW Status Circle Component with Multiple Status Indicator
+
+// MARK: - Status Circle Component with Multiple Status Indicator
 struct StatusCircleWithCount: View {
     let userId: String
     let userName: String
@@ -292,7 +476,7 @@ struct StatusCircleWithCount: View {
     }
 }
 
-// MARK: - NEW Segmented Ring for Multiple Statuses (like Instagram)
+// MARK: - Segmented Ring for Multiple Statuses
 struct SegmentedStatusRing: View {
     let segments: Int
     let isViewed: Bool
@@ -562,6 +746,10 @@ struct FullScreenReelView: View {
     @State private var showingShareSheet = false
     @State private var isDeleting = false
     
+    // NEW: For hashtag search
+    @State private var showingHashtagSearch = false
+    @State private var searchQuery = ""
+    
     @State private var reelListener: ListenerRegistration?
     @State private var currentReel: Reel?
     
@@ -779,6 +967,7 @@ struct FullScreenReelView: View {
         }
     }
     
+    // MARK: - ENHANCED Caption Section with Clickable Hashtags
     @ViewBuilder
     private var captionSection: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -790,11 +979,12 @@ struct FullScreenReelView: View {
             }
             
             if !displayReel.description.isEmpty {
-                Text(displayReel.description)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.9))
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Using the existing HashtagTextView from Components folder
+                HashtagTextView(text: displayReel.description) { hashtag in
+                    // Handle hashtag tap - dismiss current view and trigger search
+                    onDismiss()
+                }
+                .lineLimit(3)
             }
         }
     }
@@ -966,7 +1156,7 @@ struct FullScreenReelView: View {
     }
 }
 
-// MARK: - Reel Viewer View
+// MARK: - Reel Viewer View (Simplified version for direct viewing)
 struct ReelViewerView: View {
     let reel: Reel
     @Environment(\.dismiss) var dismiss
@@ -1060,10 +1250,11 @@ struct ReelViewerView: View {
                         }
                         
                         if !reel.description.isEmpty {
-                            Text(reel.description)
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.9))
-                                .lineLimit(3)
+                            HashtagTextView(text: reel.description) { hashtag in
+                                // Handle hashtag tap
+                                dismiss()
+                            }
+                            .lineLimit(3)
                         }
                     }
                     .padding()

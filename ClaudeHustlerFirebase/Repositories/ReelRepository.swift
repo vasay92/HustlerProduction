@@ -319,4 +319,52 @@ final class ReelRepository: RepositoryProtocol {
         
         return Array(reels.prefix(limit))
     }
+    
+    // Add to ReelRepository.swift
+
+    // MARK: - Search Reels
+    func searchReels(query: String, limit: Int = 50) async throws -> [Reel] {
+        let searchLower = query.lowercased()
+        
+        // First, try to get reels with matching tags
+        let tagQuery = db.collection("reels")
+            .whereField("tags", arrayContains: searchLower)
+            .limit(to: limit)
+        
+        let tagSnapshot = try await tagQuery.getDocuments()
+        
+        var reels = tagSnapshot.documents.compactMap { doc -> Reel? in
+            var reel = try? doc.data(as: Reel.self)
+            reel?.id = doc.documentID
+            return reel
+        }
+        
+        // If not enough results, search in all reels
+        if reels.count < 10 {
+            let allReelsSnapshot = try await db.collection("reels")
+                .order(by: "createdAt", descending: true)
+                .limit(to: 100)
+                .getDocuments()
+            
+            let additionalReels = allReelsSnapshot.documents.compactMap { doc -> Reel? in
+                var reel = try? doc.data(as: Reel.self)
+                reel?.id = doc.documentID
+                
+                // Check if title or description contains search query
+                if let reel = reel {
+                    let matches = reel.title.lowercased().contains(searchLower) ||
+                                 reel.description.lowercased().contains(searchLower) ||
+                                 reel.tags.contains { $0.lowercased().contains(searchLower) }
+                    
+                    return matches && !reels.contains(where: { $0.id == reel.id }) ? reel : nil
+                }
+                
+                return nil
+            }
+            
+            reels.append(contentsOf: additionalReels)
+        }
+        
+        return Array(reels.prefix(limit))
+    }
 }
