@@ -651,11 +651,11 @@ struct VerticalReelScrollView: View {
     @State private var isCleanView = false
     let onHashtagTapped: ((String) -> Void)?
     
-    init(reels: [Reel], initialIndex: Int, viewModel: ReelsViewModel) {
+    init(reels: [Reel], initialIndex: Int, viewModel: ReelsViewModel, onHashtagTapped: ((String) -> Void)? = nil) {
         self.reels = reels
         self.initialIndex = initialIndex
         self.viewModel = viewModel
-        self.onHashtagTapped = onHashtagTapped
+        self.onHashtagTapped = onHashtagTapped  // Now this will work
         _currentIndex = State(initialValue: initialIndex)
     }
     
