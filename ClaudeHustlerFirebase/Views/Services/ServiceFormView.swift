@@ -1,6 +1,5 @@
 // ServiceFormView.swift
-// Path: ClaudeHustlerFirebase/Views/Services/ServiceFormView.swift
-// UPDATED: Replaced categories with tags
+// Updated to remove price field while keeping all other features
 
 import SwiftUI
 import PhotosUI
@@ -16,8 +15,7 @@ struct ServiceFormView: View {
     // Form Fields
     @State private var title = ""
     @State private var description = ""
-    @State private var tags: [String] = []  // UPDATED: Replaced selectedCategory with tags
-    @State private var price = ""
+    @State private var tags: [String] = []
     @State private var location = ""
     @State private var isRequest = false
     @State private var selectedImages: [UIImage] = []
@@ -48,8 +46,7 @@ struct ServiceFormView: View {
         self.existingPost = post
         _title = State(initialValue: post?.title ?? "")
         _description = State(initialValue: post?.description ?? "")
-        _tags = State(initialValue: post?.tags ?? [])  // UPDATED: Initialize tags
-        _price = State(initialValue: post?.price != nil ? String(Int(post!.price!)) : "")
+        _tags = State(initialValue: post?.tags ?? [])
         _location = State(initialValue: post?.location ?? "")
         _locationInput = State(initialValue: post?.location ?? "")
         _isRequest = State(initialValue: post?.isRequest ?? isRequest)
@@ -71,11 +68,6 @@ struct ServiceFormView: View {
         ValidationHelper.validatePostDescription(description)
     }
     
-    private var priceValidation: (isValid: Bool, price: Double?, message: String) {
-        ValidationHelper.validatePostPrice(price)
-    }
-    
-    // UPDATED: Add tag validation
     private var tagsValidation: (isValid: Bool, message: String) {
         if tags.count < 5 {
             return (false, "Please add at least 5 tags")
@@ -89,8 +81,7 @@ struct ServiceFormView: View {
     private var isFormValid: Bool {
         titleValidation.isValid &&
         descriptionValidation.isValid &&
-        priceValidation.isValid &&
-        tagsValidation.isValid  // UPDATED: Include tag validation
+        tagsValidation.isValid
     }
     
     var body: some View {
@@ -100,8 +91,7 @@ struct ServiceFormView: View {
                     typeToggleSection
                     titleSection
                     descriptionSection
-                    tagSection  // UPDATED: Replaced categorySection with tagSection
-                    priceSection
+                    tagSection
                     enhancedLocationSection
                     imagesSection
                     submitSection
@@ -116,7 +106,7 @@ struct ServiceFormView: View {
                 }
             }
             .sheet(isPresented: $showingImagePicker) {
-                MultiImagePicker(images: $selectedImages)
+                ImagePickerView(selectedImages: $selectedImages, maxSelectionCount: 6)
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK") { }
@@ -211,7 +201,6 @@ struct ServiceFormView: View {
         .padding(.horizontal)
     }
     
-    // UPDATED: New tag section replacing category section
     @ViewBuilder
     private var tagSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -237,39 +226,6 @@ struct ServiceFormView: View {
                 
                 PopularTagsView(selectedTags: $tags)
             }
-        }
-        .padding(.horizontal)
-    }
-    
-    @ViewBuilder
-    private var priceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Price")
-                    .font(.headline)
-                Text("(Optional)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            HStack {
-                Text("$")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-                
-                TextField(isRequest ? "Your budget" : "Your price", text: $price)
-                    .keyboardType(.decimalPad)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-            }
-            .withValidation(
-                (priceValidation.isValid, priceValidation.message),
-                showError: $showValidationErrors
-            )
-            
-            RequirementHintView(requirements: [
-                "Leave empty for negotiable pricing",
-                "Maximum: $\(Int(ValidationRules.postPriceMax))"
-            ])
         }
         .padding(.horizontal)
     }
@@ -352,6 +308,7 @@ struct ServiceFormView: View {
                         .font(.caption)
                         .foregroundColor(.red)
                 }
+                
                 // Show validated address
                 if hasValidatedLocation && !displayLocation.isEmpty {
                     HStack {
@@ -384,17 +341,6 @@ struct ServiceFormView: View {
             if let coordinates = validatedCoordinates {
                 MapPreview(
                     coordinate: coordinates,
-                    privacy: locationPrivacy,
-                    approximateRadius: approximateRadius
-                )
-                .frame(height: 200)
-                .cornerRadius(12)
-            }
-            
-            // Show Map Preview if location is validated
-            if hasValidatedLocation, let coords = validatedCoordinates {
-                MapPreview(
-                    coordinate: coords,
                     privacy: locationPrivacy,
                     approximateRadius: approximateRadius
                 )
@@ -443,7 +389,7 @@ struct ServiceFormView: View {
             }
             
             RequirementHintView(requirements: [
-                "Add up to 5 images",
+                "Add up to 6 images",
                 "Images help attract more attention"
             ])
         }
@@ -532,17 +478,6 @@ struct ServiceFormView: View {
                 .foregroundColor(.red)
             }
             
-            if !priceValidation.isValid {
-                HStack(spacing: 4) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption)
-                    Text(priceValidation.message)
-                        .font(.caption)
-                }
-                .foregroundColor(.red)
-            }
-            
-            // UPDATED: Add tag validation message
             if !tagsValidation.isValid {
                 HStack(spacing: 4) {
                     Image(systemName: "xmark.circle.fill")
@@ -613,7 +548,6 @@ struct ServiceFormView: View {
     // MARK: - Actions
     
     private func savePost() {
-        
         showValidationErrors = true
         
         guard isFormValid else {
@@ -626,26 +560,24 @@ struct ServiceFormView: View {
             do {
                 var imageURLs: [String] = []
                 if !selectedImages.isEmpty {
-                    
                     for (_, image) in selectedImages.enumerated() {
                         let imageName = "\(UUID().uuidString).jpg"
                         let imagePath = "posts/\(imageName)"
-                        
-                        
                         let url = try await firebase.uploadImage(image, path: imagePath)
-                        
                         imageURLs.append(url)
                     }
                 }
                 
                 if isEditMode {
+                    // UPDATE EXISTING POST
                     var updatedPost = existingPost!
                     updatedPost.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
                     updatedPost.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-                    updatedPost.tags = tags  // UPDATED: Save tags instead of category
-                    updatedPost.price = priceValidation.price
+                    updatedPost.tags = tags
+                    updatedPost.price = nil // Always nil now
                     updatedPost.location = displayLocation.isEmpty ? location : displayLocation
                     updatedPost.imageURLs = imageURLs.isEmpty ? (existingPost?.imageURLs ?? []) : imageURLs
+                    updatedPost.updatedAt = Date()
                     
                     // Add location data
                     if let coords = validatedCoordinates {
@@ -670,7 +602,7 @@ struct ServiceFormView: View {
                     await ServicesViewModel.shared?.refresh(type: updatedPost.isRequest ? .requests : .offers)
                     
                 } else {
-                    // CREATE NEW POST
+                    // CREATE NEW POST (without price)
                     let newPost = ServicePost(
                         id: nil,
                         userId: firebase.currentUser?.id ?? "",
@@ -678,9 +610,9 @@ struct ServiceFormView: View {
                         userProfileImage: firebase.currentUser?.profileImageURL,
                         title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                        tags: tags,  // UPDATED: Save tags instead of category
-                        price: priceValidation.price,
-                        location: displayLocation.isEmpty ? nil : displayLocation,
+                        tags: tags,
+                        price: nil, // Always nil now
+                        location: displayLocation.isEmpty ? location : displayLocation,
                         imageURLs: imageURLs,
                         isRequest: isRequest,
                         status: .active,
@@ -694,6 +626,7 @@ struct ServiceFormView: View {
                         ) ?? .exact,
                         approximateRadius: approximateRadius
                     )
+                    
                     _ = try await servicesViewModel.createPost(newPost)
                     
                     // Update tag analytics
@@ -707,9 +640,9 @@ struct ServiceFormView: View {
                 
                 dismiss()
             } catch {
-                errorMessage = "Update failed: \(error.localizedDescription)"
+                errorMessage = "Failed to save post: \(error.localizedDescription)"
                 showingError = true
-                print("❌ Update Error: \(error)")
+                print("❌ Save Error: \(error)")
             }
             
             isSaving = false
@@ -850,21 +783,17 @@ struct MapPreview: View {
     }
 }
 
-struct MapPin: Identifiable {
-    let id = UUID()
-    let coordinate: CLLocationCoordinate2D
-}
-
-// MARK: - Multi Image Picker
-
-struct MultiImagePicker: UIViewControllerRepresentable {
-    @Binding var images: [UIImage]
+// MARK: - Image Picker View
+struct ImagePickerView: UIViewControllerRepresentable {
+    @Binding var selectedImages: [UIImage]
+    let maxSelectionCount: Int
     @Environment(\.dismiss) var dismiss
     
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.filter = .images
-        config.selectionLimit = 5  // Allow up to 5 images
+        config.selectionLimit = maxSelectionCount
+        config.preferredAssetRepresentationMode = .current
         
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
@@ -878,73 +807,87 @@ struct MultiImagePicker: UIViewControllerRepresentable {
     }
     
     class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let parent: MultiImagePicker
+        let parent: ImagePickerView
         
-        init(_ parent: MultiImagePicker) {
+        init(_ parent: ImagePickerView) {
             self.parent = parent
         }
         
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             picker.dismiss(animated: true)
             
-            parent.images = []  // Clear previous selections
+            // Clear previous selections
+            parent.selectedImages = []
+            
+            // Handle empty selection
+            guard !results.isEmpty else { return }
+            
+            // Process all selected images
+            let group = DispatchGroup()
+            var loadedImages: [UIImage] = []
             
             for result in results {
+                group.enter()
+                
                 if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
                     result.itemProvider.loadObject(ofClass: UIImage.self) { image, error in
                         if let image = image as? UIImage {
-                            DispatchQueue.main.async {
-                                self.parent.images.append(image)
-                                
-                            }
+                            loadedImages.append(image)
                         }
+                        group.leave()
                     }
+                } else {
+                    group.leave()
                 }
+            }
+            
+            // Wait for all images to load, then update
+            group.notify(queue: .main) {
+                self.parent.selectedImages = loadedImages
+                print("✅ Selected \(loadedImages.count) images")
             }
         }
     }
 }
 
-// MARK: - Popular Tags View Component (NEW)
+// MARK: - Popular Tags View
 struct PopularTagsView: View {
     @Binding var selectedTags: [String]
-    @State private var popularTags: [String] = []
     @StateObject private var tagRepository = TagRepository.shared
+    @State private var popularTags: [String] = []
+    
+    private let commonServiceTags = [
+        "#plumbing", "#electrical", "#cleaning", "#painting", "#carpentry",
+        "#landscaping", "#moving", "#tutoring", "#petcare", "#babysitting",
+        "#repair", "#installation", "#maintenance", "#delivery", "#assembly"
+    ]
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(popularTags, id: \.self) { tag in
-                    if !selectedTags.contains(tag) && selectedTags.count < 10 {
-                        Button(action: {
-                            withAnimation {
-                                selectedTags.append(tag)
-                            }
-                        }) {
-                            Text(tag)
-                                .font(.caption)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.blue.opacity(0.1))
-                                .foregroundColor(.blue)
-                                .cornerRadius(15)
+                ForEach(commonServiceTags, id: \.self) { tag in
+                    Button(action: {
+                        if !selectedTags.contains(tag) && selectedTags.count < ValidationRules.maxTags {
+                            selectedTags.append(tag)
                         }
+                    }) {
+                        Text(tag)
+                            .font(.caption)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                selectedTags.contains(tag) ?
+                                Color.blue : Color(.systemGray5)
+                            )
+                            .foregroundColor(
+                                selectedTags.contains(tag) ?
+                                .white : .primary
+                            )
+                            .cornerRadius(15)
                     }
-                }
-            }
-        }
-        .onAppear {
-            Task {
-                do {
-                    popularTags = try await tagRepository.fetchTrendingTags(limit: 15)
-                } catch {
-                    print("Failed to load popular tags: \(error)")
+                    .disabled(selectedTags.contains(tag))
                 }
             }
         }
     }
-}
-
-#Preview {
-    ServiceFormView()
 }

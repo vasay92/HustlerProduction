@@ -290,6 +290,7 @@ struct ServicesView: View {
 
 
 // MARK: - UPDATED: Minimal Service Card (for grid view) with tags
+// MARK: - Minimal Service Card (for grid view)
 struct MinimalServiceCard: View {
     let post: ServicePost
     let isRequest: Bool
@@ -329,7 +330,7 @@ struct MinimalServiceCard: View {
                 }
             }
             
-            // UPDATED: Title and Tags Section
+            // Title and Tags Section
             VStack(alignment: .leading, spacing: 2) {
                 Text(post.title)
                     .font(.caption)
@@ -360,9 +361,7 @@ struct MinimalServiceCard: View {
         Rectangle()
             .fill(
                 LinearGradient(
-                    colors: isRequest ?
-                        [Color.orange.opacity(0.3), Color.red.opacity(0.3)] :
-                        [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
+                    colors: isRequest ? [Color.orange.opacity(0.3), Color.red.opacity(0.3)] : [Color.blue.opacity(0.3), Color.purple.opacity(0.3)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -382,10 +381,16 @@ struct MinimalServiceCard: View {
     }
 }
 
-// MARK: - UPDATED: Service List Card (for list view) with tags
+// MARK: - Service List Card (for list view)
+// ServiceListCard_Updated.swift
+// UPDATED: Service List Card with abbreviated time, clickable tags, and no price
+
+import SwiftUI
+
 struct ServiceListCard: View {
     let post: ServicePost
     let isRequest: Bool
+    @StateObject private var servicesViewModel = ServicesViewModel.shared ?? ServicesViewModel()
     
     var body: some View {
         HStack(spacing: 12) {
@@ -441,19 +446,25 @@ struct ServiceListCard: View {
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                 
-                // UPDATED: Tags instead of category
+                // UPDATED: Clickable Tags and Time with abbreviated format
                 HStack {
                     if !post.tags.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 4) {
                                 ForEach(post.tags.prefix(3), id: \.self) { tag in
-                                    Text(tag)
-                                        .font(.caption2)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Color(.systemGray5))
-                                        .foregroundColor(.secondary)
-                                        .cornerRadius(4)
+                                    Button(action: {
+                                        // Navigate to Services tab and add filter
+                                        TabSelection.shared.selectedTab = 1 // Services tab
+                                        servicesViewModel.addTagFilter(tag)
+                                    }) {
+                                        Text(tag)
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color(.systemGray5))
+                                            .foregroundColor(.primary)
+                                            .cornerRadius(4)
+                                    }
                                 }
                                 if post.tags.count > 3 {
                                     Text("+\(post.tags.count - 3)")
@@ -467,11 +478,10 @@ struct ServiceListCard: View {
                     
                     Spacer()
                     
-                    if let price = post.price {
-                        Text("$\(Int(price))")
-                            .font(.headline)
-                            .foregroundColor(isRequest ? .orange : .green)
-                    }
+                    // Time with abbreviated format
+                    Text(timeAgo(from: post.createdAt))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             
@@ -500,5 +510,119 @@ struct ServiceListCard: View {
                     .font(.title2)
                     .foregroundColor(.white)
             )
+    }
+    
+    // Abbreviated time format function
+    private func timeAgo(from date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.minute, .hour, .day, .weekOfYear, .month, .year], from: date, to: now)
+        
+        if let year = components.year, year > 0 {
+            return "\(year)y"
+        } else if let month = components.month, month > 0 {
+            return "\(month)mo"
+        } else if let week = components.weekOfYear, week > 0 {
+            return "\(week)w"
+        } else if let day = components.day, day > 0 {
+            return "\(day)d"
+        } else if let hour = components.hour, hour > 0 {
+            return "\(hour)h"
+        } else if let minute = components.minute, minute > 0 {
+            return "\(minute)m"
+        } else {
+            return "now"
+        }
+    }
+}
+
+// TabSelection class to handle navigation
+class TabSelection: ObservableObject {
+    static let shared = TabSelection()
+    @Published var selectedTab = 0
+}
+
+
+// MARK: - Service Search View (for hashtag searches)
+struct ServiceSearchView: View {
+    let searchQuery: String
+    @StateObject private var viewModel = ServicesViewModel()
+    @State private var searchResults: [ServicePost] = []
+    @State private var isLoading = true
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Search header
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Search Results")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    Text(searchQuery)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                }
+                
+                Text("\(searchResults.count) posts found")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            
+            if isLoading {
+                Spacer()
+                ProgressView("Searching...")
+                Spacer()
+            } else if searchResults.isEmpty {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "magnifyingglass.circle")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray)
+                    Text("No posts found")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                    Text("Try searching with different tags")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(searchResults) { post in
+                            NavigationLink(destination: PostDetailView(post: post)) {
+                                ServiceListCard(post: post, isRequest: post.isRequest)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding()
+                }
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await searchPosts()
+        }
+    }
+    
+    private func searchPosts() async {
+        isLoading = true
+        
+        do {
+            // Search for posts with this tag
+            // For general search including tags
+            searchResults = try await PostRepository.shared.searchPostsWithTags(query: searchQuery, tags: nil)
+            isLoading = false
+        } catch {
+            print("Error searching posts: \(error)")
+            isLoading = false
+        }
     }
 }

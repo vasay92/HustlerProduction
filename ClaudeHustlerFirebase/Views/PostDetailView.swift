@@ -1,6 +1,6 @@
 // PostDetailView.swift
 // Path: ClaudeHustlerFirebase/Views/Post/PostDetailView.swift
-// UPDATED: Complete file with tags instead of categories
+// UPDATED: Removed price, Active status, improved time format, added clickable photos and hashtags, rating display
 
 import SwiftUI
 import Firebase
@@ -18,6 +18,10 @@ struct PostDetailView: View {
     @State private var showingEditView = false
     @State private var showingDeleteConfirmation = false
     @State private var isDeleting = false
+    @State private var showingFullScreenImage = false
+    @State private var selectedImageIndex = 0
+    @State private var showingImageViewer = false
+    @State private var selectedImageURL: String?
     
     var body: some View {
         ZStack {
@@ -84,6 +88,15 @@ struct PostDetailView: View {
         .sheet(isPresented: $showingEditView) {
             ServiceFormView(post: post)
         }
+        .fullScreenCover(isPresented: $showingImageViewer) {
+            if let imageURL = selectedImageURL,
+               let index = post.imageURLs.firstIndex(of: imageURL) {
+                ReviewImageViewer(
+                    imageURLs: post.imageURLs,
+                    selectedIndex: index
+                )
+            }
+        }
         // FIX #2: ADD MESSAGE NAVIGATION
         .fullScreenCover(isPresented: $showingMessageView) {
             ChatView(
@@ -108,14 +121,15 @@ struct PostDetailView: View {
         } message: {
             Text("This action cannot be undone.")
         }
+        
     }
     
-    // MARK: - Photo Gallery Section
+    // MARK: - Photo Gallery Section with Clickable Images
     @ViewBuilder
     private var photoGallerySection: some View {
         if !post.imageURLs.isEmpty {
             VStack(spacing: 0) {
-                // Main Image
+                // Main Image - Now Clickable
                 TabView(selection: $selectedPhotoIndex) {
                     ForEach(Array(post.imageURLs.enumerated()), id: \.offset) { index, imageURL in
                         AsyncImage(url: URL(string: imageURL)) { phase in
@@ -125,6 +139,11 @@ struct PostDetailView: View {
                                     .resizable()
                                     .scaledToFit()
                                     .frame(maxHeight: 350)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedImageIndex = index
+                                        showingFullScreenImage = true
+                                    }
                                     .tag(index)
                             case .failure(_):
                                 Image(systemName: "photo")
@@ -213,7 +232,7 @@ struct PostDetailView: View {
         }
     }
     
-    // MARK: - Post Details Section
+    // MARK: - Post Details Section (without price and Active status)
     @ViewBuilder
     private var postDetailsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -221,19 +240,6 @@ struct PostDetailView: View {
             Text(post.title)
                 .font(.title2)
                 .fontWeight(.bold)
-            
-            // Price
-            if let price = post.price {
-                Text(post.isRequest ? "Budget: $\(Int(price))" : "$\(Int(price))")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(post.isRequest ? .orange : .green)
-            } else {
-                Text(post.isRequest ? "Budget: Flexible" : "Contact for price")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.gray)
-            }
             
             // Location
             if let location = post.location, !location.isEmpty {
@@ -247,39 +253,39 @@ struct PostDetailView: View {
                 }
             }
             
-            // UPDATED: Tags instead of category badge
+            // UPDATED: Clickable Tags
             if !post.tags.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(post.tags, id: \.self) { tag in
-                            TagChip(
-                                tag: tag,
-                                isClickable: false
-                            )
+                            Button(action: {
+                                // Navigate to ServicesView with tag filter
+                                dismiss() // Close the detail view first
+                                
+                                // Small delay to ensure dismiss completes
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    TabSelection.shared.selectedTab = 1 // Services tab
+                                    // Add tag to filter in ServicesViewModel
+                                    ServicesViewModel.shared?.addTagFilter(tag)
+                                }
+                            }) {
+                                TagChip(
+                                    tag: tag,
+                                    isClickable: true
+                                )
+                            }
                         }
                     }
                 }
             }
             
-            // Request/Offer and Status badges
+            // Request/Offer badge only
             HStack {
                 if post.isRequest {
                     RequestBadge()
                 }
                 
                 Spacer()
-                
-                // Status badge
-                if post.status == .active {
-                    Text("ACTIVE")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.green)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.green.opacity(0.1))
-                        .cornerRadius(4)
-                }
             }
             
             Divider()
@@ -293,12 +299,12 @@ struct PostDetailView: View {
                 .font(.body)
                 .foregroundColor(.primary.opacity(0.9))
             
-            // Posted Date
+            // Posted Date with improved format
             HStack {
                 Image(systemName: "clock")
                     .font(.caption)
                     .foregroundColor(.gray)
-                Text("Posted \(post.createdAt, style: .relative) ago")
+                Text("Posted \(timeAgo(from: post.createdAt))")
                     .font(.caption)
                     .foregroundColor(.gray)
             }
@@ -308,7 +314,7 @@ struct PostDetailView: View {
         .background(Color(.systemBackground))
     }
     
-    // MARK: - User Info Section
+    // MARK: - User Info Section with Rating Display
     @ViewBuilder
     private var userInfoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -325,6 +331,29 @@ struct PostDetailView: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
+                        
+                        // Rating Display
+                        if let rating = posterInfo?.rating,
+                           let reviewCount = posterInfo?.reviewCount,
+                           reviewCount > 0 {
+                            HStack(spacing: 4) {
+                                ForEach(0..<5) { index in
+                                    Image(systemName: index < Int(rating) ? "star.fill" : "star")
+                                        .font(.caption2)
+                                        .foregroundColor(.orange)
+                                }
+                                Text(String(format: "%.1f", rating))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("(\(reviewCount))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            Text("No reviews yet")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                         
                         if let memberSince = posterInfo?.createdAt {
                             Text("Member since \(yearFormatter.string(from: memberSince))")
@@ -381,13 +410,45 @@ struct PostDetailView: View {
     }
     
     // MARK: - Helper Functions
+    
+    // Improved time format function
+    private func timeAgo(from date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.year, .month, .weekOfYear, .day, .hour, .minute], from: date, to: now)
+        
+        if let year = components.year, year >= 2 {
+            return "\(year) years ago"
+        } else if let year = components.year, year >= 1 {
+            return "1 year ago"
+        } else if let month = components.month, month >= 2 {
+            return "\(month) months ago"
+        } else if let month = components.month, month >= 1 {
+            return "1 month ago"
+        } else if let week = components.weekOfYear, week >= 2 {
+            return "\(week) weeks ago"
+        } else if let week = components.weekOfYear, week >= 1 {
+            return "1 week ago"
+        } else if let day = components.day, day >= 2 {
+            return "\(day) days ago"
+        } else if let day = components.day, day >= 1 {
+            return "1 day ago"
+        } else if let hour = components.hour, hour >= 2 {
+            return "\(hour) hours ago"
+        } else if let hour = components.hour, hour >= 1 {
+            return "1 hour ago"
+        } else if let minute = components.minute, minute >= 2 {
+            return "\(minute) minutes ago"
+        } else if let minute = components.minute, minute >= 1 {
+            return "1 minute ago"
+        } else {
+            return "just now"
+        }
+    }
+    
     private func shareContent() -> String {
         var content = "\(post.title)\n\n"
         content += "\(post.description)\n\n"
-        
-        if let price = post.price {
-            content += "Price: $\(Int(price))\n"
-        }
         
         if !post.tags.isEmpty {
             content += "Tags: \(post.tags.joined(separator: " "))\n"
