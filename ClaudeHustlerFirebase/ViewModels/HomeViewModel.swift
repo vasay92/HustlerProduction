@@ -85,7 +85,7 @@ class HomeViewModel: ObservableObject {
             preloadImages()
             
         } catch {
-            print("Error loading posts: \(error)")
+            
             posts = []
             hasMore = false
         }
@@ -110,7 +110,7 @@ class HomeViewModel: ObservableObject {
             preloadImages(for: result.items)
             
         } catch {
-            print("Error loading more posts: \(error)")
+            
             hasMore = false
         }
         
@@ -152,7 +152,7 @@ class HomeViewModel: ObservableObject {
         
         if !urls.isEmpty {
             SDWebImagePrefetcher.shared.prefetchURLs(urls) { finishedCount, totalCount in
-                print("Preloaded \(finishedCount) of \(totalCount) images")
+                
             }
         }
     }

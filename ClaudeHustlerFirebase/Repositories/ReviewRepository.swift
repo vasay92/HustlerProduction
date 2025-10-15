@@ -366,7 +366,7 @@ final class ReviewRepository: RepositoryProtocol {
             let average = Double(totalRating) / Double(reviews.count)
             return (average, reviews.count, breakdown)
         } catch {
-            print("Error getting review stats: \(error)")
+            
             return (0.0, 0, [:])
         }
     }
@@ -374,11 +374,7 @@ final class ReviewRepository: RepositoryProtocol {
     // MARK: - Create with Images
     // MARK: - Create with Images (FIXED WITH LOGGING)
        func createReview(for userId: String, rating: Int, text: String, images: [UIImage] = []) async throws -> Review {
-           print("📝 ReviewRepository.createReview called")
-           print("  For user: \(userId)")
-           print("  Rating: \(rating)")
-           print("  Text length: \(text.count)")
-           print("  Images count: \(images.count)")
+           
            
            guard let reviewerId = Auth.auth().currentUser?.uid else {
                throw NSError(domain: "ReviewRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "No authenticated user"])
@@ -392,23 +388,23 @@ final class ReviewRepository: RepositoryProtocol {
            
            // Upload images if provided
            if !images.isEmpty {
-               print("📤 Starting image uploads...")
+               
                for (index, image) in images.enumerated() {
-                   print("  Uploading image \(index + 1) of \(images.count)...")
+                   
                    
                    let path = "reviews/\(reviewerId)/\(UUID().uuidString)_\(index).jpg"
-                   print("  Path: \(path)")
+                   
                    
                    do {
                        let url = try await FirebaseService.shared.uploadImage(image, path: path)
                        mediaURLs.append(url)
-                       print("  ✅ Uploaded: \(url)")
+                       
                    } catch {
-                       print("  ❌ Failed to upload image \(index + 1): \(error)")
+                       
                        throw error
                    }
                }
-               print("✅ All images uploaded successfully")
+               
            }
            
            // Get reviewer info
@@ -426,15 +422,13 @@ final class ReviewRepository: RepositoryProtocol {
                mediaURLs: mediaURLs  // This should now contain the uploaded URLs
            )
            
-           print("📝 Creating review document in Firestore...")
-           print("  Media URLs in review: \(review.mediaURLs.count)")
+           
            
            let reviewId = try await create(review)
            var newReview = review
            newReview.id = reviewId
            
-           print("✅ Review created with ID: \(reviewId)")
-           print("  Final media URLs count: \(newReview.mediaURLs.count)")
+           
            
            return newReview
        }
@@ -448,7 +442,7 @@ final class ReviewRepository: RepositoryProtocol {
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
-                    print("Error listening to reviews: \(error)")
+                    
                     completion([])
                     return
                 }
@@ -481,7 +475,7 @@ final class ReviewRepository: RepositoryProtocol {
         do {
             try await notificationRepository.markAsRead(notificationId)
         } catch {
-            print("Error marking notification as read: \(error)")
+            
         }
     }
     

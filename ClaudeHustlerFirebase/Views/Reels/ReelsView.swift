@@ -1142,7 +1142,7 @@ struct FullScreenReelView: View {
                 try await viewModel.toggleFollowReelCreator(reel.userId)
                 isFollowing.toggle()
             } catch {
-                print("Error toggling follow: \(error)")
+                
             }
         }
     }
@@ -1452,7 +1452,7 @@ struct ReelViewerView: View {
                 try await viewModel.toggleFollowReelCreator(reel.userId)
                 isFollowing.toggle()
             } catch {
-                print("Error toggling follow: \(error)")
+                
             }
         }
     }
@@ -1464,7 +1464,7 @@ struct ReelViewerView: View {
             do {
                 isSaved = try await viewModel.toggleSaveReel(reelId)
             } catch {
-                print("Error toggling save: \(error)")
+                
             }
         }
     }

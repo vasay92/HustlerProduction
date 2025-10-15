@@ -343,7 +343,7 @@ final class NotificationRepository {
         ]
         
         try await db.collection("notifications").addDocument(data: data)
-        print("✅ Notification saved to Firestore")
+        
     }
     
     // MARK: - Fetch Notifications
@@ -439,7 +439,7 @@ final class NotificationRepository {
             .limit(to: 100)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
-                    print("❌ Error listening to notifications: \(error)")
+                    
                     completion([])
                     return
                 }
@@ -450,8 +450,7 @@ final class NotificationRepository {
                     return notification
                 } ?? []
                 
-                print("📬 Received \(notifications.count) notifications from listener")
-                print("   Unread messages: \(notifications.filter { !$0.isRead && ($0.type == .newMessage || $0.type == .messageRequest) }.count)")
+                
                 
                 completion(notifications)
             }
@@ -473,11 +472,7 @@ final class NotificationRepository {
     ) async {
         // This would integrate with your FCM backend service
         // For now, we'll just log it
-        print("📱 Would send push notification:")
-        print("  To: \(token)")
-        print("  Title: \(title)")
-        print("  Body: \(body)")
-        print("  Data: \(data)")
+       
         
         // In production, you would call your backend API or Cloud Function here
         // Example:

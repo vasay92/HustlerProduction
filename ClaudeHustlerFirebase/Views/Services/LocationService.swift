@@ -122,12 +122,12 @@ extension LocationService: CLLocationManagerDelegate {
             startUpdatingLocation()
         case .denied:
             locationError = "Location access denied. Please enable in Settings > Privacy > Location Services"
-            print("❌ LocationService: Location access denied")
+            
         case .restricted:
             locationError = "Location access restricted"
-            print("❌ LocationService: Location access restricted")
+            
         case .notDetermined:
-            print("📍 LocationService: Location permission not determined")
+            break
         @unknown default:
             break
         }
@@ -136,17 +136,17 @@ extension LocationService: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         
-        print("📍 LocationService: Received location update - Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude)")
+        
         userLocation = location.coordinate
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("❌ LocationService: Location error: \(error.localizedDescription)")
+        
         locationError = error.localizedDescription
         
         // If it's a network error, we might still have a cached location
         if let location = manager.location {
-            print("📍 LocationService: Using cached location")
+            
             userLocation = location.coordinate
         }
     }

@@ -67,7 +67,7 @@ final class NotificationsViewModel: ObservableObject {
                 self.error = error
                 self.isLoading = false
             }
-            print("Error loading notifications: \(error)")
+            
         }
     }
     
@@ -80,11 +80,7 @@ final class NotificationsViewModel: ObservableObject {
                 self?.notifications = notifications
                 self?.unreadCount = notifications.filter { !$0.isRead }.count
                 
-                print("🔔 NotificationsViewModel updated:")
-                print("   Total: \(notifications.count)")
-                print("   Bell count: \(self?.bellNotificationCount ?? 0)")
-                print("   Message count: \(self?.messageNotificationCount ?? 0)")
-                
+               
                 // Update app badge
                 await self?.updateAppBadge()
             }
@@ -109,7 +105,7 @@ final class NotificationsViewModel: ObservableObject {
                 unreadCount = notifications.filter { !$0.isRead }.count
             }
         } catch {
-            print("Error marking notification as read: \(error)")
+            
         }
     }
     
@@ -123,7 +119,7 @@ final class NotificationsViewModel: ObservableObject {
             }
             unreadCount = 0
         } catch {
-            print("Error marking all notifications as read: \(error)")
+            
         }
     }
     
@@ -138,7 +134,7 @@ final class NotificationsViewModel: ObservableObject {
             notifications.removeAll { $0.id == notificationId }
             unreadCount = notifications.filter { !$0.isRead }.count
         } catch {
-            print("Error deleting notification: \(error)")
+            
         }
     }
     

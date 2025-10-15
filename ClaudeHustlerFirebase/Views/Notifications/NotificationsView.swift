@@ -434,7 +434,7 @@ struct ReelFullScreenPresenter: View {
                 reel = try await ReelRepository.shared.fetchById(reelId)
                 isLoading = false
             } catch {
-                print("Error loading reel: \(error)")
+                
                 isLoading = false
             }
         }
@@ -498,7 +498,7 @@ struct ReelWithCommentPresenter: View {
                 reel = try await ReelRepository.shared.fetchById(reelId)
                 isLoading = false
             } catch {
-                print("Error loading reel: \(error)")
+                
                 isLoading = false
             }
         }

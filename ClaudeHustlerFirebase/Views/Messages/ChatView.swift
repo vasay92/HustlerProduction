@@ -437,10 +437,10 @@ struct ChatView: View {
             do {
                 switch type {
                 case .post:
-                    print("DEBUG: Attempting to fetch post with ID: \(id)")
+                    
                     
                     guard let fetchedPost = try await PostRepository.shared.fetchById(id) else {
-                        print("ERROR: Post not found with ID: \(id)")
+                        
                         
                         await MainActor.run {
                             showContentUnavailableAlert(type: "Post")
@@ -448,18 +448,17 @@ struct ChatView: View {
                         return
                     }
                     
-                    print("DEBUG: Successfully fetched post: \(fetchedPost.title)")
+                    
                     
                     await MainActor.run {
                         self.postToShow = fetchedPost
-                        print("DEBUG: postToShow set, modal should open")
                     }
                     
                 case .reel:
-                    print("DEBUG: Attempting to fetch reel with ID: \(id)")
+                    
                     
                     guard let fetchedReel = try await ReelRepository.shared.fetchById(id) else {
-                        print("ERROR: Reel not found with ID: \(id)")
+                        
                         
                         await MainActor.run {
                             showContentUnavailableAlert(type: "Reel")
@@ -467,18 +466,18 @@ struct ChatView: View {
                         return
                     }
                     
-                    print("DEBUG: Successfully fetched reel: \(fetchedReel.title)")
+                    
                     
                     await MainActor.run {
                         self.reelToShow = fetchedReel
-                        print("DEBUG: reelToShow set, modal should open")
+                        
                     }
                     
                 case .status:
-                    print("DEBUG: Attempting to fetch status with ID: \(id)")
+                    
                     
                     guard let fetchedStatus = try await StatusRepository.shared.fetchById(id) else {
-                        print("ERROR: Status not found with ID: \(id)")
+                        
                         
                         await MainActor.run {
                             showContentUnavailableAlert(type: "Status")
@@ -486,15 +485,15 @@ struct ChatView: View {
                         return
                     }
                     
-                    print("DEBUG: Successfully fetched status from user: \(fetchedStatus.userName ?? "Unknown")")
+                    
                     
                     await MainActor.run {
                         self.statusToShow = fetchedStatus
-                        print("DEBUG: statusToShow set, modal should open")
+                        
                     }
                 }
             } catch {
-                print("ERROR: Failed to load content - \(error)")
+                
                 
                 await MainActor.run {
                     showContentErrorAlert()

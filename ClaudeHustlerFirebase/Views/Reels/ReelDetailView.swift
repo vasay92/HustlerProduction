@@ -39,7 +39,7 @@ struct ReelDetailView: View {
         do {
             reel = try await ReelRepository.shared.fetchById(reelId)
         } catch {
-            print("Error loading reel: \(error)")
+            
         }
     }
 }

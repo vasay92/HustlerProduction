@@ -243,7 +243,7 @@ final class ReelsViewModel: ObservableObject {
         do {
             try await statusRepository.markAsViewed(statusId, by: userId)
         } catch {
-            print("Error viewing status: \(error)")
+            
         }
     }
     
@@ -253,7 +253,7 @@ final class ReelsViewModel: ObservableObject {
             // Remove expired statuses from local array
             statuses.removeAll { $0.isExpired }
         } catch {
-            print("Error cleaning up expired statuses: \(error)")
+            
         }
     }
     
@@ -306,7 +306,7 @@ final class ReelsViewModel: ObservableObject {
         do {
             trendingReels = try await reelRepository.fetchTrending(limit: 10)
         } catch {
-            print("Error loading trending reels: \(error)")
+            
         }
     }
     
@@ -510,7 +510,7 @@ final class ReelsViewModel: ObservableObject {
                     }
                 }
             } catch {
-                print("Error loading reel: \(error)")
+                
             }
         }
         return nil

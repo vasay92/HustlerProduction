@@ -81,7 +81,7 @@ final class ServicesViewModel: ObservableObject {
                 self.error = error
                 self.isLoadingOffers = false
             }
-            print("Error loading offers: \(error)")
+            
         }
     }
     
@@ -155,7 +155,7 @@ final class ServicesViewModel: ObservableObject {
                 self.error = error
                 self.isLoadingRequests = false
             }
-            print("Error loading requests: \(error)")
+            
         }
     }
     
@@ -273,7 +273,7 @@ final class ServicesViewModel: ObservableObject {
                 self.trendingTags = tags
             }
         } catch {
-            print("Failed to load trending tags: \(error)")
+            
         }
     }
     

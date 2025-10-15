@@ -126,7 +126,7 @@ final class ProfileViewModel: ObservableObject {
             }
         } catch {
             self.error = error
-            print("Error toggling follow: \(error)")
+            
         }
     }
     
@@ -151,7 +151,7 @@ final class ProfileViewModel: ObservableObject {
             portfolioCards = try await portfolioRepository.fetchUserPortfolioCards(userId: profileUserId)
         } catch {
             self.error = error
-            print("Error loading portfolio: \(error)")
+            
         }
         
         isLoadingPortfolio = false
@@ -165,7 +165,7 @@ final class ProfileViewModel: ObservableObject {
             try await portfolioRepository.delete(cardId)
             portfolioCards.removeAll { $0.id == cardId }
         } catch {
-            print("Error deleting portfolio card: \(error)")
+            
         }
     }
     
@@ -190,7 +190,7 @@ final class ProfileViewModel: ObservableObject {
             // Use the existing fetchUserPosts method from PostRepository
             userPosts = try await postRepository.fetchUserPosts(userId: profileUserId, limit: 20)
         } catch {
-            print("Error loading user posts: \(error)")
+            
         }
     }
     
@@ -208,7 +208,7 @@ final class ProfileViewModel: ObservableObject {
             savedReels = try await savedItemsRepository.fetchSavedReels()
             
         } catch {
-            print("Error loading saved items: \(error)")
+            
         }
     }
     
@@ -218,7 +218,7 @@ final class ProfileViewModel: ObservableObject {
         do {
             return try await userRepository.fetchFollowers(for: profileUserId)
         } catch {
-            print("Error fetching followers: \(error)")
+            
             return []
         }
     }
@@ -227,7 +227,7 @@ final class ProfileViewModel: ObservableObject {
         do {
             return try await userRepository.fetchFollowing(for: profileUserId)
         } catch {
-            print("Error fetching following: \(error)")
+            
             return []
         }
     }

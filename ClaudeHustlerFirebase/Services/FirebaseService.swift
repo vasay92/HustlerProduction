@@ -429,7 +429,7 @@ extension FirebaseService {
         // Commit the batch
         try await batch.commit()
         
-        print("Conversation \(conversationId) cleared successfully")
+        
     }
     
   
@@ -442,7 +442,7 @@ extension FirebaseService {
                 .getDocuments()
             return snapshot.documents.count
         } catch {
-            print("Error getting message count: \(error)")
+            
             return 0
         }
     }
@@ -470,9 +470,9 @@ extension FirebaseService {
                 try await document.reference.delete()
             }
             
-            print("Cleaned up \(expiredStatuses.documents.count) expired statuses")
+            
         } catch {
-            print("Error cleaning up user content: \(error)")
+            
         }
     }
     

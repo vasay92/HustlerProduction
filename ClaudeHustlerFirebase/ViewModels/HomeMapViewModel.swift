@@ -133,19 +133,14 @@ final class HomeMapViewModel: ObservableObject {
         do {
             // First, check ALL posts to see what we have
             let allPostsResult = try await repository.fetch(limit: 500)
-            print("📊 Total posts in database: \(allPostsResult.items.count)")
             
             // Filter for posts with coordinates
             let postsWithCoords = allPostsResult.items.filter { $0.coordinates != nil }
-            print("📍 Posts with coordinates: \(postsWithCoords.count)")
             
             // Log posts without coordinates for debugging
             let postsWithoutCoords = allPostsResult.items.filter { $0.coordinates == nil }
             if !postsWithoutCoords.isEmpty {
-                print("⚠️ Posts WITHOUT coordinates:")
-                postsWithoutCoords.forEach { post in
-                    print("  - \(post.title) (location: \(post.location ?? "nil"))")
-                }
+                
             }
             
             // Store posts with coordinates
@@ -156,7 +151,7 @@ final class HomeMapViewModel: ObservableObject {
             await loadUserRatings(for: posts)
             
         } catch {
-            print("❌ Error loading posts: \(error)")
+            
         }
         
         isLoading = false

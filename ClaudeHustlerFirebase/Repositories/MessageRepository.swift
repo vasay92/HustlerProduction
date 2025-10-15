@@ -294,7 +294,7 @@ final class MessageRepository: RepositoryProtocol {
         do {
             let conversation = try await db.collection("conversations").document(conversationId).getDocument()
             guard let participantIds = conversation.data()?["participantIds"] as? [String] else {
-                print("❌ No participant IDs found for conversation: \(conversationId)")
+                
                 return
             }
             
@@ -310,12 +310,12 @@ final class MessageRepository: RepositoryProtocol {
                     // Get profile image URL - check different possible field names
                     if let imageURL = userData["profileImageURL"] as? String, !imageURL.isEmpty {
                         participantImages[participantId] = imageURL
-                        print("✅ Found profile image for \(participantId): \(imageURL)")
+                        
                     } else if let imageURL = userData["profileImage"] as? String, !imageURL.isEmpty {
                         participantImages[participantId] = imageURL
-                        print("✅ Found profile image (alt field) for \(participantId): \(imageURL)")
+                        
                     } else {
-                        print("⚠️ No profile image for user \(participantId)")
+                        
                     }
                 }
             }
@@ -326,9 +326,9 @@ final class MessageRepository: RepositoryProtocol {
                 "participantImages": participantImages
             ])
             
-            print("✅ Updated conversation \(conversationId) with participant info")
+            
         } catch {
-            print("❌ Error updating participant info for conversation \(conversationId): \(error)")
+            
         }
     }
     
@@ -345,7 +345,7 @@ final class MessageRepository: RepositoryProtocol {
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
-                    print("Error listening to messages: \(error)")
+                    
                     completion([])
                     return
                 }
@@ -509,7 +509,7 @@ final class MessageRepository: RepositoryProtocol {
             let updatedResult = try await fetchConversations(limit: 50)
             return updatedResult.items
         } catch {
-            print("Error loading conversations: \(error)")
+            
             return []
         }
     }
@@ -524,11 +524,11 @@ final class MessageRepository: RepositoryProtocol {
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
-                    print("Error listening to messages: \(error)")
+                    
                     return
                 }
                 
-                print("DEBUG - Listener received \(snapshot?.documents.count ?? 0) documents")
+                
                 
                 let messages: [Message] = snapshot?.documents.compactMap { doc in
                     let data = doc.data()
@@ -668,9 +668,9 @@ final class MessageRepository: RepositoryProtocol {
                 await updateConversationParticipantInfo(conversationId: doc.documentID)
             }
             
-            print("✅ Updated participant info for \(snapshot.documents.count) conversations")
+            
         } catch {
-            print("❌ Error refreshing conversation participant info: \(error)")
+            
         }
     }
 }
