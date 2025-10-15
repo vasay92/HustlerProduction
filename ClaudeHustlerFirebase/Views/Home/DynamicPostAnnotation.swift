@@ -1,4 +1,4 @@
-// DynamicPostAnnotation.swift - Fixed version
+// DynamicPostAnnotation.swift - With Pulsing Animated Pins
 // Path: ClaudeHustlerFirebase/Views/Home/DynamicPostAnnotation.swift
 
 import SwiftUI
@@ -35,11 +35,10 @@ struct DynamicPostAnnotation: View {
     }
     
     var body: some View {
-        // FIX: Use ZStack instead of Group, or use @ViewBuilder
         ZStack {
             switch annotationStyle {
             case .minimal:
-                MinimalDotPin(post: post, isSelected: isSelected)
+                PulsingPin(post: post, isSelected: isSelected)
             case .compact:
                 CompactTitlePin(post: post, isSelected: isSelected)
             case .detailed:
@@ -73,24 +72,56 @@ extension HomeMapViewModel {
     }
 }
 
-// MARK: - Minimal Dot Pin
-struct MinimalDotPin: View {
+// MARK: - Pulsing Animated Pin 📡
+struct PulsingPin: View {
     let post: ServicePost
     let isSelected: Bool
+    @State private var isPulsing = false
+    
+    var primaryColor: Color {
+        post.isRequest ? .orange : .blue
+    }
     
     var body: some View {
         ZStack {
-            Circle()
-                .fill(Color.white)
-                .frame(width: isSelected ? 18 : 14, height: isSelected ? 18 : 14)
-                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+            // Pulsing rings (2 waves for continuous effect)
+            ForEach(0..<2) { index in
+                Circle()
+                    .stroke(primaryColor.opacity(0.6), lineWidth: 2)
+                    .frame(width: isSelected ? 26 : 20, height: isSelected ? 26 : 20)
+                    .scaleEffect(isPulsing ? 2.0 : 1.0)
+                    .opacity(isPulsing ? 0 : 0.6)
+                    .animation(
+                        .easeOut(duration: 1.5)
+                        .repeatForever(autoreverses: false)
+                        .delay(Double(index) * 0.4),
+                        value: isPulsing
+                    )
+            }
             
+            // Main pin with radial gradient
             Circle()
-                .fill(post.isRequest ? Color.orange : Color.blue)
-                .frame(width: isSelected ? 14 : 10, height: isSelected ? 14 : 10)
+                .fill(
+                    RadialGradient(
+                        colors: [primaryColor.opacity(0.9), primaryColor],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: isSelected ? 13 : 10
+                    )
+                )
+                .frame(width: isSelected ? 26 : 20, height: isSelected ? 26 : 20)
+                .shadow(color: primaryColor.opacity(0.5), radius: 6, y: 3)
+            
+            // Icon
+            Image(systemName: post.isRequest ? "hand.raised.fill" : "wrench.and.screwdriver.fill")
+                .font(.system(size: isSelected ? 11 : 9, weight: .bold))
+                .foregroundColor(.white)
         }
-        .scaleEffect(isSelected ? 1.3 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
+        .scaleEffect(isSelected ? 1.15 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
+        .onAppear {
+            isPulsing = true
+        }
     }
 }
 
@@ -101,8 +132,8 @@ struct CompactTitlePin: View {
     
     var body: some View {
         HStack(spacing: 4) {
-            // Dot
-            MinimalDotPin(post: post, isSelected: false)
+            // Pulsing pin
+            PulsingPin(post: post, isSelected: false)
             
             // Title
             Text(post.title)
@@ -238,47 +269,27 @@ struct SelectedPostBubble: View {
                                 .font(.system(size: 8))
                                 .foregroundColor(.orange)
                         }
+                        
                         if let count = reviewCount {
                             Text("(\(count))")
-                                .font(.caption2)
+                                .font(.system(size: 9))
                                 .foregroundColor(.secondary)
                         }
                     }
                 }
-            }
-            
-            // Price
-            if let price = post.price {
-                HStack {
+                
+                // Price
+                if let price = post.price {
                     Text("$\(Int(price))")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundColor(post.isRequest ? .orange : .blue)
-                    
-                    Text(post.isRequest ? "budget" : "")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("Tap for details")
-                        .font(.caption2)
-                        .foregroundColor(.blue)
                 }
             }
         }
-        .padding(10)
-        .frame(width: 200)
+        .padding(12)
         .background(Color.white)
-        .cornerRadius(10)
-        .shadow(color: .black.opacity(0.12), radius: 6)
-        
-        // Pointer triangle is placed outside the VStack
-        .overlay(
-            Image(systemName: "arrowtriangle.down.fill")
-                .font(.system(size: 10))
-                .foregroundColor(.white)
-                .offset(y: -1),
-            alignment: .bottom
-        )
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        .frame(width: 200)
     }
 }

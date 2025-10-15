@@ -10,7 +10,6 @@
 		EB0A08FF2E8B2A000002D40C /* NotificationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A08FE2E8B29FF0002D40C /* NotificationRepository.swift */; };
 		EB0A09052E8B2B530002D40C /* NotificationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */; };
 		EB0A09422E8F4C790002D40C /* HomeMapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A09412E8F4C790002D40C /* HomeMapViewModel.swift */; };
-		EB0A09C92E9F2C730002D40C /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EB0A09C82E9F2C590002D40C /* Info.plist */; };
 		EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */; };
 		EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA492E68F52F006DB468 /* ContentView.swift */; };
 		EB6BBA762E68F6BB006DB468 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = EB6BBA752E68F6BB006DB468 /* FirebaseAuth */; };
@@ -475,7 +474,6 @@
 			files = (
 				EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */,
 				EB6BBA7E2E68F71A006DB468 /* GoogleService-Info.plist in Resources */,
-				EB0A09C92E9F2C730002D40C /* Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -691,7 +689,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YWS732PT7T;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				"INFOPLIST_FILE[sdk=*]" = Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -719,7 +718,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YWS732PT7T;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				"INFOPLIST_FILE[sdk=*]" = Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
