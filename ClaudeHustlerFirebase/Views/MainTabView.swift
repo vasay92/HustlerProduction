@@ -1,4 +1,4 @@
-// MainTabView.swift
+// MainTabView.swift - UPDATED WITH GUEST BROWSING
 // Path: ClaudeHustlerFirebase/Views/MainTabView.swift
 
 import SwiftUI
@@ -32,6 +32,8 @@ struct MainTabView: View {
     @State private var activeSheet: ActiveSheet?
     @State private var pendingSheet: ActiveSheet?
     @StateObject private var notificationsViewModel = NotificationsViewModel()
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -63,19 +65,32 @@ struct MainTabView: View {
                 }
                 .tag(3)
             
-            // Profile Tab
-            ProfileView()
-                .tabItem {
-                    Label("Profile", systemImage: "person.fill")
+            // Profile Tab - UPDATED: Show GuestProfileView if not logged in
+            NavigationView {
+                if firebase.isAuthenticated {
+                    ProfileView()
+                } else {
+                    GuestProfileView()
                 }
-                .tag(4)
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person.fill")
+            }
+            .tag(4)
         }
         .accentColor(.blue)
         .onChange(of: selectedTab) { oldValue, newValue in
             if newValue == 2 {
-                // Post tab was selected - show options and revert to previous tab
-                showingPostOptions = true
-                selectedTab = previousTab
+                // UPDATED: Check authentication before showing create options
+                if !firebase.isAuthenticated {
+                    authPromptAction = "Create Content"
+                    showingAuthPrompt = true
+                    selectedTab = previousTab
+                } else {
+                    // Post tab was selected - show options and revert to previous tab
+                    showingPostOptions = true
+                    selectedTab = previousTab
+                }
             } else {
                 // Normal tab selection - store as previous tab
                 previousTab = newValue
@@ -97,6 +112,10 @@ struct MainTabView: View {
             case .camera(let mode):
                 CameraView(mode: mode)
             }
+        }
+        // ADDED: Auth prompt sheet
+        .sheet(isPresented: $showingAuthPrompt) {
+            AuthenticationPromptView(action: authPromptAction)
         }
     }
 }
@@ -223,4 +242,3 @@ struct PostOptionButton: View {
         }
     }
 }
-

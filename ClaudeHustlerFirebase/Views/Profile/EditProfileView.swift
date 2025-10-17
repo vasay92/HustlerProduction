@@ -13,7 +13,7 @@ struct EditProfileView: View {
     @State private var location: String = ""
     @State private var profileImage: UIImage?
     @State private var showingImagePicker = false
-    @State private var isServiceProvider = false
+    @State private var isServiceProvider = false  // Keep in state for database compatibility
     @State private var isSaving = false
     @State private var showingError = false
     @State private var errorMessage = ""
@@ -92,15 +92,8 @@ struct EditProfileView: View {
                         .autocapitalization(.words)
                 }
                 
-                // Service Provider Toggle
-                Section {
-                    Toggle("I provide services", isOn: $isServiceProvider)
-                        .tint(.blue)
-                } footer: {
-                    Text("Enable this if you offer services to others")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                // REMOVED: Service Provider Toggle Section
+                // This section has been removed as requested
             }
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -174,7 +167,7 @@ struct EditProfileView: View {
         name = user.name
         bio = user.bio
         location = user.location
-        isServiceProvider = user.isServiceProvider
+        isServiceProvider = user.isServiceProvider  // Load from database but don't show UI
     }
     
     private func saveProfile() async {
@@ -203,13 +196,13 @@ struct EditProfileView: View {
                 isUpdatingProfileImage = false
             }
             
-            // Update other profile fields
+            // Update other profile fields (keep existing isServiceProvider value)
             try await firebase.updateUserProfile(
                 name: name,
                 bio: bio,
                 location: location,
                 profileImageURL: profileImageURL,
-                isServiceProvider: isServiceProvider
+                isServiceProvider: isServiceProvider  // Keep existing value from database
             )
             
             // Refresh current user data

@@ -17,125 +17,131 @@ struct LoginView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Logo
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(.blue)
-                        .padding(.top, 40)
-                    
-                    Text("Hustler")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    // Input fields
-                    VStack(spacing: 15) {
-                        // Name field (only for sign up)
-                        if isSignUp {
-                            TextField("Full Name", text: $name)
+            // CHANGED: Using GeometryReader to center content
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // CHANGED: Added Spacer to push content to center
+                        Spacer()
+                            .frame(height: geometry.size.height * 0.1) // 10% from top
+                        
+                        // Logo
+                        Image("Logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 120, height: 120)
+                        
+                        // Input fields
+                        VStack(spacing: 15) {
+                            // Name field (only for sign up)
+                            if isSignUp {
+                                TextField("Full Name", text: $name)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .autocapitalization(.words)
+                                    .disabled(authService.isLoading)
+                            }
+                            
+                            TextField("Email", text: $email)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .autocapitalization(.words)
+                                .autocapitalization(.none)
+                                .keyboardType(.emailAddress)
+                                .autocorrectionDisabled()
                                 .disabled(authService.isLoading)
-                        }
-                        
-                        TextField("Email", text: $email)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .autocapitalization(.none)
-                            .keyboardType(.emailAddress)
-                            .autocorrectionDisabled()
-                            .disabled(authService.isLoading)
-                        
-                        SecureField("Password", text: $password)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .textContentType(.init(rawValue: ""))
-                            .disabled(authService.isLoading)
-                        
-                        // Confirm password (only for sign up)
-                        if isSignUp {
-                            SecureField("Confirm Password", text: $confirmPassword)
+                            
+                            SecureField("Password", text: $password)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .textContentType(.init(rawValue: ""))
                                 .disabled(authService.isLoading)
                             
-                            // Password requirements hint
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Password must contain:")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("• At least 8 characters")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Text("• Upper & lowercase letters")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Text("• At least one number")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Text("• At least one special character")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                            // Confirm password (only for sign up)
+                            if isSignUp {
+                                SecureField("Confirm Password", text: $confirmPassword)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .textContentType(.init(rawValue: ""))
+                                    .disabled(authService.isLoading)
+                                
+                                // Password requirements hint
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Password must contain:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("• At least 8 characters")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Text("• Upper & lowercase letters")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Text("• At least one number")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Text("• At least one special character")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal)
                         }
-                    }
-                    .padding(.horizontal)
-                    
-                    // Error message
-                    if let error = authService.error {
-                        Text(error.localizedDescription)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .padding(.horizontal)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    // Sign In/Up Button
-                    Button(action: { performAuth() }) {
-                        if authService.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        } else {
-                            Text(isSignUp ? "Sign Up" : "Sign In")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                        }
-                    }
-                    .background(authService.isLoading ? Color.gray : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .disabled(authService.isLoading || !isFormValid)
-                    .padding(.horizontal)
-                    
-                    // Additional options
-                    VStack(spacing: 10) {
-                        // Toggle between Sign In/Up
-                        Button(action: {
-                            withAnimation {
-                                isSignUp.toggle()
-                                authService.error = nil
-                            }
-                        }) {
-                            Text(isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
-                                .foregroundColor(.blue)
-                        }
-                        .disabled(authService.isLoading)
+                        .padding(.horizontal)
                         
-                        // Forgot password (only for sign in)
-                        if !isSignUp {
-                            Button(action: { showingPasswordReset = true }) {
-                                Text("Forgot Password?")
-                                    .font(.caption)
+                        // Error message
+                        if let error = authService.error {
+                            Text(error.localizedDescription)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .padding(.horizontal)
+                                .multilineTextAlignment(.center)
+                        }
+                        
+                        // Sign In/Up Button
+                        Button(action: { performAuth() }) {
+                            if authService.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            } else {
+                                Text(isSignUp ? "Sign Up" : "Sign In")
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            }
+                        }
+                        .background(authService.isLoading ? Color.gray : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                        .disabled(authService.isLoading || !isFormValid)
+                        .padding(.horizontal)
+                        
+                        // Additional options
+                        VStack(spacing: 10) {
+                            // Toggle between Sign In/Up
+                            Button(action: {
+                                withAnimation {
+                                    isSignUp.toggle()
+                                    authService.error = nil
+                                }
+                            }) {
+                                Text(isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
                                     .foregroundColor(.blue)
                             }
                             .disabled(authService.isLoading)
+                            
+                            // Forgot password (only for sign in)
+                            if !isSignUp {
+                                Button(action: { showingPasswordReset = true }) {
+                                    Text("Forgot Password?")
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
+                                }
+                                .disabled(authService.isLoading)
+                            }
                         }
+                        
+                        // CHANGED: Added Spacer to push content to center
+                        Spacer()
+                            .frame(height: geometry.size.height * 0.1) // 10% from bottom
                     }
-                    
-                    Spacer(minLength: 40)
+                    .frame(minHeight: geometry.size.height) // CHANGED: Ensures content can be centered
                 }
             }
             .alert("Reset Password", isPresented: $showingPasswordReset) {
