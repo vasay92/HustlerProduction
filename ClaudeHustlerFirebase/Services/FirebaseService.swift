@@ -86,17 +86,13 @@ class FirebaseService: ObservableObject {
     // MARK: - User Management
     
     private func loadUser(userId: String) async {
-        
         do {
             let document = try await db.collection("users").document(userId).getDocument()
-            
             if document.exists {
                 let data = document.data() ?? [:]
-                
                 do {
                     currentUser = try document.data(as: User.self)
                 } catch {
-                    
                     currentUser = User(
                         id: userId,
                         email: data["email"] as? String ?? "",

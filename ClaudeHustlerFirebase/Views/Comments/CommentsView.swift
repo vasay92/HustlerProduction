@@ -184,7 +184,7 @@ struct CommentsView: View {
                 // - Updating the reply count on parent comments
                 
             } catch {
-                print("Error posting comment: \(error)")
+                
             }
         }
     }
@@ -203,7 +203,7 @@ struct CommentsView: View {
             // - Soft deleting the comment
             
         } catch {
-            print("Error deleting comment: \(error)")
+           
         }
     }
 }
@@ -343,7 +343,7 @@ struct CommentCell: View {
                     isLiked.toggle()
                 }
             } catch {
-                print("Error toggling like: \(error)")
+                
             }
         }
     }
@@ -369,7 +369,7 @@ struct CommentCell: View {
                     self.replies = loadedReplies
                 }
             } catch {
-                print("Error loading replies: \(error)")
+                
             }
         }
     }

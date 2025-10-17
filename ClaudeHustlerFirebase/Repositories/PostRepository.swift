@@ -527,7 +527,7 @@ extension PostRepository {
             // Clear cache
             cache.remove(for: "post_\(postId)")
         } catch {
-            print("Failed to geocode location for post \(postId): \(error)")
+            
         }
     }
 }

@@ -208,7 +208,7 @@ struct ConversationsListView: View {
             try await MessageRepository.shared.deleteConversation(conversationId)
             await viewModel.loadConversations()
         } catch {
-            print("Error deleting conversation: \(error)")
+            
         }
     }
 }
@@ -236,14 +236,12 @@ struct ConversationRow: View {
 
     private var unreadCount: Int {
         guard let userId = currentUserId else { return 0 }
-        let count = conversation.unreadCounts[userId] ?? 0  // ADD THIS LINE
-        print("DEBUG: Conversation \(conversation.id ?? "unknown") - unreadCount for user \(userId): \(count)")
+        let count = conversation.unreadCounts[userId] ?? 0
         return count
     }
 
     private var hasUnread: Bool {
-        let result = unreadCount > 0  // ADD THIS LINE
-        print("DEBUG: hasUnread = \(result) for conversation \(conversation.id ?? "unknown")")
+        let result = unreadCount > 0
         return result
     }
     

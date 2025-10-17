@@ -192,7 +192,7 @@ struct CommentsViewWithHighlight: View {
                     replyingTo = nil
                 }
             } catch {
-                print("Error posting comment: \(error)")
+                
             }
         }
     }
@@ -203,7 +203,7 @@ struct CommentsViewWithHighlight: View {
         do {
             try await CommentRepository.shared.deleteComment(commentId, reelId: reelId)
         } catch {
-            print("Error deleting comment: \(error)")
+            
         }
     }
 }
@@ -369,7 +369,7 @@ struct CommentCellWithHighlight: View {
                     isLiked.toggle()
                 }
             } catch {
-                print("Error toggling like: \(error)")
+               
             }
         }
     }
@@ -395,7 +395,7 @@ struct CommentCellWithHighlight: View {
                     self.replies = loadedReplies
                 }
             } catch {
-                print("Error loading replies: \(error)")
+                
             }
         }
     }

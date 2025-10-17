@@ -316,7 +316,7 @@ struct ContentPreviewCard: View {
                 contentStatus = status
             }
         } catch {
-            print("Error checking content availability: \(error)")
+            
             contentExists = false
             loadError = true
         }

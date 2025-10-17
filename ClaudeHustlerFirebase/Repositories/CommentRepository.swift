@@ -205,7 +205,7 @@ final class CommentRepository {
             .order(by: "timestamp", descending: false)
             .addSnapshotListener { snapshot, error in
                 if let error = error {
-                    print("Error listening to comments: \(error)")
+                    
                     completion([])
                     return
                 }

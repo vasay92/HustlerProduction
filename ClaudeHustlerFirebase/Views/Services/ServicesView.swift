@@ -621,7 +621,7 @@ struct ServiceSearchView: View {
             searchResults = try await PostRepository.shared.searchPostsWithTags(query: searchQuery, tags: nil)
             isLoading = false
         } catch {
-            print("Error searching posts: \(error)")
+            
             isLoading = false
         }
     }

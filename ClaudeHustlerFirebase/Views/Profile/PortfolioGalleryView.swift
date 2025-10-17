@@ -223,22 +223,20 @@ struct PortfolioGalleryView: View {
         do {
             guard let userId = firebase.currentUser?.id,
                   let cardId = card.id else {
-                print("❌ Missing user ID or card ID")
                 isAddingImages = false
                 return
             }
             
-            print("📤 Starting upload of \(images.count) images")
+            
             var newURLs: [String] = []
             
             for (index, image) in images.enumerated() {
                 let path = "portfolio/\(userId)/\(cardId)/\(UUID().uuidString)_\(index).jpg"
-                print("  Uploading image \(index + 1)/\(images.count)")
+                
                 let url = try await firebase.uploadImage(image, path: path)
                 newURLs.append(url)
             }
             
-            print("✅ Uploaded \(newURLs.count) images successfully")
             
             // Update local state immediately
             await MainActor.run {
@@ -250,13 +248,11 @@ struct PortfolioGalleryView: View {
             updatedCard.mediaURLs = mediaURLs
             
             try await profileViewModel.updatePortfolioCard(updatedCard)
-            print("✅ Portfolio card updated in database")
             
             // Clear the selected images
             newImages = []
             
         } catch {
-            print("❌ Error adding images: \(error)")
         }
         
         isAddingImages = false
@@ -272,7 +268,7 @@ struct PortfolioGalleryView: View {
                 
                 try await profileViewModel.updatePortfolioCard(updatedCard)
             } catch {
-                print("Error deleting image: \(error)")
+                
             }
         }
     }
@@ -345,7 +341,7 @@ struct MultiImagePickerForPortfolio: UIViewControllerRepresentable {
             // Wait for all images to load, then update
             group.notify(queue: .main) {
                 self.parent.images = loadedImages
-                print("✅ Selected \(loadedImages.count) images")
+               
             }
         }
     }
@@ -473,7 +469,7 @@ struct EditPortfolioDetailsView: View {
             try await profileViewModel.updatePortfolioCard(updatedCard)
             dismiss()
         } catch {
-            print("Error saving changes: \(error)")
+            
         }
         
         isSaving = false

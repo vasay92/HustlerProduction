@@ -26,14 +26,10 @@ final class LocationService: NSObject, ObservableObject {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = 10 // Update every 10 meters
-        
-        print("📍 LocationService: Setup complete")
     }
     
     private func checkInitialAuthorizationStatus() {
         authorizationStatus = locationManager.authorizationStatus
-        print("📍 LocationService: Initial authorization status: \(authorizationStatus.debugDescription)")
-        
         // If already authorized, start updating immediately
         if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
             startUpdatingLocation()
@@ -42,25 +38,21 @@ final class LocationService: NSObject, ObservableObject {
     
     // MARK: - Permission Handling
     func requestLocationPermission() {
-        print("📍 LocationService: Requesting location permission")
         locationManager.requestWhenInUseAuthorization()
     }
-    
+
     func startUpdatingLocation() {
         guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
-            print("❌ LocationService: Cannot start updates - not authorized. Status: \(authorizationStatus.debugDescription)")
             return
         }
         
-        print("📍 LocationService: Starting location updates")
         locationManager.startUpdatingLocation()
         
         // Request a single location update immediately
         locationManager.requestLocation()
     }
-    
+
     func stopUpdatingLocation() {
-        print("📍 LocationService: Stopping location updates")
         locationManager.stopUpdatingLocation()
     }
     
@@ -115,8 +107,6 @@ final class LocationService: NSObject, ObservableObject {
 extension LocationService: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
-        print("📍 LocationService: Authorization changed to: \(authorizationStatus.debugDescription)")
-        
         switch authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
             startUpdatingLocation()

@@ -341,7 +341,7 @@ final class ServicesViewModel: ObservableObject {
                 return false
             }
         } catch {
-            print("Search failed: \(error)")
+            
             return []
         }
     }

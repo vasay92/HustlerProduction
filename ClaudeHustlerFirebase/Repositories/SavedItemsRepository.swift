@@ -57,7 +57,7 @@ final class SavedItemsRepository {
             let doc = try await db.collection("savedItems").document(docId).getDocument()
             return doc.exists
         } catch {
-            print("Error checking saved status: \(error)")
+            
             return false
         }
     }

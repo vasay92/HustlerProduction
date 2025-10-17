@@ -95,7 +95,7 @@ struct LikesListView: View {
                 try? doc.data(as: ReelLike.self)
             }
         } catch {
-            print("Error loading likes: \(error)")
+            
         }
     }
 }

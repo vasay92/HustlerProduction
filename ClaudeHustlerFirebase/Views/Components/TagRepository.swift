@@ -103,7 +103,7 @@ final class TagRepository: ObservableObject {
             // Clear trending cache
             cache.remove(for: "trending_tags")
         } catch {
-            print("Error updating tag analytics: \(error)")
+            
         }
     }
     
@@ -139,7 +139,7 @@ final class TagRepository: ObservableObject {
             return Array(suggestions.prefix(limit))
             
         } catch {
-            print("Error searching tags: \(error)")
+            
             return getDefaultSuggestions(for: cleanQuery)
         }
     }

@@ -384,7 +384,7 @@ struct StatusViewerView: View {
                 markCurrentStatusAsViewed()
             }
         } catch {
-            print("Error loading statuses: \(error)")
+            
             userStatuses = []
         }
         
@@ -457,14 +457,14 @@ struct StatusViewerView: View {
             } catch {
                 await MainActor.run {
                     isDeleting = false
-                    print("Error deleting status: \(error)")
+                   
                 }
             }
         }
     }
     
     private func reportStatus() {
-        print("Status reported")
+        
         // Implement reporting logic
     }
 }

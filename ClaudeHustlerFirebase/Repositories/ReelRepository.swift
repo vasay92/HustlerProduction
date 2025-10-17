@@ -127,7 +127,7 @@ final class ReelRepository: RepositoryProtocol {
             "thumbnailURL": reel.thumbnailURL ?? "",
             "title": reel.title,
             "description": reel.description,
-            "tags": reel.tags,  // ✅ FIXED: Using "tags" instead of "hashtags"
+            "tags": reel.tags,  //  FIXED: Using "tags" instead of "hashtags"
             "createdAt": Date(),
             "likes": [],
             "comments": 0,
@@ -173,7 +173,7 @@ final class ReelRepository: RepositoryProtocol {
         let updates: [String: Any] = [
             "title": reel.title,
             "description": reel.description,
-            "tags": reel.tags,  // ✅ FIXED: Using "tags" instead of "hashtags"
+            "tags": reel.tags,  //  FIXED: Using "tags" instead of "hashtags"
             "updatedAt": Date()
         ]
         

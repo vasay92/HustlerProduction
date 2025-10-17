@@ -81,20 +81,14 @@ final class NotificationRepository {
         messageText: String,
         isNewConversation: Bool = false
     ) async {
-        print("📧 ATTEMPTING TO CREATE MESSAGE NOTIFICATION")
-        print("   For: \(userId)")
-        print("   From: \(fromUserId)")
-        print("   IsNew: \(isNewConversation)")
-        
+       
         // Don't notify yourself
         guard userId != fromUserId else {
-            print("❌ Not creating notification - same user")
             return
         }
         
         // Get sender info
         guard let fromUser = try? await UserRepository.shared.fetchById(fromUserId) else {
-            print("❌ Could not fetch sender user info")
             return
         }
         
@@ -102,11 +96,9 @@ final class NotificationRepository {
         let recipientUser = try? await UserRepository.shared.fetchById(userId)
         if let settings = recipientUser?.notificationSettings {
             if isNewConversation && !settings.messageRequests {
-                print("❌ User has disabled message request notifications")
                 return
             }
             if !isNewConversation && !settings.newMessages {
-                print("❌ User has disabled new message notifications")
                 return
             }
         }
@@ -128,9 +120,7 @@ final class NotificationRepository {
         
         do {
             try await createNotification(notification)
-            print("✅ MESSAGE NOTIFICATION CREATED SUCCESSFULLY")
         } catch {
-            print("❌ Error creating message notification: \(error)")
         }
     }
     
@@ -219,7 +209,6 @@ final class NotificationRepository {
                     )
                 }
             } catch {
-                print("Error creating review notification: \(error)")
             }
         }
     
@@ -319,15 +308,12 @@ final class NotificationRepository {
                 )
             }
         } catch {
-            print("Error creating reel notification: \(error)")
         }
     }
     
     // MARK: - Core Notification Operations
     private func createNotification(_ notification: AppNotification) async throws {
-        print("📝 Creating notification in Firestore...")
-        print("   Type: \(notification.type.rawValue)")
-        print("   For user: \(notification.userId)")
+       
         
         let data: [String: Any] = [
             "userId": notification.userId,
@@ -493,7 +479,7 @@ final class NotificationRepository {
             
             return Int(truncating: snapshot.count ?? 0)
         } catch {
-            print("Error getting unread count: \(error)")
+            
             return 0
         }
     }

@@ -251,7 +251,7 @@ struct HomeMapView: View {
             .navigationBarHidden(true)
             .task {
                 await viewModel.loadPosts()
-                print("🗺️ Loaded \(viewModel.filteredPosts.count) posts with coordinates")
+                
                 locationService.startUpdatingLocation()
                 notificationsViewModel.startListening()
             }
@@ -525,7 +525,7 @@ struct PostPreviewCard: View {
                 posterInfo = try? document.data(as: User.self)
             }
         } catch {
-            print("Error loading poster info: \(error)")
+            
         }
     }
     
@@ -548,7 +548,7 @@ struct PostPreviewCard: View {
                     type: .post
                 )
             } catch {
-                print("Error toggling save: \(error)")
+                
             }
         }
     }

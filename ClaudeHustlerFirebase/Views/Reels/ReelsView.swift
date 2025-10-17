@@ -222,7 +222,7 @@ struct ReelsView: View {
         do {
             searchResults = try await viewModel.searchReels(query: searchQuery)
         } catch {
-            print("Error searching reels: \(error)")
+            
             searchResults = []
         }
     }
@@ -1154,7 +1154,7 @@ struct FullScreenReelView: View {
             do {
                 isSaved = try await viewModel.toggleSaveReel(reelId)
             } catch {
-                print("Error toggling save: \(error)")
+                
             }
         }
     }
@@ -1178,7 +1178,7 @@ struct FullScreenReelView: View {
             try await viewModel.deleteReel(reelId)
             onDismiss()
         } catch {
-            print("Error deleting reel: \(error)")
+            
             isDeleting = false
         }
     }
@@ -1488,7 +1488,7 @@ struct ReelViewerView: View {
             try await viewModel.deleteReel(reelId)
             dismiss()
         } catch {
-            print("Error deleting reel: \(error)")
+           
             isDeleting = false
         }
     }
@@ -1598,7 +1598,7 @@ struct EditReelCaptionView: View {
             try await viewModel.updateReel(updatedReel)
             dismiss()
         } catch {
-            print("Error updating reel: \(error)")
+            
         }
         
         isSaving = false

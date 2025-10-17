@@ -87,7 +87,7 @@ final class ProfileViewModel: ObservableObject {
             
         } catch {
             self.error = error
-            print("Error loading profile: \(error)")
+            
         }
         
         isLoadingProfile = false
@@ -137,7 +137,7 @@ final class ProfileViewModel: ObservableObject {
             let currentUser = try await userRepository.fetchById(currentUserId)
             isFollowing = currentUser?.following.contains(profileUserId) ?? false
         } catch {
-            print("Error checking following status: \(error)")
+            
         }
     }
     

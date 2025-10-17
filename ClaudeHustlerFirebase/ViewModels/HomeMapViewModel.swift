@@ -84,7 +84,6 @@ final class HomeMapViewModel: ObservableObject {
                 )
             )
         }
-        print("📍 Initial map region set to user location (zoomed out)")
     }
     
     // MARK: - Location Methods
@@ -92,7 +91,6 @@ final class HomeMapViewModel: ObservableObject {
     // Called when user taps location button - centers and zooms in
     func centerOnUserLocation() {
         guard let userLocation = locationService.userLocation else {
-            print("❌ No user location available")
             
             // Request permission if not granted
             if locationService.authorizationStatus == .notDetermined {
@@ -100,7 +98,7 @@ final class HomeMapViewModel: ObservableObject {
             } else if locationService.authorizationStatus == .denied ||
                       locationService.authorizationStatus == .restricted {
                 // Could show alert here about enabling location in settings
-                print("❌ Location permission denied")
+                
             }
             return
         }
@@ -115,7 +113,6 @@ final class HomeMapViewModel: ObservableObject {
                 )
             )
         }
-        print("📍 Centered on user location (zoomed in)")
     }
     
     // Update map region without animation (for manual pan/zoom)
@@ -179,7 +176,7 @@ final class HomeMapViewModel: ObservableObject {
                     }
                 }
             } catch {
-                print("Error loading rating for user \(userId): \(error)")
+                
             }
         }
     }

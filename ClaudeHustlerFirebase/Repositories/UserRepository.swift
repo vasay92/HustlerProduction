@@ -416,7 +416,7 @@ class UserRepository: ObservableObject {
             cache.remove(for: "user_\(userId)")
             
         } catch {
-            print("Error updating user rating: \(error)")
+            
         }
     }
     

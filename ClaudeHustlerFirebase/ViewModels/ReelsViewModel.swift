@@ -119,7 +119,7 @@ final class ReelsViewModel: ObservableObject {
                 .map { $0.key }
             
         } catch {
-            print("Error loading trending hashtags: \(error)")
+            
             trendingHashtags = []
         }
     }
@@ -144,7 +144,7 @@ final class ReelsViewModel: ObservableObject {
                 }
             }
         } catch {
-            print("Error extracting hashtags: \(error)")
+            
         }
         
         return hashtags
@@ -318,7 +318,7 @@ final class ReelsViewModel: ObservableObject {
             let (reels, _) = try await reelRepository.fetchUserReels(userId, limit: 20)
             userReels = reels
         } catch {
-            print("Error loading user reels: \(error)")
+            
         }
     }
     
@@ -334,7 +334,7 @@ final class ReelsViewModel: ObservableObject {
                 reels[index].likes.append(userId)
             }
         } catch {
-            print("Error liking reel: \(error)")
+            
         }
     }
     
@@ -348,7 +348,7 @@ final class ReelsViewModel: ObservableObject {
                 reels[index].likes.removeAll { $0 == userId }
             }
         } catch {
-            print("Error unliking reel: \(error)")
+            
         }
     }
     
@@ -372,7 +372,7 @@ final class ReelsViewModel: ObservableObject {
                 reels[index].shares += 1
             }
         } catch {
-            print("Error sharing reel: \(error)")
+            
         }
     }
     
@@ -551,7 +551,7 @@ final class ReelsViewModel: ObservableObject {
                 reels[index].views += 1
             }
         } catch {
-            print("Error incrementing view count: \(error)")
+            
         }
     }
 }
