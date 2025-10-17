@@ -16,3 +16,4 @@ Build/
 
 # macOS
 .DS_Store
+*.plist
