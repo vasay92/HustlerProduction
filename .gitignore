@@ -1,3 +1,18 @@
 GoogleService-Info.plist
 *.xcuserstate
 .DS_Store
+# Firebase Config
+GoogleService-Info.plist
+GoogleService-Info-*.plist
+
+# Xcode User Data
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcshareddata/
+
+# Build folders
+DerivedData/
+Build/
+
+# macOS
+.DS_Store
