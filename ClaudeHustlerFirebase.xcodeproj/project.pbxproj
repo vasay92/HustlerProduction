@@ -10,13 +10,13 @@
 		EB0A08FF2E8B2A000002D40C /* NotificationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A08FE2E8B29FF0002D40C /* NotificationRepository.swift */; };
 		EB0A09052E8B2B530002D40C /* NotificationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */; };
 		EB0A09422E8F4C790002D40C /* HomeMapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0A09412E8F4C790002D40C /* HomeMapViewModel.swift */; };
+		EB0A09CB2EA2DFEC0002D40C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EB0A09CA2EA2DFEC0002D40C /* GoogleService-Info.plist */; };
 		EB6BBA482E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */; };
 		EB6BBA4A2E68F52F006DB468 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA492E68F52F006DB468 /* ContentView.swift */; };
 		EB6BBA762E68F6BB006DB468 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = EB6BBA752E68F6BB006DB468 /* FirebaseAuth */; };
 		EB6BBA782E68F6BB006DB468 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = EB6BBA772E68F6BB006DB468 /* FirebaseCore */; };
 		EB6BBA7A2E68F6BB006DB468 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = EB6BBA792E68F6BB006DB468 /* FirebaseFirestore */; };
 		EB6BBA7C2E68F6BB006DB468 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = EB6BBA7B2E68F6BB006DB468 /* FirebaseStorage */; };
-		EB6BBA7E2E68F71A006DB468 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */; };
 		EB6BBA802E68F9CF006DB468 /* DataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA7F2E68F9CF006DB468 /* DataModels.swift */; };
 		EB6BBA822E68F9DF006DB468 /* FirebaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA812E68F9DE006DB468 /* FirebaseService.swift */; };
 		EB6BBA8F2E68FAF9006DB468 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB6BBA8E2E68FAF9006DB468 /* MainTabView.swift */; };
@@ -68,12 +68,12 @@
 		EB0A09042E8B2B530002D40C /* NotificationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsViewModel.swift; sourceTree = "<group>"; };
 		EB0A09412E8F4C790002D40C /* HomeMapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMapViewModel.swift; sourceTree = "<group>"; };
 		EB0A09C82E9F2C590002D40C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EB0A09CA2EA2DFEC0002D40C /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EB6BBA442E68F52F006DB468 /* ClaudeHustlerFirebase.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeHustlerFirebase.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB6BBA472E68F52F006DB468 /* ClaudeHustlerFirebaseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeHustlerFirebaseApp.swift; sourceTree = "<group>"; };
 		EB6BBA492E68F52F006DB468 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		EB6BBA512E68F531006DB468 /* ClaudeHustlerFirebaseTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeHustlerFirebaseTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB6BBA5B2E68F531006DB468 /* ClaudeHustlerFirebaseUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeHustlerFirebaseUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EB6BBA7F2E68F9CF006DB468 /* DataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataModels.swift; sourceTree = "<group>"; };
 		EB6BBA812E68F9DE006DB468 /* FirebaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseService.swift; sourceTree = "<group>"; };
 		EB6BBA8E2E68FAF9006DB468 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
@@ -197,8 +197,8 @@
 				EB6BBA6F2E68F5CB006DB468 /* App */,
 				EBD038CD2E7CF10B004E0CBD /* Helpers */,
 				EB6BBA6E2E68F5B5006DB468 /* ClaudeHustlerFirebase */,
-				EB6BBA7D2E68F71A006DB468 /* GoogleService-Info.plist */,
 				EBBCA1932E7C875000745D24 /* Assets.xcassets */,
+				EB0A09CA2EA2DFEC0002D40C /* GoogleService-Info.plist */,
 				EBD038C42E7CC4DF004E0CBD /* Frameworks */,
 				EB6BBA452E68F52F006DB468 /* Products */,
 			);
@@ -473,7 +473,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EBBCA1942E7C875000745D24 /* Assets.xcassets in Resources */,
-				EB6BBA7E2E68F71A006DB468 /* GoogleService-Info.plist in Resources */,
+				EB0A09CB2EA2DFEC0002D40C /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
