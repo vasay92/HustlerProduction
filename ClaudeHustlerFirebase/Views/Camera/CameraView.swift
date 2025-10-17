@@ -56,7 +56,6 @@ struct ImagePicker: UIViewControllerRepresentable {
                         if let image = image as? UIImage {
                             // Set the single image binding if available
                             self.parent.singleImage = image
-                            print("✅ Single image loaded and set")
                         }
                         // Dismiss after setting the image
                         self.parent.dismiss()
@@ -79,7 +78,6 @@ struct ImagePicker: UIViewControllerRepresentable {
                 
                 group.notify(queue: .main) {
                     self.parent.images = loadedImages
-                    print("✅ Loaded \(loadedImages.count) images")
                     self.parent.dismiss()
                 }
             }
@@ -387,7 +385,6 @@ struct CameraView: View {
         
         uploadProgress = 1.0
         
-        print("✅ Created status with ID: \(statusId)")
         
         // Refresh statuses in ReelsViewModel
         if let reelsVM = ReelsViewModel.shared {
@@ -453,7 +450,6 @@ struct CameraView: View {
         
         uploadProgress = 1.0
         
-        print("✅ Created reel with ID: \(reelId)")
         
         // Refresh reels in view model
         if let reelsVM = ReelsViewModel.shared {
@@ -489,7 +485,6 @@ struct CameraView: View {
             let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
             return UIImage(cgImage: cgImage)
         } catch {
-            print("Error generating thumbnail: \(error)")
             return nil
         }
     }

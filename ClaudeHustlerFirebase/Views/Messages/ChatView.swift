@@ -304,7 +304,6 @@ struct ChatView: View {
             await notificationsVM.markAsRead(notification)
         }
         
-        print("📬 Marked \(messageNotifications.count) message notifications as read for conversation: \(conversationId)")
     }
     
     private func setupChat() async {
@@ -336,7 +335,6 @@ struct ChatView: View {
                 await markMessageNotificationsAsRead()
             }
         } catch {
-            print("Error setting up chat: \(error)")
         }
         
         isLoadingMessages = false
@@ -386,7 +384,6 @@ struct ChatView: View {
                 }
                 
             } catch {
-                print("Error sending message: \(error)")
             }
         }
     }
@@ -420,7 +417,6 @@ struct ChatView: View {
                 ])
             
         } catch {
-            print("Error clearing chat: \(error)")
         }
     }
     

@@ -22,7 +22,6 @@ final class MessagesViewModel: ObservableObject {
     init() {
         Self.shared = self
         self.currentUserId = Auth.auth().currentUser?.uid
-        print("DEBUG - MessagesViewModel init - currentUserId: \(self.currentUserId ?? "nil")")
     }
     
     // MARK: - Conversation Management

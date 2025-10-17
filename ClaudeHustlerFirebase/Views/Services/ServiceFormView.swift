@@ -642,7 +642,6 @@ struct ServiceFormView: View {
             } catch {
                 errorMessage = "Failed to save post: \(error.localizedDescription)"
                 showingError = true
-                print("❌ Save Error: \(error)")
             }
             
             isSaving = false
@@ -844,7 +843,6 @@ struct ImagePickerView: UIViewControllerRepresentable {
             // Wait for all images to load, then update
             group.notify(queue: .main) {
                 self.parent.selectedImages = loadedImages
-                print("✅ Selected \(loadedImages.count) images")
             }
         }
     }

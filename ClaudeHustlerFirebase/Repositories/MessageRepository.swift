@@ -114,7 +114,6 @@ final class MessageRepository: RepositoryProtocol {
             "contextUserId": message.contextUserId ?? ""
         ]
         
-        print("DEBUG - Creating message with context: \(message.contextTitle ?? "no title")")
         
         // Create the message
         let docRef = try await db.collection("messages")
@@ -385,7 +384,6 @@ final class MessageRepository: RepositoryProtocol {
             )
             return result.items
         } catch {
-            print("Error loading messages: \(error)")
             return []
         }
     }
@@ -592,7 +590,6 @@ final class MessageRepository: RepositoryProtocol {
                     return message
                 } ?? []
                 
-                print("DEBUG - Listener triggered with \(messages.count) messages")
                 completion(messages)
             }
         
@@ -648,7 +645,6 @@ final class MessageRepository: RepositoryProtocol {
                 "lastReadTimestamps.\(currentUserId)": Date()
             ])
         
-        print("DEBUG - Reset unread count for user \(currentUserId) in conversation \(conversationId)")
         
         // Clear cache
         cache.remove(for: "messages_\(conversationId)")

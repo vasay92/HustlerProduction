@@ -196,7 +196,6 @@ class AuthenticationService: ObservableObject {
         // Sign out from Firebase Auth
         try firebase.signOut()
         
-        print("✅ User signed out and all listeners cleaned")
     }
     
     // MARK: - Password Reset

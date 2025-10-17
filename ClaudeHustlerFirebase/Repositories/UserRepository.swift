@@ -130,13 +130,9 @@ class UserRepository: ObservableObject {
             throw NSError(domain: "UserRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Can only update own profile image"])
         }
         
-        // Get user's name for consistency
-        let userDoc = try await db.collection("users").document(userId).getDocument()
-        let userName = userDoc.data()?["name"] as? String ?? "User"
-        
         let batch = db.batch()
         var updateCount = 0
-        let maxBatchSize = 450 // Leave some room under 500 limit
+        let maxBatchSize = 450
         
         // 1. Update user profile
         let userRef = db.collection("users").document(userId)
@@ -146,7 +142,7 @@ class UserRepository: ObservableObject {
         ], forDocument: userRef)
         updateCount += 1
         
-        // 2. Update all user's posts
+        // 2. Update posts - IMAGE ONLY
         let posts = try await db.collection("posts")
             .whereField("userId", isEqualTo: userId)
             .getDocuments()
@@ -154,13 +150,12 @@ class UserRepository: ObservableObject {
         for post in posts.documents {
             if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "userProfileImage": imageURL,
-                "userName": userName
+                "userProfileImage": imageURL
             ], forDocument: post.reference)
             updateCount += 1
         }
         
-        // 3. Update all user's reels
+        // 3. Update reels - IMAGE ONLY
         let reels = try await db.collection("reels")
             .whereField("userId", isEqualTo: userId)
             .getDocuments()
@@ -168,13 +163,12 @@ class UserRepository: ObservableObject {
         for reel in reels.documents {
             if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "userProfileImage": imageURL,
-                "userName": userName
+                "userProfileImage": imageURL
             ], forDocument: reel.reference)
             updateCount += 1
         }
         
-        // 4. Update all user's comments
+        // 4. Update comments - IMAGE ONLY
         let comments = try await db.collection("comments")
             .whereField("userId", isEqualTo: userId)
             .getDocuments()
@@ -182,13 +176,12 @@ class UserRepository: ObservableObject {
         for comment in comments.documents {
             if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "userProfileImage": imageURL,
-                "userName": userName
+                "userProfileImage": imageURL
             ], forDocument: comment.reference)
             updateCount += 1
         }
         
-        // 5. Update all user's active statuses
+        // 5. Update statuses - IMAGE ONLY
         let statuses = try await db.collection("statuses")
             .whereField("userId", isEqualTo: userId)
             .whereField("isActive", isEqualTo: true)
@@ -197,13 +190,12 @@ class UserRepository: ObservableObject {
         for status in statuses.documents {
             if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "userProfileImage": imageURL,
-                "userName": userName
+                "userProfileImage": imageURL
             ], forDocument: status.reference)
             updateCount += 1
         }
         
-        // 6. Update all user's reviews
+        // 6. Update reviews - IMAGE ONLY
         let reviews = try await db.collection("reviews")
             .whereField("reviewerId", isEqualTo: userId)
             .getDocuments()
@@ -211,13 +203,12 @@ class UserRepository: ObservableObject {
         for review in reviews.documents {
             if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "reviewerProfileImage": imageURL,
-                "reviewerName": userName
+                "reviewerProfileImage": imageURL
             ], forDocument: review.reference)
             updateCount += 1
         }
         
-        // 7. Update conversations participant info
+        // 7. Update conversations - IMAGE ONLY
         let conversations = try await db.collection("conversations")
             .whereField("participantIds", arrayContains: userId)
             .getDocuments()
@@ -225,13 +216,12 @@ class UserRepository: ObservableObject {
         for conversation in conversations.documents {
             if updateCount >= maxBatchSize { break }
             batch.updateData([
-                "participantImages.\(userId)": imageURL,
-                "participantNames.\(userId)": userName
+                "participantImages.\(userId)": imageURL
             ], forDocument: conversation.reference)
             updateCount += 1
         }
         
-        // 8. Update recent messages (last 50)
+        // 8. Update messages - IMAGE ONLY (if field exists)
         let messages = try await db.collection("messages")
             .whereField("senderId", isEqualTo: userId)
             .limit(to: 50)
@@ -240,40 +230,34 @@ class UserRepository: ObservableObject {
         
         for message in messages.documents {
             if updateCount >= maxBatchSize { break }
-            batch.updateData([
-                "senderProfileImage": imageURL,
-                "senderName": userName
-            ], forDocument: message.reference)
-            updateCount += 1
+            if message.data()["senderProfileImage"] != nil {
+                batch.updateData([
+                    "senderProfileImage": imageURL
+                ], forDocument: message.reference)
+                updateCount += 1
+            }
         }
         
-        // 9. Update reel likes
+        // 9. Update reel likes - IMAGE ONLY (if field exists)
         let reelLikes = try await db.collection("reelLikes")
             .whereField("userId", isEqualTo: userId)
             .getDocuments()
         
         for like in reelLikes.documents {
             if updateCount >= maxBatchSize { break }
-            batch.updateData([
-                "userProfileImage": imageURL,
-                "userName": userName
-            ], forDocument: like.reference)
-            updateCount += 1
+            if like.data()["userProfileImage"] != nil {
+                batch.updateData([
+                    "userProfileImage": imageURL
+                ], forDocument: like.reference)
+                updateCount += 1
+            }
         }
         
         // Commit all updates
         try await batch.commit()
         
-        print("✅ Profile image updated across \(updateCount) documents for user: \(userId)")
-        
-        // Clear all relevant caches
+        // Clear all caches
         cache.clearAll()
-        
-        // If we hit the batch limit, run a second batch for remaining updates
-        if updateCount >= maxBatchSize {
-            print("⚠️ Batch limit reached, some content may not be updated immediately")
-            // You could schedule a background task here to update remaining content
-        }
     }
     
     // MARK: - Follow/Unfollow Operations

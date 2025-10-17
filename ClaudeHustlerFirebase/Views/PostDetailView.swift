@@ -473,7 +473,6 @@ struct PostDetailView: View {
                 posterInfo?.id = document.documentID
             }
         } catch {
-            print("Error loading poster info: \(error)")
         }
     }
     
@@ -496,7 +495,6 @@ struct PostDetailView: View {
                     type: .post
                 )
             } catch {
-                print("Error toggling save: \(error)")
             }
         }
     }
@@ -510,7 +508,6 @@ struct PostDetailView: View {
             try await PostRepository.shared.delete(postId)
             dismiss()
         } catch {
-            print("Error deleting post: \(error)")
             isDeleting = false
         }
     }

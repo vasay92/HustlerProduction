@@ -35,12 +35,9 @@ class FirebaseService: ObservableObject {
     private func setupAuthListener() {
         auth.addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
-                print("Auth state changed - User UID: \(user?.uid ?? "nil")")
                 self?.isAuthenticated = user != nil
                 if let userId = user?.uid {
-                    print("Loading user with ID: \(userId)")
                     await self?.loadUser(userId: userId)
-                    print("After loadUser - currentUser ID: \(self?.currentUser?.id ?? "nil")")
                 } else {
                     self?.currentUser = nil
                 }
@@ -89,21 +86,16 @@ class FirebaseService: ObservableObject {
     // MARK: - User Management
     
     private func loadUser(userId: String) async {
-        print("loadUser called with userId: \(userId)")
         
         do {
             let document = try await db.collection("users").document(userId).getDocument()
-            print("Document exists: \(document.exists)")
             
             if document.exists {
                 let data = document.data() ?? [:]
-                print("Document data keys: \(data.keys)")
                 
                 do {
                     currentUser = try document.data(as: User.self)
-                    print("Successfully decoded user: \(currentUser?.id ?? "nil")")
                 } catch {
-                    print("Failed to decode user: \(error)")
                     
                     currentUser = User(
                         id: userId,
@@ -118,11 +110,9 @@ class FirebaseService: ObservableObject {
                         following: data["following"] as? [String] ?? [],
                         followers: data["followers"] as? [String] ?? []
                     )
-                    print("Manually created user: \(currentUser?.id ?? "nil")")
                 }
             }
         } catch {
-            print("Error in loadUser: \(error)")
         }
     }
     
@@ -133,15 +123,11 @@ class FirebaseService: ObservableObject {
     // MARK: - Image Upload
     
     func uploadImage(_ image: UIImage, path: String) async throws -> String {
-            print("🖼️ FirebaseService.uploadImage called")
-            print("  Path: \(path)")
             
             guard let imageData = image.jpegData(compressionQuality: 0.7) else {
-                print("❌ Failed to convert image to JPEG data")
                 throw NSError(domain: "ImageError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])
             }
             
-            print("  Image data size: \(imageData.count) bytes (\(imageData.count / 1024)KB)")
             
             // Create a fresh reference each time
             let storageRef = Storage.storage().reference().child(path)
@@ -151,21 +137,15 @@ class FirebaseService: ObservableObject {
             metadata.contentType = "image/jpeg"
             
             do {
-                print("  📤 Uploading to Firebase Storage...")
                 // Upload the data
                 let uploadTask = try await storageRef.putDataAsync(imageData, metadata: metadata)
-                print("  ✅ Upload successful")
                 
-                print("  Getting download URL...")
                 // Get the download URL
                 let downloadURL = try await storageRef.downloadURL()
                 let urlString = downloadURL.absoluteString
                 
-                print("  ✅ Got download URL: \(urlString)")
                 return urlString
             } catch {
-                print("  ❌ Upload failed: \(error)")
-                print("  Error details: \(error.localizedDescription)")
                 throw error
             }
         }
@@ -197,7 +177,6 @@ class FirebaseService: ObservableObject {
     func clearImageCache() {
         SDImageCache.shared.clearMemory()
         SDImageCache.shared.clearDisk {
-            print("Image cache cleared")
         }
     }
     
@@ -250,7 +229,6 @@ extension FirebaseService {
                 return user.followers.count
             }
         } catch {
-            print("Error getting follower count: \(error)")
         }
         return 0
     }
@@ -262,7 +240,6 @@ extension FirebaseService {
                 return user.following.count
             }
         } catch {
-            print("Error getting following count: \(error)")
         }
         return 0
     }
@@ -275,7 +252,6 @@ extension FirebaseService {
                 "lastActive": Date()
             ])
         } catch {
-            print("Error updating last active: \(error)")
         }
     }
 }
@@ -501,7 +477,6 @@ extension FirebaseService {
             
             return (posts.documents.count, reels.documents.count, statuses.documents.count)
         } catch {
-            print("Error getting user content stats: \(error)")
             return (0, 0, 0)
         }
     }

@@ -99,7 +99,6 @@ struct PortfolioCardView: View {
             try await PortfolioRepository.shared.deletePortfolioCard(cardId)
             await profileViewModel.loadPortfolioCards()
         } catch {
-            print("Error deleting portfolio: \(error)")
         }
     }
 }
@@ -379,7 +378,6 @@ struct ReviewCard: View {
                     isUpdating = false
                 }
             } catch {
-                print("Error toggling helpful: \(error)")
                 isUpdating = false
             }
         }
@@ -390,7 +388,6 @@ struct ReviewCard: View {
             do {
                 try await ReviewRepository.shared.delete(review.id ?? "")
             } catch {
-                print("Error deleting review: \(error)")
             }
         }
     }
@@ -929,7 +926,6 @@ struct CreateReviewView: View {
         isSubmitting = true
         submitProgress = 0.2
         
-        print("📸 Starting review submission with \(reviewImages.count) images")
         
         do {
             // Add a small delay for UI feedback
@@ -938,13 +934,10 @@ struct CreateReviewView: View {
             
             // Debug: Check if we have images
             if !reviewImages.isEmpty {
-                print("📸 Images to upload: \(reviewImages.count)")
                 for (index, image) in reviewImages.enumerated() {
                     let size = image.size
-                    print("  Image \(index + 1): \(size.width)x\(size.height)")
                 }
             } else {
-                print("📸 No images to upload")
             }
             
             // Create the review with images
@@ -955,13 +948,8 @@ struct CreateReviewView: View {
                 images: reviewImages
             )
             
-            print("✅ Review created successfully")
-            print("  Review ID: \(createdReview.id ?? "no-id")")
-            print("  Media URLs count: \(createdReview.mediaURLs.count)")
             if !createdReview.mediaURLs.isEmpty {
-                print("  Media URLs:")
                 for (index, url) in createdReview.mediaURLs.enumerated() {
-                    print("    \(index + 1): \(url)")
                 }
             }
             
@@ -970,8 +958,6 @@ struct CreateReviewView: View {
             
             dismiss()
         } catch {
-            print("❌ Error submitting review: \(error)")
-            print("  Error details: \(error.localizedDescription)")
             
             errorMessage = "Failed to submit review: \(error.localizedDescription)"
             showingError = true
@@ -1027,7 +1013,6 @@ struct MultiImagePickerForReviews: UIViewControllerRepresentable {
                             DispatchQueue.main.async {
                                 self.parent.images.append(image)
                                 self.loadCount += 1
-                                print("Preloaded \(self.loadCount) of \(results.count) images")
                             }
                         }
                     }
@@ -1377,7 +1362,6 @@ struct CreatePortfolioCardView: View {
         
         do {
             guard let userId = firebase.currentUser?.id else {
-                print("No user ID found")
                 return
             }
             
@@ -1414,7 +1398,6 @@ struct CreatePortfolioCardView: View {
             
             dismiss()
         } catch {
-            print("Error creating card: \(error)")
         }
         
         isCreating = false
