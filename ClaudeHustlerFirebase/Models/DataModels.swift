@@ -22,7 +22,7 @@ struct User: Codable, Identifiable {
     var completedServices: Int? = 0
     var timesBooked: Int? = 0
     let createdAt: Date = Date()
-    var lastActive: Date = Date()
+    var lastActive: Date? = Date()
     
     // Notification tokens
     var fcmToken: String?
