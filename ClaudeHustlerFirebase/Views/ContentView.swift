@@ -1,6 +1,4 @@
-
-
-// ContentView.swift
+// ContentView.swift - UPDATED FOR GUEST BROWSING
 // Path: ClaudeHustlerFirebase/Views/ContentView.swift
 
 import SwiftUI
@@ -18,13 +16,17 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(.systemBackground))
                 
-            case .authenticated:
+            case .authenticated, .unauthenticated:
+                // CHANGED: Show MainTabView for BOTH authenticated and unauthenticated users
+                // The MainTabView will handle showing guest views where needed
                 MainTabView()
                     .transition(.opacity)
                 
-            case .unauthenticated, .authenticating:
-                LoginView()
-                    .transition(.opacity)
+            case .authenticating:
+                // Show loading during active authentication
+                ProgressView("Authenticating...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.systemBackground))
             }
         }
         .animation(.easeInOut, value: authService.authState)

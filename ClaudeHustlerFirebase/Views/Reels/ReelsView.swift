@@ -995,7 +995,14 @@ struct FullScreenReelView: View {
                 .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
             
             if !isOwnReel {
-                Button(action: { toggleFollow() }) {
+                Button(action: {
+                    if firebase.isAuthenticated {
+                        toggleFollow()
+                    } else {
+                        authPromptAction = "Follow Users"
+                        showingAuthPrompt = true
+                    }
+                }) {
                     Text(isFollowing ? "Following" : "Follow")
                         .font(.caption)
                         .fontWeight(.semibold)
