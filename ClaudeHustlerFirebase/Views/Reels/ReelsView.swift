@@ -766,6 +766,9 @@ struct FullScreenReelView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingShareSheet = false
     @State private var isDeleting = false
+    // ADD THESE:
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     
     // NEW: For hashtag search
     @State private var showingHashtagSearch = false
@@ -920,6 +923,9 @@ struct FullScreenReelView: View {
                 }
             }
         )
+        .sheet(isPresented: $showingAuthPrompt) {
+            AuthenticationPromptView(action: authPromptAction)
+        }
     }
     
     @ViewBuilder
@@ -1046,7 +1052,14 @@ struct FullScreenReelView: View {
                 icon: isLiked ? "heart.fill" : "heart",
                 text: likesCount > 0 ? "\(likesCount)" : nil,
                 color: isLiked ? .red : .white,
-                action: { toggleLike() },
+                action: {
+                    if firebase.isAuthenticated {
+                        toggleLike()
+                    } else {
+                        authPromptAction = "Like Reels"
+                        showingAuthPrompt = true
+                    }
+                },
                 onLongPress: likesCount > 0 ? { showingLikesList = true } : nil
             )
             
@@ -1054,7 +1067,14 @@ struct FullScreenReelView: View {
                 icon: "bubble.right",
                 text: commentsCount > 0 ? "\(commentsCount)" : nil,
                 color: .white,
-                action: { showingComments = true }
+                action: {
+                    if firebase.isAuthenticated {
+                        showingComments = true
+                    } else {
+                        authPromptAction = "Comment on Reels"
+                        showingAuthPrompt = true
+                    }
+                }
             )
             
             if !isOwnReel {
@@ -1062,7 +1082,14 @@ struct FullScreenReelView: View {
                     icon: "message",
                     text: nil,
                     color: .white,
-                    action: { showingMessageView = true }
+                    action: {
+                        if firebase.isAuthenticated {
+                            showingMessageView = true
+                        } else {
+                            authPromptAction = "Send Messages"
+                            showingAuthPrompt = true
+                        }
+                    }
                 )
             }
             
@@ -1077,7 +1104,14 @@ struct FullScreenReelView: View {
                 icon: isSaved ? "bookmark.fill" : "bookmark",
                 text: nil,
                 color: isSaved ? .yellow : .white,
-                action: { toggleSave() }
+                action: {
+                    if firebase.isAuthenticated {
+                        toggleSave()
+                    } else {
+                        authPromptAction = "Save Reels"
+                        showingAuthPrompt = true
+                    }
+                }
             )
             
             Menu {
@@ -1187,6 +1221,7 @@ struct FullScreenReelView: View {
         reelListener?.remove()
         reelListener = nil
     }
+        
 }
 
 // MARK: - Reel Viewer View (Simplified version for direct viewing)

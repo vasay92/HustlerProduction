@@ -222,7 +222,8 @@ struct CommentCellWithHighlight: View {
     @State private var replies: [Comment] = []
     @State private var showReplies = false
     @State private var highlightAnimation = false
-    
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     var canDelete: Bool {
         comment.userId == firebase.currentUser?.id || reelOwnerId == firebase.currentUser?.id
     }
@@ -258,7 +259,14 @@ struct CommentCellWithHighlight: View {
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         
-                        Button(action: { toggleLike() }) {
+                        Button(action: {
+                            if firebase.isAuthenticated {
+                                toggleLike()
+                            } else {
+                                authPromptAction = "Like Comments"
+                                showingAuthPrompt = true
+                            }
+                        }) {
                             HStack(spacing: 4) {
                                 Image(systemName: isLiked ? "heart.fill" : "heart")
                                     .font(.caption)
@@ -271,7 +279,12 @@ struct CommentCellWithHighlight: View {
                         }
                         
                         Button("Reply") {
-                            onReply()
+                            if firebase.isAuthenticated {
+                                onReply()
+                            } else {
+                                authPromptAction = "Reply to Comments"
+                                showingAuthPrompt = true
+                            }
                         }
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -352,6 +365,9 @@ struct CommentCellWithHighlight: View {
                 }
             }
         }
+        .sheet(isPresented: $showingAuthPrompt) {
+            AuthenticationPromptView(action: authPromptAction)
+        }
     }
     
     private func toggleLike() {
@@ -405,6 +421,7 @@ struct CommentCellWithHighlight: View {
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
+        
 }
 
 // MARK: - Reply Cell with Highlight

@@ -25,6 +25,9 @@ struct EnhancedProfileView: View {
     @State private var showAllReviews = false
     @State private var showingReviewForm = false
     @State private var hasScrolledToReview = false  // ADDED
+    // ADD THESE:
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     
     // UPDATED init to accept optional highlightReviewId
     init(userId: String, highlightReviewId: String? = nil) {
@@ -138,6 +141,9 @@ struct EnhancedProfileView: View {
                     isFromContentView: false
                 )
             }
+        }
+        .sheet(isPresented: $showingAuthPrompt) {
+            AuthenticationPromptView(action: authPromptAction)
         }
     }
     
@@ -267,8 +273,13 @@ struct EnhancedProfileView: View {
             } else {
                 // Follow/Unfollow button
                 Button(action: {
-                    Task {
-                        await viewModel.toggleFollow()
+                    if firebase.isAuthenticated {
+                        Task {
+                            await viewModel.toggleFollow()
+                        }
+                    } else {
+                        authPromptAction = "Follow Users"
+                        showingAuthPrompt = true
                     }
                 }) {
                     Text(viewModel.isFollowing ? "Unfollow" : "Follow")
@@ -282,7 +293,14 @@ struct EnhancedProfileView: View {
                 }
                 
                 // Message button
-                Button(action: { showingMessageView = true }) {
+                Button(action: {
+                    if firebase.isAuthenticated {
+                        showingMessageView = true
+                    } else {
+                        authPromptAction = "Send Messages"
+                        showingAuthPrompt = true
+                    }
+                }) {
                     Label("Message", systemImage: "message.fill")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -458,7 +476,12 @@ struct EnhancedProfileView: View {
                 .padding()
                 
                 if firebase.currentUser != nil && !viewModel.isOwnProfile {
-                    Button(action: { showingReviewForm = true }) {
+                    Button(action: { if firebase.isAuthenticated {
+                        showingReviewForm = true
+                    } else {
+                        authPromptAction = "Write Reviews"
+                        showingAuthPrompt = true
+                    } }) {
                         Label("Write a Review", systemImage: "pencil")
                             .font(.subheadline)
                             .fontWeight(.semibold)
@@ -474,6 +497,7 @@ struct EnhancedProfileView: View {
             }
         }
     }
+        
 }
 
 // MARK: - User Post Card

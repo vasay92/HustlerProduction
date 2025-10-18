@@ -16,6 +16,9 @@ struct CommentsView: View {
     @State private var showDeleteConfirmation = false
     @State private var commentToDelete: Comment?
     @State private var listener: ListenerRegistration?
+    // ADD THESE:
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     
     var body: some View {
         NavigationView {
@@ -220,7 +223,8 @@ struct CommentCell: View {
     @State private var isLiked = false
     @State private var replies: [Comment] = []
     @State private var showReplies = false
-    
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     var canDelete: Bool {
         comment.userId == firebase.currentUser?.id || reelOwnerId == firebase.currentUser?.id
     }
@@ -256,7 +260,14 @@ struct CommentCell: View {
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         
-                        Button(action: { toggleLike() }) {
+                        Button(action: {
+                            if firebase.isAuthenticated {
+                                toggleLike()
+                            } else {
+                                authPromptAction = "Like Comments"
+                                showingAuthPrompt = true
+                            }
+                        }) {
                             HStack(spacing: 4) {
                                 Image(systemName: isLiked ? "heart.fill" : "heart")
                                     .font(.caption)
@@ -269,7 +280,12 @@ struct CommentCell: View {
                         }
                         
                         Button("Reply") {
-                            onReply()
+                            if firebase.isAuthenticated {
+                                onReply()
+                            } else {
+                                authPromptAction = "Reply to Comments"
+                                showingAuthPrompt = true
+                            }
                         }
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -326,6 +342,9 @@ struct CommentCell: View {
         .onAppear {
             isLiked = comment.likes.contains(firebase.currentUser?.id ?? "")
         }
+        .sheet(isPresented: $showingAuthPrompt) {
+            AuthenticationPromptView(action: authPromptAction)
+        }
     }
     
     private func toggleLike() {
@@ -379,6 +398,7 @@ struct CommentCell: View {
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
+        
 }
 
 // MARK: - Reply Cell

@@ -285,6 +285,9 @@ struct PostPreviewCard: View {
     @State private var showingMessageView = false
     @State private var showingShareSheet = false
     @StateObject private var firebase = FirebaseService.shared
+    // ADD THESE:
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     
     var body: some View {
         VStack(spacing: 0) {
@@ -437,7 +440,14 @@ struct PostPreviewCard: View {
                     .disabled(post.userId == firebase.currentUser?.id)
                     
                     HStack(spacing: 6) {
-                        Button(action: { toggleSave() }) {
+                        Button(action: {
+                            if firebase.isAuthenticated {
+                                toggleSave()
+                            } else {
+                                authPromptAction = "Save Posts"
+                                showingAuthPrompt = true
+                            }
+                        }) {
                             Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
                                 .font(.system(size: 16))
                                 .foregroundColor(isSaved ? .blue : .gray)
@@ -511,6 +521,9 @@ struct PostPreviewCard: View {
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(items: [post.title, post.description])
         }
+        .sheet(isPresented: $showingAuthPrompt) {
+                    AuthenticationPromptView(action: authPromptAction)
+                }
     }
     
     // Helper functions...
@@ -552,6 +565,7 @@ struct PostPreviewCard: View {
             }
         }
     }
+        
 }
 
 // Keep your existing PostMapAnnotation, FilterChip, and other structs...

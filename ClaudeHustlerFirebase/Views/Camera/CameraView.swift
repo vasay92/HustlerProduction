@@ -123,6 +123,11 @@ struct CameraView: View {
                 closeButtonOverlay
             }
             .navigationBarHidden(true)
+            .onAppear {
+                if !FirebaseService.shared.isAuthenticated {
+                    dismiss()
+                }
+            }
         }
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(images: .constant([]), singleImage: $capturedImage)

@@ -22,6 +22,9 @@ struct PostDetailView: View {
     @State private var selectedImageIndex = 0
     @State private var showingImageViewer = false
     @State private var selectedImageURL: String?
+    // ADD THESE:
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     
     var body: some View {
         ZStack {
@@ -121,7 +124,9 @@ struct PostDetailView: View {
         } message: {
             Text("This action cannot be undone.")
         }
-        
+        .sheet(isPresented: $showingAuthPrompt) {
+            AuthenticationPromptView(action: authPromptAction)
+        }
     }
     
     // MARK: - Photo Gallery Section with Clickable Images
@@ -386,7 +391,14 @@ struct PostDetailView: View {
                     icon: "message",
                     title: "Message",
                     color: .green,
-                    action: { showingMessageView = true }
+                    action: {
+                        if firebase.isAuthenticated {
+                            showingMessageView = true
+                        } else {
+                            authPromptAction = "Send Messages"
+                            showingAuthPrompt = true
+                        }
+                    }
                 )
             }
             
@@ -394,8 +406,15 @@ struct PostDetailView: View {
             PostActionButton(
                 icon: isSaved ? "bookmark.fill" : "bookmark",
                 title: "Save",
-                color: isSaved ? .orange : .gray,
-                action: toggleSave
+                color: isSaved ? .yellow : .gray,
+                action: {
+                    if firebase.isAuthenticated {
+                        toggleSave()
+                    } else {
+                        authPromptAction = "Save Posts"
+                        showingAuthPrompt = true
+                    }
+                }
             )
             
             // SHARE THIRD
@@ -517,6 +536,7 @@ struct PostDetailView: View {
         formatter.dateFormat = "MMM yyyy"
         return formatter
     }
+        
 }
 
 // MARK: - Supporting Views

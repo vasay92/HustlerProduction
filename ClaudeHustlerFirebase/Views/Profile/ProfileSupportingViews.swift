@@ -117,6 +117,9 @@ struct ReviewCard: View {
     @State private var isUpdating = false
     @State private var selectedImageURL: String? = nil  // CHANGED from selectedImageIndex
     @StateObject private var firebase = FirebaseService.shared
+    // ADD THESE:
+    @State private var showingAuthPrompt = false
+    @State private var authPromptAction = ""
     
     init(review: Review, isProfileOwner: Bool) {
         self.review = review
@@ -169,6 +172,9 @@ struct ReviewCard: View {
         }
         .onAppear {
             isHelpful = review.helpfulVotes.contains(firebase.currentUser?.id ?? "")
+        }
+        .sheet(isPresented: $showingAuthPrompt) {
+            AuthenticationPromptView(action: authPromptAction)
         }
     }
     
@@ -339,7 +345,14 @@ struct ReviewCard: View {
     private var actionButtonsSection: some View {
         HStack {
             // Helpful button
-            Button(action: toggleHelpful) {
+            Button(action: {
+                if firebase.isAuthenticated {
+                    toggleHelpful()
+                } else {
+                    authPromptAction = "Mark Reviews as Helpful"
+                    showingAuthPrompt = true
+                }
+            }) {
                 HStack(spacing: 4) {
                     Image(systemName: isHelpful ? "hand.thumbsup.fill" : "hand.thumbsup")
                         .font(.caption)
@@ -358,7 +371,14 @@ struct ReviewCard: View {
             
             // Reply button (for profile owner only)
             if isProfileOwner && review.reply == nil && !isOwnReview {
-                Button("Reply", action: { showingReplyForm = true })
+                Button("Reply", action: {
+                    if firebase.isAuthenticated {
+                        showingReplyForm = true
+                    } else {
+                        authPromptAction = "Reply to Reviews"
+                        showingAuthPrompt = true
+                    }
+                })
                     .font(.caption)
                     .foregroundColor(.blue)
             }
@@ -391,6 +411,7 @@ struct ReviewCard: View {
             }
         }
     }
+        
 }
 
 // Add this extension to make String Identifiable for sheet(item:)

@@ -12,6 +12,7 @@ struct ServiceFormView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var firebase = FirebaseService.shared
     
+    
     // Form Fields
     @State private var title = ""
     @State private var description = ""
@@ -112,6 +113,13 @@ struct ServiceFormView: View {
                 Button("OK") { }
             } message: {
                 Text(errorMessage)
+            }
+            .onAppear {
+                // Check authentication when form opens
+                if !firebase.isAuthenticated {
+                    dismiss()
+                    // Parent view should show auth prompt
+                }
             }
         }
     }
